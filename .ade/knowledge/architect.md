@@ -80,3 +80,12 @@
   - F3 ticket `s1c` starts one recursive `watch_directory` per root inside `fileBrowserStore.show`; a feature with many roots must pass `show(key, [])` and keep its own listings. `DetachedApp` mounts no file browser, palette or toast.
   - When a finding is a product decision, list it with the PRD's literal text as the default built and design the recommended case too; do not pick a narrower reading as the default.
   - Next free ADR is 0042 (0041 taken by this revision, provisional).
+- 2026-11-15: F4 design revision 3 (after the blocked delta review of revision 2; branch `arch-f4`, written on Linux, PRD 3.7 bae3e5f).
+  - Bound each system call, not each job: a job of many fast calls is not a hang. Give each job a caller deadline that answers "not answering" and marks nothing; mark only on one call blocked past its bound, and mark the path before the mount (a mount point the table missed would otherwise mark the startup volume).
+  - macOS firmlinks: `/Users`, `/Volumes`, `/Applications`, `/private`, `/opt`, `/usr/local` live on the data volume at `/System/Volumes/Data`, but `lstat` says folder and `realpath` keeps `/Users/...`. A longest-mount-point-prefix match charges them to `/`. Charge by the parent folder's `st_dev` instead; match table entries in both spellings.
+  - `std::fs::DirEntry::metadata()` is an `lstat` on Unix, and the `lstat` of a mount-point child enters that child's file system (`list_directory`, `lib.rs:89`).
+  - Pane ids are `pane-${++paneCounter}` per page (`tabStore.ts:219`): unique only within one window's page load. `buildLanes` joins tracker entries to live panes by that id. The agent picker (`AgentPicker.tsx:250`) and `dispatchAgent` (`agentLaunch.ts:91`) start entries with no `cwd`.
+  - Per-task Dispatch (`OrchestratorTab.tsx:739`) passes `session?.projectDir`; with none, `addTab(title, undefined)` starts in the home folder. Generation creates the folder after `setTasks` (`:196`), so clicks can race it.
+  - Imports run only at launch (`sync.ts`, `applyRemote`); each periodic sync replaces `lastReport` (`:57`). Anything a launch sync must keep showing goes in `sync-state.json` (`SyncState`, `sync.rs:130`), not in the report alone.
+  - jsdom's user agent is not a Mac, so `IS_MAC` is false in vitest; the pattern is `FileBrowserOpen.test.tsx:15`'s `vi.mock("../../lib/shortcuts", …IS_MAC: true)`.
+  - Next free ADR is still 0042.

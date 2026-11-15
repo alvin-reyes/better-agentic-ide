@@ -6,15 +6,19 @@ the UX are approved.
 ## State
 
 - **PRD:** F4 is approved by the owner at revision 3.3 (`docs/prd.md`, branch
-  `prd-workspaces`, PR #113). Not merged, not sharded.
+  `prd-workspaces`, PR #113). Revisions 3.4 to 3.7 (3.7 is bae3e5f) apply the owner's
+  "strip all paths" and ask OQ-14 to OQ-21; their text is pending the owner's approval.
+  The owner answered OQ-14 to OQ-21 on 2026-11-15, each as recommended, and OQ-20 as
+  (b′); the product manager is recording the answers. Not merged, not sharded.
 - **Design** (branch `arch-f4`): `2026-11-15-workspaces-design.md`, with
   `.ade/context/workspaces.md`, `.ade/context/sync-local-fields.md` and ADRs 0037 to
-  0041 (Proposed, numbers provisional). Revision 1 was BLOCKED in adversarial review:
-  four blockers, sixteen majors, eleven minors
-  (`2026-11-15-workspaces-design-review-1.md`). **Revision 2 is written** and answers
-  every finding (its section 22 is the findings table). It has not had its delta review.
-  Nothing in it was compiled. It builds in the owner's decision below, proposes 14
-  stories for S1 (section 17), and lists the exact PRD amendments needed (section 21).
+  0041 (Proposed, numbers provisional). Revision 1 was BLOCKED in adversarial review
+  (`2026-11-15-workspaces-design-review-1.md`). Revision 2 (3c9354a) was BLOCKED in its
+  delta review: three new blockers, four new majors, twelve new minors. **Revision 3 is
+  written** and answers each (its section 23). It has not had its delta review. Nothing
+  in it was compiled or run on a Mac. It builds the owner's answers to OQ-14 to OQ-21,
+  proposes 16 stories (three for S0, which ships first on every OS; thirteen for S1;
+  section 17), and reconciles itself with PRD 3.7 row by row (section 21).
 - **UX** (branch `ux-f4`): `2026-11-15-workspaces-ux.md` and
   `2026-11-15-workspaces-mockup.html`. Draft 1 was BLOCKED in adversarial review: one
   blocker, ten majors, thirteen minors (`2026-11-15-workspaces-ux-review-1.md` on that
@@ -28,17 +32,23 @@ the UX are approved.
 
 Asked about design review blocker B3: **strip all paths**. The orchestrator's
 `projectDir` and the agent tracker's `cwd` are never synced, for anyone, hub or not;
-each machine keeps its own. This goes beyond WS-7 AC3's table as approved, so the
-product manager must amend G2 and WS-7 AC3 (and the notes for F2 and F5). The design
-lists the exact amendment; the PRD is not yet changed.
+each machine keeps its own. PRD revisions 3.4 to 3.7 write it into G2, WS-7 AC3 and
+the notes for F2 and F5; that text is pending the owner's approval.
+
+Later the same day the owner answered OQ-14 to OQ-21 as recommended (cleanup, notice,
+history kept, release note, per-task Dispatch makes the folder, S0 ahead with all four
+rules, a missing recorded folder counts as none) and OQ-20 as (b′): join only runs this
+instance started, and record `cwd` in the agent picker and `dispatchAgent`.
 
 ## Still open for the owner
 
 - A new shortcut, ⌘⇧E "Focus File Browser" (UX).
-- The proposed gate addition for the macOS-only tests of stories w2, w4 and w5
+- The proposed gate addition for the macOS-only tests of stories w2, w4, w5 and w11
   (`docs/architecture.md`, marked NOT in force; design O-4).
-- Paths already in the sync repo's git history, and older builds writing paths back:
-  accept, with "update every machine" in the release note? (design O-2)
+- Offer a way to start the sync repository afresh? (design O-2; OQ-16 accepted that
+  history keeps old folders.)
+- Accept the four infrastructure stories w2 to w5 against `CLAUDE.md`'s "vertically
+  sliced" rule? (design O-5)
 - Extend "strip all paths" to `ade-session`'s path fields for every tab? (design O-3)
 - The product questions each revision lists (design section 19, P-1 to P-15; UX section
   23, P1 to P23), among
@@ -49,13 +59,16 @@ lists the exact amendment; the PRD is not yet changed.
 ## Next steps
 
 1. The designer answers the six UX items design revision 2 reopened (design section 18
-   and D-1 to D-4; the Checking state is back because opening now streams).
+   and D-1 to D-5; the Checking state is back because opening now streams; D-5 is the
+   skipped-key line in Settings → Sync).
 2. Delta review of each by the adversarial reviewer.
-3. The product manager applies the PRD amendments and answers the product questions; the
-   owner approves the changed PRD text.
+3. The product manager records the owner's answers to OQ-14 to OQ-21 (with OQ-20 as
+   (b′) and the skipped-key notice kept until the key next syncs; design section 21
+   marks both as "needs PRD text") and answers the product questions; the owner approves
+   the changed PRD text.
 4. The owner approves the design and the UX; the architect records it in
    `.ade/session.md`.
-5. The scrum-master shards S1 (F4.11), including the amendments to F3 `s1c` items 4, 6 and (11)
+5. The scrum-master shards S0 first (w12a to w12c, every OS, no F2), then S1 (F4.11), including the amendments to F3 `s1c` items 4, 6 and (11)
    that the design lists.
 
 ## Dependencies on unmerged work

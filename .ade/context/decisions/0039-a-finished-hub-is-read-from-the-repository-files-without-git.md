@@ -1,6 +1,6 @@
 # 0039: A finished hub is read from the repository's files, without git
 
-- Status: Proposed (2026-11-15), with the F4 design revision 2 (revised after the blocked review of revision 1: one deadline, every outcome stated, a retry, `.git` as a file is unsupported); not approved. The number is provisional (see the README's numbering notes). It disagrees with ADR `0029-a-finished-hub-is-judged-by-head-with-ades-own-git` (Proposed, on branch `onboarding-arch`, not merged); it does not supersede it, because F4 does not change F2. It recommends that F2's design adopt this check.
+- Status: Proposed (2026-11-15), with the F4 design revision 3 (revised after the blocked review of revision 1: one deadline, every outcome stated, a retry, `.git` as a file is unsupported; and after the delta review of revision 2: nothing inside `.git` is followed, and only a single blocked call marks a mount); not approved. The number is provisional (see the README's numbering notes). It disagrees with ADR `0029-a-finished-hub-is-judged-by-head-with-ades-own-git` (Proposed, on branch `onboarding-arch`, not merged); it does not supersede it, because F4 does not change F2. It recommends that F2's design adopt this check.
 - Context:
   - F4 WS-2 AC8: wherever F4 decides whether a folder is a finished hub, it runs nothing that the hub's repository config, the global config or the system config names. The PRD leaves the way to the architect: git with those settings neutralised, or reading the repository's objects without git.
   - F4.1: the folder must be the top level of its own repository, and that repository's current commit must hold `hub.conf` at its root.
@@ -10,11 +10,12 @@
   - Spec: `docs/superpowers/specs/2026-11-15-workspaces-design.md`, section 8.
 - Decision:
   - `repohead::finished_hub(path)` reads files and starts no process. It opens no config file.
-  - **The whole check is one job with one 2-second deadline** in the bounded pool (ADR 0041). No answer is `Failed(NotAnswering)`.
+  - **The whole check is one job whose answer has a 2-second deadline** in the bounded pool (ADR 0041); each of its calls has its own 2-second bound. No answer is `Failed(NotAnswering)`. A check that is merely slow marks nothing; only a call blocked past its bound marks its path or mount.
+  - **Nothing inside `.git` is followed.** The hub folder is resolved by the guarded resolver; every file and folder below it is opened from its parent's descriptor with `O_NOFOLLOW`. A link inside `.git` is `Failed(Unsupported("link_in_git"))`.
   - Order: the folder exists (`stat`); it holds a regular file `hub.conf` by `lstat`, never following a link (the cheap exit, so an ordinary project's repository is never opened); `path/.git` is a folder (only the folder's own, never a parent's); `HEAD` is resolved through loose refs and `packed-refs`; the commit and its root tree are read from loose objects or from packs through index version 2, deltas included; the root tree has `hub.conf` with mode `100644` or `100755`.
   - Ref names from `HEAD` are checked before they are joined to a path.
   - Outcomes: `Finished`; `Missing` (does not exist, and only that); `NotHub` (not a folder, no `hub.conf`); `NotFinished` (no repository of its own, no commit, not committed, not a regular file); `Failed` (not answering, unsupported with its reason, object missing, damaged). `Failed` is never treated as finished.
-  - Not read, each `Failed(Unsupported)` with its reason: reftable refs; pack index version 1; `.git` as a file (a linked worktree or a submodule); `.git` as a link; more than 200 packs; a delta chain deeper than 64; a `packed-refs` over 16 MiB; a commit over 1 MiB or a tree over 8 MiB. An object reached only through alternates or a partial clone is `Failed(ObjectMissing)`.
+  - Not read, each `Failed(Unsupported)` with its reason: reftable refs; pack index version 1; `.git` as a file (a linked worktree or a submodule); `.git` as a link; a link inside `.git`; more than 200 packs; a delta chain deeper than 64; a `packed-refs` over 16 MiB; a commit over 1 MiB or a tree over 8 MiB. An object reached only through alternates or a partial clone is `Failed(ObjectMissing)`.
   - When the read ends in `ObjectMissing` or `Damaged`, the check resolves `HEAD` and reads once more inside the same deadline, because `git gc` replaces packs while a persona commits.
   - Object ids of 20 and 32 bytes are both read. Hashes are not verified.
 - Consequences:

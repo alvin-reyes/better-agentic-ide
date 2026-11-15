@@ -1,35 +1,40 @@
-# Workspaces (F4): technical design for slice S1
+# Workspaces (F4): technical design for slices S0 and S1
 
-- **Status:** Proposed, revision 2 (2026-11-15). Revision 1 was BLOCKED by its adversarial review (four blockers, sixteen majors, eleven minors). This revision answers every finding (section 22) and folds in the owner's decision of 2026-11-15 on the sync strip. Not approved. A delta review follows.
+- **Status:** Proposed, revision 3 (2026-11-15). Revision 1 was BLOCKED by its adversarial review (four blockers, sixteen majors, eleven minors). Revision 2 (3c9354a) closed every revision 1 blocker and most majors; its delta review was BLOCKED on three new blockers, four new majors and twelve new minors. This revision answers each of those (section 23) and builds in the owner's answers of 2026-11-15 to OQ-14 to OQ-21. Not approved. A delta review follows.
 - **Owner:** architect.
-- **PRD:** `docs/prd.md` section F4, revision 3.3, approved by the owner 2026-11-10 (branch `prd-workspaces`, b2f541c). Where the PRD leaves a choice to the architect, the choice is made here and marked **(architect)**. Where a choice belongs to the product manager, the designer or the owner, it is listed in section 19 with a recommendation, the PRD's literal text is the default built, and the recommended case is designed too.
-- **Owner decision, 2026-11-15 (revision 1's Q1, review finding B3):** **strip all paths.** An orchestrator session's `projectDir` and an agent-tracker entry's `cwd` are never synced, for anyone, hub or not. Each machine keeps its own. This goes beyond WS-7 AC3's table as approved. The PRD text it needs is written out in section 21 for the product manager; this design does not edit the PRD.
-- **Scope:** slice S1 in full. Slice S2 (recents, live refresh) only as far as S1 must not block it (section 16).
+- **PRD:** `docs/prd.md` section F4 on branch `prd-workspaces`. **Revision 3.3 is the approved text** (owner, 2026-11-10). **Revisions 3.4 to 3.7** (2026-11-15; 3.7 is bae3e5f) are pending the owner's approval of their text; this design is built against 3.7, and section 21 reconciles it with 3.7 row by row. Where the PRD leaves a choice to the architect, the choice is made here and marked **(architect)**. Where a choice belongs to the product manager, the designer or the owner, it is listed in section 19 with a recommendation, the PRD's literal text is the default built, and the recommended case is designed too.
+- **Owner decisions this design builds on:**
+  - 2026-11-15, revision 1's Q1 (review finding B3): **strip all paths.** An orchestrator session's `projectDir` and an agent-tracker entry's `cwd` are never synced, for anyone, hub or not. Each machine keeps its own.
+  - 2026-11-15, **OQ-14 to OQ-21, each as recommended**: the repository's current files are cleaned of those two fields (OQ-14); a skipped key is shown in Settings → Sync on the machine that skipped it (OQ-15); git history is not rewritten (OQ-16); a release-note item, for devops (OQ-17); per-task Dispatch makes the folder first, one folder per session, nothing starts if that fails (OQ-18 (i)); **S0 ships ahead of S1 on every OS with all four rules and the Dispatch and fleet fixes** (OQ-19); a recorded `projectDir` that is not a folder counts as none (OQ-21).
+  - 2026-11-15, **OQ-20 (b′)**: the fleet joins a run to a live pane only when this instance started it in this launch, **and** the agent picker and the board's `dispatchAgent` record the run's `cwd` at start, as orchestrator dispatch already does. The PRD (3.7) carries (b); the product manager is recording the answers and (b′).
+- **Scope:** slice **S0** (the two sync rows, every OS, ahead of S1) and slice **S1** in full. Slice S2 (recents, live refresh) only as far as S1 must not block it (section 16).
 - **Decisions (all Proposed; numbers provisional until merge, see the decision log's numbering notes):**
   - `0037-the-workspace-record-is-one-rust-owned-local-file.md`
   - `0038-a-workspace-is-the-folders-of-one-hub.md` (OQ-1)
   - `0039-a-finished-hub-is-read-from-the-repository-files-without-git.md`
-  - `0040-sync-splits-shared-keys-into-a-public-and-a-local-part.md`
-  - `0041-workspace-file-system-calls-run-in-one-bounded-pool-guarded-by-mount.md` (new in revision 2)
-- **Contracts:** `.ade/context/workspaces.md` and `.ade/context/sync-local-fields.md` (shared with F2).
-- **UX:** the F4 UX spec is on branch `ux-f4` and is being revised after its own blocked review. Section 18 answers each item of its section 22.
-- **Code read:** every statement about "today's code" was read from `origin/main` at **84389eb**. File and line references are to that commit. Anything not checked is marked **unverified**.
+  - `0040-sync-splits-shared-keys-into-a-public-and-a-local-part.md` (revised in revision 3: the scope of each rule, per row)
+  - `0041-workspace-file-system-calls-run-in-one-bounded-pool-guarded-by-mount.md` (revised in revision 3: a bound per call, charging by device, a path mark before a mount mark)
+- **Contracts:** `.ade/context/workspaces.md` and `.ade/context/sync-local-fields.md` (shared with F2; it also holds S0's fleet and Dispatch contracts).
+- **UX:** the F4 UX spec is on branch `ux-f4` and is being revised on another machine; this design does not edit it. Section 18 answers each item of its section 22; D-5 (section 19) is new.
+- **Code read:** every statement about "today's code" was read from `origin/main` at **84389eb**. File and line references are to that commit. Anything not checked is marked **unverified**. Nothing in this revision was compiled or run on a Mac.
 - **Public repository:** the agent hub template is private. This document names its files and folders as the PRD does (`hub.conf`, `ACCESS.md`, `projects/`, `ops/`, `bin/setup`, `bin/doctor`) and describes its behaviour only. No test runs the template.
 
 ## 1. Summary
 
-- **Everything that touches the disk is in Rust**, in `src-tauri/src/workspace/` and `src-tauri/src/pathkey.rs`. The webview holds a derived view per hub in memory and never compares two paths itself.
-- **Every file-system call F4 makes goes through one fixed pool** of 8 worker threads, guarded by mount. At most 4 calls are in flight per mount, a mount whose calls do not return is marked stuck and answered at once from then on, and the mark is lifted when its calls return or the mount goes away. A dead mount parks at most 4 threads and never stops calls to other mounts (section 7, ADR 0041).
-- **Opening a workspace streams.** The first view is published at once (the hub's root, checking). The finished-hub check has one 2-second deadline for the whole check. Roots are published as their checks finish; a root not yet checked shows as checking and arrives later under a higher `gen`. Discovery as a whole stops after 10 seconds (section 7.4).
+- **Slice S0 ships first, on every OS, with no hub, no workspace and no F2 code** (OQ-19). It is three stories: the two sync rows with their import, never-take, unreadable, cleanup and skipped-key rules (w12a); the fleet's join of runs to live panes (w12b); and Dispatch making the project folder first (w12c). Section 9.
+- **Everything else that touches the disk is in Rust**, in `src-tauri/src/workspace/` and `src-tauri/src/pathkey.rs`. The webview holds a derived view per hub in memory and never compares two paths itself.
+- **Every file-system call F4 makes on a hub's paths is bounded on its own: 2 seconds per system call**, not per job. Each call is made through a descriptor of the folder already resolved, follows no link, and is charged to the file system it really enters: by the folder's device, or by the mount table when the child is a mount point. A blocked call marks its **path** stuck; a **mount** is marked only when its mount point blocks or two unrelated paths on it do. When a mark lifts, what was shown "not answering" because of it is checked again. The pool and the mount table are values in Tauri managed state, so each test builds its own (section 7, ADR 0041).
+- **Opening a workspace streams.** The first view is published at once (the hub's root, checking). Roots are published as their checks finish under a higher `gen`. Each root, each `ACCESS.md` and the finished-hub check has a 2-second deadline for its answer, which shows "not answering" and marks nothing. Discovery as a whole stops after 10 seconds (section 7.6).
 - **The workspace record is one file that Rust owns**, `<app data>/state/workspaces.json`, outside `state/kv/`, so no key list can export it (ADR 0037).
 - **Discovery is a Rust parser with a hand-written frozen fixture**, capped at 200 work folders and 500 candidate rows per hub.
-- **The finished-hub check reads the repository's files and starts no process** (ADR 0039). It does not read: reftable refs, objects reached only through alternates or a partial clone, pack index version 1, a `.git` that is a file or a link, more than 200 packs, a delta chain deeper than 64, a `packed-refs` over 16 MiB, or an object over its size cap. Each is reported as "check failed" with its reason, never as finished.
-- **The sync strip needs no knowledge of workspaces.** Sync's export removes every `projectDir` from the orchestrator key and every `cwd` from the agent-tracker key, whatever the folder. So sync runs no discovery, has no fail-closed state, does not read the record, and costs nothing at launch or close. The other rows are decided by fields of the exported value itself. The import joins the imported copy with this machine's own fields, by a rule defined for every case (section 9, ADR 0040).
+- **The finished-hub check reads the repository's files and starts no process** (ADR 0039). It follows no link inside `.git`. It does not read: reftable refs, objects reached only through alternates or a partial clone, pack index version 1, a `.git` that is a file or a link, a link inside `.git`, more than 200 packs, a delta chain deeper than 64, a `packed-refs` over 16 MiB, or an object over its size cap. Each is reported as "check failed" with its reason, never as finished.
+- **The sync strip needs no knowledge of workspaces, and each of its rules has a scope per row** (section 9.2). The never-take rule, the unreadable rule, the cleanup and the skipped-key notice cover only the orchestrator's `projectDir` and the agent tracker's `cwd`. The tab-set row keeps this machine's F2 fields and is otherwise today's import; `ade-session` exports an allowlist for marked and hub tabs.
+- **No automatic setup in a covered checkout while the covered set may be partial:** the cover check answers `unknown` until the main window has reported its tabs and until every open hub's discovery is final (section 10).
 - **The workspace mark is `Tab.workspace`**, the hub folder's path, separate from F2's `Tab.hub`. A registry in Rust knows which workspaces and hub tabs are open in which window. It serves bring-forward (D7) and the automatic-setup check (WS-1 AC8).
-- **The multi-root tree is F4's own component, listing cache and watch set.** It never passes roots to F3's `fileBrowserStore.show`, so F3's one recursive watch per root is never set on a workspace root. What differs between "before F3 S1" and "with F3 S1" is listed file by file (section 11.4).
-- **Folder watches are a bounded poll** of the expanded folders' timestamps, at most 500 per window, every 2 seconds. No operating-system watch is set, so nothing is recursive on any platform (section 11.5).
-- **F4 is gated to macOS in one place** in Rust and one in the webview (section 13.5).
-- **Fourteen stories.** Thirteen do not need F2. The fourteenth carries every F2 seam and waits for F2 slice 1 (section 17).
+- **The multi-root tree is F4's own component, listing cache and watch set.** It never passes roots to F3's `fileBrowserStore.show`. What differs between "before F3 S1" and "with F3 S1" is listed file by file (section 11.4).
+- **Folder watches are a bounded poll** of the expanded folders' timestamps, at most 500 per window, every 2 seconds. No operating-system watch is set (section 11.5).
+- **F4's workspace features are gated to macOS in one place** in Rust and one in the webview (section 13.5). S0 is not gated.
+- **Sixteen stories.** Three form S0 and need nothing. Thirteen form S1; twelve of them do not need F2, and the thirteenth carries every F2 seam and waits for F2 slice 1 (section 17).
 
 ## 2. Where things stand (origin/main 84389eb)
 
@@ -45,11 +50,15 @@
 | Sync export | Reads only `SHARED_KEYS` and `DEVICE_KEYS` from `kv/`. A key is rewritten only when its value differs **and** the local file is newer than the repo copy | `src-tauri/src/sync.rs:36` to `:47`, `:88` to `:96`, `:260` to `:282` (the test is `:272`) |
 | Sync import | For each shared key whose repo copy is newer, replaces the whole local value and puts back only secret fields. Device keys are never imported | `sync.rs:285` to `:300` |
 | Sync order and budgets | One run: pull, export, commit, push, then import. The import is skipped past the startup deadline (6 s minus 500 ms); closing waits at most 4 s | `sync.rs:510` to `:556`; `src/lib/sync.ts:20`, `:84`; `src/App.tsx:136` |
-| Orchestrator sessions | A bare array under `better-terminal-orchestrator`; each has `id` and an optional `projectDir`. Dispatching a session with no `projectDir` creates a project folder and sets it | `src/stores/orchestratorStore.ts:31` to `:38`, `:63` to `:67`, `:139`; `src/components/OrchestratorTab.tsx:391` to `:397` |
+| Orchestrator sessions | A bare array under `better-terminal-orchestrator`; each has `id` and an optional `projectDir`. **Dispatch all** makes a project folder for a session with none, sets it and writes `SPEC.md`; **per-task Dispatch** passes `session?.projectDir`, so for a session with none its agent starts in the home folder without the spec line. Generation also makes the folder, after `setTasks` | `src/stores/orchestratorStore.ts:31` to `:38`, `:63` to `:67`, `:139`; `src/components/OrchestratorTab.tsx:56`, `:196` to `:208`, `:250`, `:325`, `:385` to `:406`, `:739` |
+| The fleet | `buildLanes` takes each tracker entry's tab, tab name and folder from the live pane with the same `paneId`, before the entry's own `cwd`; cost follows the lane's folder and time. Pane ids are `pane-${n}`, per page | `src/stores/fleetStore.ts:133` to `:168`, `:209`; `src/hooks/useFleetData.ts:133` to `:185`; `tabStore.ts:219` to `:220` |
+| Runs with no folder | The agent picker and the board's `dispatchAgent` start tracker entries with no `cwd`; orchestrator dispatch records one | `src/components/AgentPicker.tsx:250` to `:256`; `src/lib/agentLaunch.ts:91`; `OrchestratorTab.tsx:355` to `:363` |
+| Sync's local state | `sync-state.json` in the app data folder, never in the repo; the webview keeps the last `SyncReport`, replaced by each run | `sync.rs:130`, `:574`; `src/lib/sync.ts:57` |
 | Agent tracker | A bare array under `better-terminal-agent-tracker`; entries have **no id**; `cwd` is optional | `src/stores/agentTrackerStore.ts:6` to `:29`, `:41` to `:51` |
 | Tab sets | `WorkspacePreset { id, name, tabs: { name, splits }[], savedAt }`, a bare array under `better-terminal-workspaces`; save and delete only | `src/stores/settingsStore.ts:334` to `:342`, `:522` to `:538` |
 | Automatic project setup | One hook, in the main window only, fed the **active tab's own-view folder** and nothing else | `src/hooks/useProjectSetup.ts:165`, `:186` to `:276`; `src/App.tsx:95` to `:100`, `:180` |
-| Pane folders | Each terminal pane polls its folder; `get_pty_cwd` reads the foreground process's folder from the process table | `src/components/TerminalPane.tsx:67`; `src-tauri/src/pty.rs:518` to `:532` |
+| Pane folders | Each terminal pane polls its folder; `get_pty_cwd` reads the foreground process's folder from the process table (`cwd_of`), and falls back to `/usr/bin/lsof` without `-b` | `src/components/TerminalPane.tsx:67`; `src-tauri/src/pty.rs:518` to `:532`, `:678` to `:720`, `:768` |
+| Listing a folder | `list_directory` lists with `read_dir` and calls `entry.metadata()` (an `lstat`) on every entry; its error message holds the path | `src-tauri/src/lib.rs:74` to `:105` |
 | Opening a folder as a tab | `openProjectTab(path)` asks its setup questions before it opens the tab | `src/lib/newTab.ts:82` to `:120` |
 | Toasts | 4 s, or 15 s with an action; main window only | `src/hooks/useContextGuard.ts:15` to `:41`; `App.tsx:174` to `:180` |
 | Platform constants | `platform::IS_MACOS` in Rust; `IS_MAC` in the webview | `src-tauri/src/platform.rs:16`; `src/lib/shortcuts.ts:14` |
@@ -74,6 +83,9 @@ flowchart LR
     FW[folderWatches]
     CP[CommandPalette<br/>4 entries]
     PS[useProjectSetup<br/>cover check]
+    FL[fleet buildLanes<br/>runs started here]
+    OPD[projectDirFor<br/>one folder per session]
+    SS[SyncSettings<br/>skipped line]
   end
   subgraph Rust
     CMD[workspace commands<br/>macOS gate]
@@ -85,8 +97,9 @@ flowchart LR
     PK[pathkey<br/>guarded resolver]
     BD[bounded<br/>pool of 8, mount guard]
     WSET[watchset<br/>poll]
-    SL[sync_local<br/>public and join]
-    SY[sync.rs export, scrub, import]
+    SL[sync_local<br/>public, join, clean]
+    SY[sync.rs export, cleanup, import, skipped]
+    OD[orchestrator_project_dir]
   end
   FILE[(state/workspaces.json)]
   KV[(state/kv/*.json)]
@@ -117,16 +130,18 @@ flowchart LR
   SY --> SL
   SY --> KV
   SY --> REPO
+  OPD --> OD
+  SS --> SY
 ```
 
-Sync no longer touches the workspace modules: `sync_local` reads no record, runs no discovery and asks no registry.
+Sync does not touch the workspace modules: `sync_local` reads no record, runs no discovery and asks no registry. S0's three parts (the fleet, `projectDirFor`, the skipped line) touch no workspace module either.
 
 ### 3.1 Modules
 
 | Module | New or changed | Responsibility | Tested by |
 |---|---|---|---|
 | `src-tauri/src/pathkey.rs` | new (or moved, section 6) | The path rule: a guarded resolver, one key per folder, `inside`, `same` | Rust, every CI OS; `macos_only` for the volume's own answers |
-| `src-tauri/src/workspace/bounded.rs` | new | The fixed pool, the per-mount limit, the stuck-mount guard, recovery, the mount table | Rust, every CI OS, with a fake file system and a fake mount table |
+| `src-tauri/src/workspace/bounded.rs` | new | `Bounded`, a value in managed state: workers and spares, the per-call bound and its watchdog, charging by device and mount point, path and mount marks, recovery and its listener, the mount table and its refresher | Rust, every CI OS, each test with its own `Bounded`, fake file system and fake mount table; `macos_only` for firmlinks and a real mount point |
 | `src-tauri/src/workspace/access.rs` | new | The table-row parser. Pure | Rust; the frozen fixture |
 | `src-tauri/src/workspace/discover.rs` | new | Files and their order, bounded reads, `~`, too broad, duplicates, the caps | Rust; `macos_only` for case, NFC and `~/Library` |
 | `src-tauri/src/workspace/repohead.rs` | new | The finished-hub check | Rust (fixtures built with `git`: `cfg(unix)`) |
@@ -136,10 +151,12 @@ Sync no longer touches the workspace modules: `sync_local` reads no record, runs
 | `src-tauri/src/workspace/registry.rs` | new | Open tabs per window, reservations, most recently used, the covered set, the terminal sampler | Rust |
 | `src-tauri/src/workspace/watchset.rs` | new | One poll set per window | Rust, every CI OS |
 | `src-tauri/src/workspace/testhub.rs` | new, `cfg(test)` | The marker-fixture builder and its "nothing changed" assertion (section 17.3) | used by the tests of w3, w5, w9 |
-| `src-tauri/src/workspace/mod.rs` | new | The commands, the events, the platform gate (section 13) | Rust |
-| `src-tauri/src/sync_local.rs` | new | `public` and `join` for the keys of section 9 | Rust, every CI OS |
-| `src-tauri/src/sync.rs` | changed | `value_for_repo`, the scrub, `import_state`, `SyncReport.skipped_keys` | Rust; the two-machine tests |
-| `src-tauri/src/lib.rs` | changed | Registers the commands and the managed state; clears a window's entries when it is destroyed; `list_directory`'s body becomes a function, `list_entries`, that `workspace_list` also calls (its behaviour is unchanged) | Rust string test; the existing listing tests |
+| `src-tauri/src/workspace/mod.rs` | new (w2 declares every module) | The commands, the events, the platform gate (section 13) | Rust |
+| `src-tauri/src/sync_local.rs` | new (w12a rows 1, 2; w13 rows 3, 4) | `public`, `join` and `clean`, row by row (9.2, 9.3) | Rust, every CI OS |
+| `src-tauri/src/sync.rs` | changed (w12a; w13) | `value_for_repo`, the cleanup, `import_state`, `SyncState.skipped`, `SyncReport.skipped_keys` | Rust; the two-machine tests |
+| `src-tauri/src/orchestrator_dir.rs` | new (w12c) | `orchestrator_project_dir`: the recorded folder if it is one, else a new one (9.9) | Rust, all three CI jobs |
+| `src-tauri/src/pty.rs` | changed (w11) | `quick_cwd(id)`: ids under the PTY lock, `cwd_of` outside it, no `lsof` | Rust |
+| `src-tauri/src/lib.rs` | changed | Registers the commands and the managed state (`Bounded`, the registry, the record store); clears a window's entries when it is destroyed. `list_directory` is not changed: `workspace_list` has its own bounded listing (11.4) | Rust string test |
 | `src/stores/tabStore.ts` | changed | `Tab.workspace`; `addWorkspaceTab`; the mark in `ClosedTab`, `SavedTab`, Duplicate; `markRunTab` (w14) | vitest |
 | `src/lib/detachWindow.ts`, `src/DetachedApp.tsx` | changed | `SerializedTab.workspace`; the detached window starts `workspaceTabs` and mounts the tab notice bar | vitest |
 | `src/lib/workspaceTabs.ts` | new | In every window: reports this window's workspace and hub tabs, **loads each hub's view**, applies a focus event | vitest |
@@ -155,7 +172,11 @@ Sync no longer touches the workspace modules: `sync_local` reads no record, runs
 | `src/components/CommandPalette.tsx` | changed | Four entries, present only for a workspace tab | vitest |
 | `src/lib/newTab.ts` | changed | `openProjectTab` asks `workspace_resolve` first | vitest |
 | `src/hooks/useProjectSetup.ts`, `src/App.tsx` | changed | The cover check before any automatic setup (section 10) | vitest |
-| `src/stores/agentTrackerStore.ts` | changed | An optional `id` on new entries (section 9.3) | vitest |
+| `src/stores/agentTrackerStore.ts` | changed (w12a, w12b) | An optional `id` on new entries (9.3); `startedHere` and `startedThisLaunch` (9.8) | vitest |
+| `src/stores/fleetStore.ts`, `src/hooks/useFleetData.ts` | changed (w12b) | `buildLanes`'s `joinable` (9.8) | vitest |
+| `src/components/AgentPicker.tsx`, `src/lib/agentLaunch.ts` | changed (w12b) | record the run's `cwd` at `startSession` (9.8) | vitest |
+| `src/lib/orchestratorProjectDir.ts`, `src/components/OrchestratorTab.tsx` | new; changed (w12c) | `projectDirFor`; its three callers (9.9) | vitest |
+| `src/components/SyncSettings.tsx`, `src/lib/sync.ts` | changed (w12a) | `SyncReport.skippedKeys` and its line (9.5) | vitest |
 | `src/components/SettingsPanel.tsx`, `SyncSettings.tsx`, `Tour.tsx`, `docs/guide/settings.md`, `docs/guide/sync.md` | changed | The Tab Sets relabel (WS-10) | vitest; the scan |
 | `scripts/workspaceWord.test.ts` | new | WS-10 AC2's scan | vitest |
 
@@ -326,16 +347,18 @@ So one discovery makes at most 2 listings, 201 file reads and 500 candidate chec
 
 ### 5.3 Reading a file (WS-9 AC2, WS-1 AC7)
 
-On Unix, one function, run as one pool job:
+On Unix, one pool job per file, every call of it made as section 7.2 says:
 
-1. `open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)`: a FIFO with no writer returns at once and a device does not wait.
-2. `fstat` the descriptor. Anything but a regular file is **unreadable**. A symbolic link to a regular file is followed.
-3. Read at most 1 MiB + 1 byte. More than 1 MiB is **unreadable** ("too large").
-4. The bytes must be valid UTF-8, all of them.
+1. **Resolve the file's folder** with the guarded resolver (section 6), from the hub's own resolved descriptor: `<hub>`, or `<hub>/projects/<name>`, or `<hub>/ops/<name>`. A link on the way is read and its target resolved component by component, each call charged to the file system it enters. Revision 2 opened the path and let the kernel follow links (review N-B1).
+2. **Look at the name** with `fstatat(folder, "ACCESS.md", AT_SYMLINK_NOFOLLOW)`. A symbolic link is read with `readlinkat` and its target resolved the same way, at most 40 links in all; then step 3 runs on the target's folder and name. Anything that is not a regular file is **unreadable** ("not regular").
+3. **Open it** with `openat(folder, name, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)`. `O_NOFOLLOW` makes a name that became a link after step 2 fail (`ELOOP`) instead of being followed; that is **unreadable** ("other"). A FIFO with no writer returns at once and a device does not wait.
+4. `fstat` the descriptor: anything but a regular file is **unreadable** ("not regular").
+5. Read at most 1 MiB + 1 byte, in reads of 64 KiB, each one call. More than 1 MiB is **unreadable** ("too large").
+6. The bytes must be valid UTF-8, all of them.
 
-No answer within the job's bound is **unreadable** ("not answering"). An unreadable file costs only its own rows.
+A call blocked past its bound, or the job past its 2-second deadline (7.6), is **unreadable** ("not answering"). Only the first marks anything (7.3). An unreadable file costs only its own rows.
 
-Off Unix (section 13.5) the function is `metadata` (regular file), then `File::open` and the same capped read. F4 is not offered there; this exists so the module compiles and its pure tests run.
+Off Unix (section 13.5) the function is `symlink_metadata` (regular file), then `File::open` and the same capped read. F4 is not offered there; this exists so the module compiles and its pure tests run.
 
 ### 5.4 From rows to candidates
 
@@ -356,7 +379,7 @@ pub struct Discovery {
     pub unreadable: Vec<FileProblem>,    // { file, why: Permission | NotRegular | NotUtf8 | TooLarge | NotAnswering | Other }
     pub work_folders_skipped: usize,
     pub rows_over_limit: usize,
-    pub cut_short: bool,                 // the 10-second deadline of 7.4 was reached
+    pub cut_short: bool,                 // the 10-second deadline of 7.6 was reached
     pub complete: bool,
 }
 pub struct Checkout { pub path: String, pub key: Option<PathKey>, pub status: Status, pub file: String /* hub-relative */, pub line: usize }
@@ -395,9 +418,9 @@ The test runs `discover` on the fixture with a temporary home and asserts the ou
 `key(path, home) -> Result<PathKey, NotAnswering>`, run as one pool job:
 
 1. Expand a leading `~` or `~/` with `home`; normalise lexically (`.` and `..`, repeated and trailing `/`).
-2. **Resolve, one component at a time (the guarded resolver).** Starting from `/`, for each component: look up the mount of the prefix resolved so far in the mount table (7.2) and note it as the mount this job is touching; if that mount is stuck, stop with `NotAnswering`; `lstat` the component; if it is a symbolic link, `readlink` it and splice the target in (at most 40 links); if it does not exist, stop resolving and append the remaining components as written. The prefix resolved so far holds no link, so its mount in the table is the mount the next call really touches. This is what makes the guard of section 7 exact.
+2. **Resolve, one component at a time (the guarded resolver).** Starting from a descriptor of `/`, for each component `c` of the folder resolved so far, `P`: charge the call to `P/c`'s mount (7.2: its own mount when `P/c` is a mount point in the table, else `P`'s device); if that path or mount is marked (7.3), stop with `NotAnswering`; `fstatat(P, c, AT_SYMLINK_NOFOLLOW)`; if it is a symbolic link, `readlinkat(P, c)` and splice the target in (at most 40 links); if it is a folder, open it with `openat(P, c, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)` as the next `P`, keeping the device the `fstatat` returned; if it does not exist, stop resolving and append the remaining components as written. Every call is made through the descriptor of a folder that holds no link, so no call follows one, and the device of that folder names the file system the next call enters. Revision 2 charged by the longest mount-point prefix of the text, which a macOS firmlink defeats (7.2).
 3. Normalise to NFC (`icu_normalizer` 2.1.1, in `src-tauri/Cargo.lock`).
-4. On macOS, when `pathconf(resolved ancestor, _PC_CASE_SENSITIVE)` is 0, case-fold with CoreFoundation's `CFStringFold` (`core-foundation-sys` 0.8.7, in the lock file; the function is at `string.rs:515` of that crate), then NFC again. A failed `pathconf` folds.
+4. On macOS, when `fpathconf(descriptor of the resolved ancestor, _PC_CASE_SENSITIVE)` is 0, case-fold with CoreFoundation's `CFStringFold` (`core-foundation-sys` 0.8.7, in the lock file; the function is at `string.rs:515` of that crate), then NFC again. A failed `fpathconf` folds. The decision (fold or not, from the volume's answer) is a plain function tested on every OS through a seam for the answer; the fold itself is `cfg(target_os = "macos")` and tested only there (17.5).
 
 - `same(a, b)`: equal keys. `inside(a, b)`: `b`'s key is a **component** prefix of `a`'s. Both compare strings and make no file-system call.
 - **Off macOS** the key is steps 1 to 3. F4 is not offered there (13.5).
@@ -410,57 +433,78 @@ The review confirmed the three crates and versions in the lock file. Whether mak
 
 ## 7. Bounds (WS-9 AC2, AC3; ADR 0041)
 
-### 7.1 The pool
+Revision 2 bounded a **job**. Its delta review (N-B1) showed what that costs: a job made of many fast calls (200 index files, a 1 MiB read, a 500-folder watch tick) could pass 2 seconds on a live mount and mark it stuck, failing every queued job; jobs touched mounts they never declared (an `ACCESS.md` opened through a link, `entry.metadata()` on a mount-point child, a link inside `.git`); on macOS the home folder, the hubs and most checkouts share one volume, so one slow job turned every local root "not answering"; and nothing was checked again when a mark lifted. Revision 3 bounds each **system call**, charges each call to the file system it really enters, marks a path before it marks a mount, and checks again when a mark lifts.
 
-`bounded::run(job) -> Result<T, NotAnswering>`. Every file-system call F4 makes on a hub, a checkout, an added folder or a watched folder is a job: one `ACCESS.md` read, one listing of `projects/` or `ops/`, one candidate check, the finished-hub check, one `workspace_locate`, **one listing of a folder in the tree** (`workspace_list`), one watch add, one watch tick per mount. Reading and writing the record file is not a job: it is ADE's own file in ADE's own data folder.
+### 7.1 The pool: a value, whose unit of bound is a call
 
-- **A fixed pool of 8 worker threads**, process-wide, started on first use.
-- **At most 4 jobs in flight per mount.** Further jobs for that mount wait in its queue.
-- **A job's bound is 2 seconds from the moment it starts running**, not from when it was queued. So a job that waited behind others is not reported as "not answering" for waiting.
-- **A queue holds at most 1,024 waiting jobs per mount.** Past that the new job answers `NotAnswering` at once. One discovery submits at most 703 jobs (5.2).
-- A job declares the mount it is about to touch before each call (the resolver of section 6 does this per component; every other job runs on an already resolved path, whose mount is known before it starts).
-- **A job that is about to cross to another mount stops and is queued again under that mount** (the resolver following a link or passing a mount point; it carries the prefix it has resolved). So the per-mount limit counts every call, and a link on the local disk that points into a dead mount is charged to the dead mount, not to the local disk.
+- **`workspace::bounded::Bounded` is a value, not a process-wide pool** (review N-M4). `Bounded::new(config, mounts: Arc<dyn MountTable>, fs: Arc<dyn Fs>)` builds one with its own workers, spares, watchdog and mount-table refresher. The app builds one in `setup`, holds `Arc<Bounded>` in Tauri managed state, and every command passes it down; every function in `workspace/` and `pathkey.rs` that touches the disk takes it as an argument. Each test builds its own, with a fake file system and a fake mount table, so tests that run in parallel in one `cargo test` process share no worker, no spare and no table. A static test asserts that `src-tauri/src/workspace/` and `pathkey.rs` hold no `static` item other than constants, no `OnceLock`, `LazyLock`, `lazy_static!` or `thread_local!`.
+- **Hang seams release on drop.** The fake file system's `hang(path)` returns a `HangGuard`; while it lives, calls on that path block; dropping it makes every blocked call return `Err(Interrupted)`. Every test that hangs a call holds the guard in a local, so a failing assertion still releases its threads, and ends by asserting `bounded.parked() == 0` within one second. `Bounded`'s `Drop` stops its workers and the watchdog and does not wait for a parked thread (in production a parked thread can be in a call that never returns).
+- **Config:** 8 workers, 8 spares, 4 calls in flight per mount, a bound of 2 seconds per call. Tests pass their own.
+- **A job** is what a caller submits: one `ACCESS.md` read, one listing of `projects/` or `ops/`, one candidate check, the finished-hub check, one `workspace_locate`, one listing of a folder in the tree (`workspace_list`), one watch add, one watch tick of one mount's folders. A job runs on a worker and makes every file-system call through its context: `ctx.stat_at(dir, name)`, `ctx.open_at(dir, name, flags)`, `ctx.read(fd, len)`, `ctx.readlink_at(dir, name)`, `ctx.read_dir_batch(dir)`, `ctx.fstat(fd)`. A static test asserts that no file in `workspace/` but `record.rs` (ADE's own file), and not `pathkey.rs`, names `std::fs::`.
+- **The bound is per call: 2 seconds from the moment that call is issued.** Time in a queue never counts, and neither do the job's other calls. A watchdog thread looks at each worker's current call every 100 ms. A call that has run for 2 seconds is **blocked**: the job's caller gets `NotAnswering` at once, the worker is parked (7.3) and a spare takes its place. A job that is slow because it makes many fast calls is never "blocked".
+- **Deadlines are the caller's, and never mark anything.** Each kind of job has a deadline for its answer (7.6). A job past its deadline answers `NotAnswering` to its caller and is cancelled at its next call (it checks a flag before each). Nothing is marked: the mount answered every call it was asked.
+- **At most 4 calls in flight per mount.** A job is always on one mount: the mount its next call is charged to (7.2). Before a call charged to another mount, the job yields its worker and is queued again under that mount, carrying where it was (for the resolver, the folder resolved so far and its descriptor). So the limit counts calls, and a link on the local disk that points into a dead mount is charged to the dead mount.
+- **A job queued again keeps its deadline** (review minor 11). The deadline runs from when the job first started running and is never restarted by a move between queues; only the per-call bound starts again, at each call. "One job, one deadline" is now "one deadline per job, one bound per call".
+- **Queues, without a cap that refuses** (review minor 6). Each mount's queue is served round-robin by submitter: each open job, each window's listing queue, each window's watch set. Each open job keeps at most 16 jobs queued at a time and submits the next as one ends; a window's listing queue holds at most 4 (11.4); a watch set submits one tick per mount (11.5). So a mount's queue holds at most 16 jobs per open job plus 5 per window, and no job is refused because a queue is full. Fifty hubs restoring on one mount share its 4 calls in turn, so each hub's first roots arrive in step instead of after the other hubs' candidates. Revision 2's cap of 1,024 is gone.
 
-### 7.2 The mount guard
+### 7.2 Which mount a call is charged to
 
-- **The mount table** is a snapshot of the mounted file systems: on macOS from `getfsstat` with `MNT_NOWAIT`; on Linux from `/proc/self/mountinfo`. One dedicated thread refreshes it at most once per second, on demand. Callers read the last snapshot and never wait for a refresh. That `getfsstat(MNT_NOWAIT)` never blocks on a dead mount is what its manual page says and is **unverified** here; because the refresher is its own thread, a refresh that did block would freeze the snapshot and stop nothing else. Tests inject the table.
-- **The mount of a path** is the longest mount point that is a component prefix of the path. For a resolved path this is exact.
-- **Stuck.** When a job has run for 2 seconds without returning, its caller gets `NotAnswering`, and the mount the job last declared is marked **stuck**. From then on every queued and every new job for that mount answers `NotAnswering` at once and starts no thread.
-- **A worker that is still blocked is parked**, and a replacement is started so 8 workers stay available. At most **8** replacements exist at any time.
-- **How many threads one dead mount can park: 4** (the per-mount limit). A hub with 33 sibling checkouts on one dead mount starts 4 calls into it, waits 2 seconds, marks it, and answers the other 29 at once.
-- **Calls to other mounts are not affected** by a stuck mount: they have their own queues, and the pool keeps 8 workers.
+The resolver (section 6) walks a path one component at a time from an open descriptor of the folder resolved so far, `P`. Every call is made on one child `c` of `P` through `P`'s descriptor: `fstatat(P, c, AT_SYMLINK_NOFOLLOW)`, `openat(P, c, O_NOFOLLOW | …)`, `readlinkat(P, c)`, `fdopendir` and `readdir` on a descriptor opened that way. **No call F4 makes follows a link**: a link is read and its target resolved component by component, each call charged in turn. A call on `P/c` is charged:
 
-**Recovery.** A stuck mark is lifted when either happens:
+1. **to the mount whose mount point is `P/c`**, when the mount table has one: the `lstat` of a mount point enters the file system mounted there. On macOS each table entry is matched in two spellings, as listed and with a leading `/System/Volumes/Data` removed (see "Firmlinks" below);
+2. otherwise **to `P`'s file system**, named by the device (`st_dev`) that the call which resolved `P` returned. A mount is identified by its device. The table gives each entry's device where it can: on Linux `mountinfo`'s major:minor, which is exactly `st_dev`; on macOS `statfs.f_fsid.val[0]`, which is taken to equal `st_dev` and is **unverified**. The guard also learns the link between a mount point and its device the first time a call on that mount point returns. A mount whose two names are never linked is tracked under both; that splits its limit of 4 calls between them and never charges a call to the wrong file system.
 
-1. a parked job returns (a hard mount whose server came back; a soft mount that timed out). The thread goes back to the pool and the surplus replacement is retired;
-2. the mount is no longer in the mount table (it was unmounted).
+`/` is stat'ed once when `Bounded` is built; its device names the first component's file system.
 
-There is no timer that lets new calls into a stuck mount: the parked calls are the probes. After recovery the next refresh or open reads the folder normally.
+**Every path F4 touches is charged this way** (review N-B1's list):
 
-**The residual cliff, stated.** Each dead mount holds up to 4 parked threads against the 8 replacements. With **three or more mounts dead at once** the pool can run short: a third dead mount may be left with fewer than 8 working threads, and when all 8 workers and 8 replacements are parked, every job answers `NotAnswering` until a mount recovers or is unmounted. For this to happen, 16 calls must each be blocked on a mount that never returns. It is a slow-down first and an outage of F4's file reads only at that limit; terminals, tabs and the rest of ADE do not use the pool.
+- an `ACCESS.md` (5.3): its folder resolved, the name looked at with `fstatat`, opened with `O_NOFOLLOW`;
+- the finished-hub check (8.1): the hub folder is resolved; inside `.git` nothing is followed at all;
+- a listing for the tree (11.4): names and `d_type` from `readdir`, then each entry's size from `fstatat` on the listed folder's descriptor, charged to the listed folder's mount; an entry that is a mount point in the table is charged to its own mount, and when that mount or its path is marked, the call is not made and the entry is listed as a folder;
+- a candidate, `workspace_locate`, a watch add, a watch tick: resolved component by component.
 
-**What is no longer in the design:** revision 1's count of abandoned calls with a cap of 32, "known to answer", and guarding by folder.
+**The mount table** is a snapshot of the mounted file systems: on macOS from `getfsstat` with `MNT_NOWAIT`; on Linux from `/proc/self/mountinfo`. One dedicated thread per `Bounded` refreshes it at most once per second, on demand. Callers read the last snapshot and never wait for a refresh. That `getfsstat(MNT_NOWAIT)` never blocks on a dead mount is what its manual page says and is **unverified** here; a refresh that did block would freeze the snapshot and stop nothing else.
 
-### 7.3 Never on the UI thread, never on an async worker
+**Firmlinks: the review's suspicion is right in mechanism. Checked by reading Apple's documented layout, not by running anything** (this revision was written on Linux). Since macOS 10.15 the startup disk is a read-only system volume mounted at `/` and a data volume mounted at `/System/Volumes/Data`. `/Users`, `/Volumes`, `/Applications`, `/Library`, `/private`, `/opt`, `/usr/local` and a few more are firmlinks from the system volume into the data volume. A firmlink is not a symbolic link: `lstat` reports a folder and `realpath` keeps the `/Users/…` spelling. So for `/Users/dev/x` the longest mount point that is a prefix is `/`, while the file system every call enters is the data volume. Revision 2's prefix match therefore charged every home-folder call to the system volume: wrong, and with no warning. Revision 3 never matches by prefix: rule 2 uses the device, and `lstat("/Users")` reports the data volume's. Rule 1 still compares a path with the table, and a mount made below a firmlinked folder may be listed under its data-volume spelling (from memory, `mount` prints `map auto_home on /System/Volumes/Data/home`; **unverified**), hence the second spelling. A mount point that both spellings miss is still contained: its hang marks its path (7.3), not the volume above it. Tests in `bounded::macos_only` (w2): `lstat("/Users")`'s device is the table's entry for `/System/Volumes/Data`; a disk image attached with `hdiutil attach -mountpoint <home>/<temp>/m` is a mount point by rule 1, and a call on `m` is charged to the image, not to the data volume.
 
-Every F4 command is declared `#[tauri::command] async fn` and does its work inside `tauri::async_runtime::spawn_blocking` (as `sync.rs:615` does), so a wait of up to 2 seconds holds a thread of the blocking pool, not an async-runtime worker, and never the main thread. A Rust string test asserts both for each F4 command, in the style of `watcher.rs:705` to `:720`.
+### 7.3 Stuck: a path first, a mount only on more evidence
 
-### 7.4 Opening a workspace: the deadlines (WS-9 AC3)
+- **Only a blocked call marks anything.** A slow job, a job past its deadline and a busy queue mark nothing.
+- **The path mark.** A blocked call's path, `P/c`, is marked stuck. From then on every call on that path or below it answers `NotAnswering` at once and starts no thread.
+- **The mount mark.** The mount the blocked call was charged to is marked stuck when the call's path is that mount's own mount point, or when a **second** call charged to that mount is blocked at a path that is neither on nor below an existing path mark. From then on every call charged to that mount answers at once.
+- **Why two steps.** On a Mac, one hang under the home folder is far more likely a dead share mounted at a place the table did not name than a dead startup disk. The path mark answers every other call into that subtree at once, so the share costs one hang, and the volume above it is marked only when two unrelated paths on it hang. A truly dead mount is marked within one bound when its calls in flight block at its mount point or at two unrelated paths, and within two bounds when they all block at one path below it (the path mark, then the next call elsewhere on it).
+- **A parked call leaves its mount's count of 4** and is counted against the spares instead. So a hang charged to the local volume (the missed mount point) does not take the volume's slots.
+- **Spares.** A parked worker is replaced, up to 8 spares at a time. A dead mount parks at most 4 threads (its calls in flight). **The residual cliff, unchanged:** with three or more mounts dead at once the pool can run short, and when all 8 workers and 8 spares are parked every job answers `NotAnswering` until a mark lifts. Sixteen calls must each be blocked on a file system that never answers. Terminals, tabs and the rest of ADE do not use the pool.
+
+### 7.4 Recovery, and checking again
+
+- **A mark lifts** when a call parked under it returns (its thread rejoins the pool and a surplus spare retires), or when its mount leaves the table (unmounted). Path marks below a mount that leaves the table lift with it.
+- **A call parked on a hard-mounted share that never answers never returns.** Its mark stays until the share is unmounted or ADE restarts, and its thread stays parked. Every later call there would hang too, so the mark is the right answer; the thread is counted in the cliff above. Stated, not solved.
+- **There is no timer that lets calls into a marked path or mount.** The parked calls are the probes.
+- **When a mark lifts, whatever was shown "not answering" because of it is checked again** (review N-B1). `Bounded` tells its listener, the registry, which mark lifted. For each open hub whose last view has, at or below that mark: a hub state `hub_missing` with why `not_answering`, the open job runs again from the finished-hub check (reason `recheck`); a root with status `not_answering`, its status is checked again (one resolution); an `ACCESS.md` that did not answer, it is read again and its rows added. This finishes the open, restore or refresh that met the hang; it is not a new occasion to read the hub's files (WS-1 AC5), and cleaning the record (5.6) still needs a complete discovery. The new view goes out under a higher `gen`, with `ade://workspace-changed` and `ade://workspace-cover-changed` (section 10). Each window's watch set adds again the folders it reported unwatched under that mark (11.5).
+
+### 7.5 Never on the UI thread, never on an async worker
+
+Every F4 command is declared `#[tauri::command] async fn` and does its work inside `tauri::async_runtime::spawn_blocking` (as `sync.rs:615` does), so a wait for a job holds a thread of the blocking pool, not an async-runtime worker, and never the main thread. A Rust string test asserts both for each F4 command, in the style of `watcher.rs:705` to `:720`.
+
+### 7.6 Opening a workspace: the deadlines (WS-9 AC3)
 
 `workspace_open(hub, reason)` starts (or joins) the hub's **open job** and answers at once with the current view. The job then publishes better views, each with a higher `gen`, and emits `ade://workspace-changed { hub, gen }`. Time is counted from the job's start, T.
+
+**The deadline of each job's answer is 2 seconds from when it starts running**, as WS-9 AC3 words it ("every file-system call F4 makes for one root or one `ACCESS.md` … under a 2-second bound"): one root's check, one `ACCESS.md`, one listing, the finished-hub check, `workspace_resolve`, `workspace_locate`, `workspace_list`, a watch add. Past it the answer is "not answering", and nothing is marked unless one of its calls was itself blocked. A watch tick has no deadline (11.5).
 
 | Step | Bound | What is on screen |
 |---|---|---|
 | The first view | at once | the hub's root with status `checking`; on a refresh, the roots already shown stay |
-| The finished-hub check | **one deadline of 2 s for the whole check** (it is one job; its internal caps are in 8.1). Past it: `not answering`, and its mount is marked stuck | the view's state: `ok`, `hub_missing`, `not_finished` or `check_failed` |
+| The finished-hub check | each call 2 s; the check's answer 2 s (it is one job; its caps are in 8.1). Past it: `Failed(NotAnswering)`; its mount is marked only if a call blocked | the view's state: `ok`, `hub_missing`, `not_finished` or `check_failed` |
 | Listing `projects/` and `ops/`, and reading the top-level file | each one job, started together when the check says finished | |
 | Reading each work folder's file, then checking each candidate | each one job, queued as soon as it is known | a root appears when its row is known, with status `checking`, and gets its real status when its job answers. Views are published at most every 100 ms |
-| The whole discovery | **10 s after the check finished.** Jobs not yet started are cancelled: their files count as unreadable ("not answering"), their roots show `not_answering`, `cut_short` is set and the notice says so | the final view |
+| The whole discovery | **10 s after the check finished.** Jobs not yet started are cancelled: their files count as unreadable ("not answering"), their roots show `not_answering`, `cut_short` is set and the notice says so | the final view (`final: true`) |
 
-- **No root delays another by more than the bound.** A root whose own job hangs is `not_answering` 2 seconds after that job started, and the others were published as they arrived. A slow chain delays only what depends on it.
-- **The worst case, stated.** The final view comes at most 2 s (the check) + 10 s (discovery) + 2 s (jobs running at the cut) after T. A dead mount costs 2 seconds once. Only a mount that is slow at every call without ever exceeding 2 seconds reaches the 10-second cut.
-- **The local case.** For a hub with 20 checkouts on a local disk the whole job takes milliseconds. The macOS test of WS-9 AC3 times **the open job from T to its final view** (the check, discovery, the record and the added folders' checks), 20 real checkouts, median of 5 runs after one warm-up run, under 1 second. It is `workspace::open::macos_only`, in story w5.
-- **`workspace_resolve`** (before a tab exists) runs the key and the check as one job under one 2-second deadline. No answer is `plain` with `check_failed: not_answering`.
+- **No root delays another by more than the bound.** A root whose own job hangs is `not_answering` 2 seconds after that job started, and the others were published as they arrived.
+- **The worst case, stated.** The final view comes at most 2 s (the check) + 10 s (discovery) + 2 s (jobs running at the cut) after the check started running. When many hubs restore on one mount, the check waits its turn in that mount's queue first; it is the open job's first submission, so it waits behind other hubs' jobs only, round-robin.
+- **The local case.** For a hub with 20 checkouts on a local disk the whole job takes milliseconds. The macOS test of WS-9 AC3 times **the open job from T to its final view**, 20 real checkouts, median of 5 runs after one warm-up run, under 1 second. It is `workspace::open::macos_only`, in story w5.
+- **`workspace_resolve`** (before a tab exists) runs the key and the check as one job with one 2-second deadline. No answer is `plain` with `check_failed: not_answering`.
 
 ## 8. The finished-hub check (WS-2 AC8, F4.1, ADR 0039)
 
@@ -480,9 +524,11 @@ pub enum HubCheck {
 
 ### 8.1 What it reads, exactly
 
-The whole check is **one job with one 2-second deadline**. No process is started. **No config file is opened**: not `<path>/.git/config`, not the global or system config, not `.gitattributes`, not a hook.
+The whole check is **one job whose answer has a 2-second deadline** (7.6); each of its calls has its own 2-second bound, and only a call blocked past that bound marks anything (7.3). A check that is merely slow, say over 200 index files on a slow share, answers `Failed(NotAnswering)` at its deadline and marks nothing. No process is started.
 
-1. `path` by `stat`: does not exist → `Missing`; exists and is not a folder → `NotHub(NotAFolder)`.
+**Nothing inside `.git` is followed** (review N-B1). The hub folder `path` is resolved by the guarded resolver (section 6). From then on every file and folder below `path` is opened from its parent's descriptor with `O_NOFOLLOW` (and `O_DIRECTORY` for a folder): `hub.conf`, `.git`, `HEAD`, `refs/…`, `packed-refs`, `objects/…`, `objects/pack/…`. A symbolic link met at any of them is `Failed(Unsupported("link_in_git"))` (or, for `hub.conf` and `.git`, the outcomes below). So the check never enters a file system its folder is not on, other than through a mount point, which the charging of 7.2 handles. **No config file is opened**: not `<path>/.git/config`, not the global or system config, not `.gitattributes`, not a hook.
+
+1. `path` by the resolver: does not exist → `Missing`; exists and is not a folder → `NotHub(NotAFolder)`.
 2. `<path>/hub.conf` by **`lstat`**: absent → `NotHub(NoHubConf)`, the cheap exit for an ordinary project folder; present and not a regular file (a link, a folder, a FIFO) → `NotFinished(NotAFile)`. The link is not followed: a hub file never sends the check to another path (D3).
 3. `<path>/.git` by `lstat`:
    - absent → `NotFinished(NoRepository)`. **The top-level rule** (F4.1): only the folder's own `.git` is looked at, never a parent's;
@@ -504,7 +550,7 @@ The whole check is **one job with one 2-second deadline**. No process is started
    - another mode (a symbolic link, a folder, a submodule) → `NotFinished(NotAFile)`;
    - absent → `NotFinished(NotCommitted)`. The index is never read.
 
-**A repack under the check.** A persona commits often, and `git gc` replaces packs while they are read. When steps 4 to 7 end in `ObjectMissing` or `Damaged`, or a pack listed in step 5 is gone when opened, the check **runs steps 4 to 7 once more** from a fresh listing, inside the same 2-second deadline. The second result stands.
+**A repack under the check.** A persona commits often, and `git gc` replaces packs while they are read. When steps 4 to 7 end in `ObjectMissing` or `Damaged`, or a pack listed in step 5 is gone when opened, the check **runs steps 4 to 7 once more** from a fresh listing, inside the same deadline. The second result stands.
 
 Object ids of 20 and 32 bytes are both read. Hashes are not verified: the check decides what ADE shows and grants nothing.
 
@@ -512,7 +558,7 @@ Object ids of 20 and 32 bytes are both read. Hashes are not verified: the check 
 
 - **An estimated 600 to 900 lines of Rust with their tests**, owned by this project: loose refs, `packed-refs`, loose objects, pack index version 2, pack entries, delta application, commit and tree parsing, the retry. The estimate is not measured.
 - **One new direct dependency**, `flate2` (1.1.9 with `miniz_oxide` 0.8.9 is in the lock file; the review confirmed it). That adding it directly leaves the rest of the lock file unchanged is **unverified**; story w3's first step is `cargo metadata --locked`.
-- **What it does not read**, each `Failed` with its reason and never `Finished`: reftable refs; objects reached only through alternates or a partial clone; pack index version 1; `.git` as a file; `.git` as a link; more than 200 packs; a delta chain deeper than 64; a `packed-refs` over 16 MiB; an object over its cap.
+- **What it does not read**, each `Failed` with its reason and never `Finished`: reftable refs; objects reached only through alternates or a partial clone; pack index version 1; `.git` as a file; `.git` as a link; a link inside `.git`; more than 200 packs; a delta chain deeper than 64; a `packed-refs` over 16 MiB; an object over its cap.
 - **reftable.** The default `git init` of Apple Git 2.50.1 uses the files backend (checked here and by the review). Whether a newer git from another source defaults to reftable is **unverified**. If one does, every new hub made with it is "check failed" until a reftable reader is added. That is a known limit with a detection and a message.
 - **Where it can disagree with F2's check** (ADR 0029 on `onboarding-arch`, which runs `/usr/bin/git`). The review ran F2's commands and found they answer finished for: a hub checked out as **a linked worktree** (`.git` is a file), and a `hub.conf` committed as **a symbolic link**. F2's would also answer finished for every unsupported format above. Section 13.2 says what happens to bring-forward in those cases, and section 15 asks F2's design to use this check.
 
@@ -535,90 +581,101 @@ In `repohead.rs`. The fixtures are built in a temporary folder by the test's own
 - a parent repository that commits `sub/hub.conf`, `sub` with no `.git` → `NoRepository`;
 - `.git` a file → `Unsupported("git_file")`; a `reftable` folder; 201 index files; a ref loop; a truncated object → `Damaged`; `HEAD` naming `ref: ../../x` → `Damaged`;
 - **the retry:** a file-system seam removes the pack after it is listed and puts the repacked one in place; the check answers `Finished`;
-- **the deadline:** a seam that hangs on the third read gives `Failed(NotAnswering)` within 2 seconds;
+- **the deadline:** a seam that hangs on the third read gives `Failed(NotAnswering)` within 2 seconds and marks that path; a seam that makes each of 300 reads take 10 ms gives `Failed(NotAnswering)` at the deadline and marks nothing;
+- **no link followed:** `G/refs/heads` a link to another folder, and `G/objects/pack` a link → `Unsupported("link_in_git")`, and the seam records no call outside `path`;
 - a folder with no `hub.conf` returns `NotHub` and the seam records **no** open under `.git`;
 - the marker fixture (section 17.3).
 
-## 9. The sync strip and its import rule (WS-7 AC3, F2 OB-10 AC2, OB-14 AC5, ADR 0040)
+## 9. Sync, the fleet and Dispatch (S0, and S1's rows; WS-7 AC3, F2 OB-10 AC2, OB-14 AC5, ADR 0040)
 
 ### 9.1 The rule in one paragraph
 
-Some fields of synced keys are **local fields**: they never go to the sync repo, and each machine keeps its own. Which fields are local is fixed by the key and the field's name, or by a field of the same saved tab. **Nothing in sync looks at a workspace, a record, a discovery or a folder.** The export writes the value without its local fields. The import takes the other machine's value and puts this machine's own local fields back onto the entries that are still there.
+Some fields of synced keys are **local fields**: they never go to the sync repo, and each machine keeps its own. Which fields are local is fixed by the key and the field's name, or, for `ade-session`, by a field of the same saved tab. **Nothing in sync looks at a workspace, a record, a discovery or a folder.** The export writes the value without its local fields; the import takes the other machine's value and puts this machine's own local fields back onto the entries that are still there. **Every rule beyond that has a scope, and the scope is per row** (review N-B3; PRD 3.7 WS-7 AC3 and F4.9): the never-take rule, the unreadable rule, the cleanup of the repository's current files and the skipped-key notice cover **only the orchestrator's `projectDir` and the agent tracker's `cwd`, in those two keys**. F2's rows (tab sets, `ade-session`) get the PRD's import rule ("keep what this machine holds") and nothing more.
 
-### 9.2 The rows
+### 9.2 The rows, each rule's scope
 
-| Key | Group | Local fields | Decided by |
-|---|---|---|---|
-| `better-terminal-orchestrator` | shared | every `projectDir`, at any depth of the value | the name alone (owner, 2026-11-15) |
-| `better-terminal-agent-tracker` | shared | every `cwd`, at any depth | the name alone (owner, 2026-11-15) |
-| `better-terminal-workspaces` (tab sets) | shared | every `cwd` and every `hub`, at any depth (the fields F2 OB-14 AC5 adds to a tab-set entry) | the names alone |
-| `ade-session` | device: exported, never imported | for a saved tab that has `workspace` (F4) or `hub` (F2): everything but the allowlist of 9.4 | that saved tab's own fields |
-| `better-terminal-prompt-history`, `better-terminal-saved-notes`, `ade-scratchpad-draft`, every other key | | none | the engineer's own text (WS-7 AC3's table) |
+| | `better-terminal-orchestrator` (shared) | `better-terminal-agent-tracker` (shared) | `better-terminal-workspaces`, tab sets (shared) | `ade-session` (device: exported, never imported) |
+|---|---|---|---|---|
+| **Slice, story** | S0, w12a | S0, w12a | S1, w13 (F2 writes the fields: w14) | S1, w13 |
+| **Local fields** (the export leaves them out) | `projectDir`, anywhere inside each element of the list | `cwd`, anywhere inside each element of the list | `cwd` and `hub` of each entry of each set's `tabs` (F2's fields: its design gives a hub entry `hub?: true` and `cwd?`; F2 OB-14 AC5: the entry is exported "without its folder", Load on another Mac opens "a plain tab", and this Mac "keeps its own entries' folders and flags") | for a saved tab with `workspace` (F4) or `hub` (F2): every field outside the allowlist of 9.4 |
+| **Source** | WS-7 AC3's row; the owner, 2026-11-15 | the same | WS-7 AC3's tab-set row; F2 OB-14 AC5 | WS-7 AC3's two `ade-session` rows; F2 OB-10 AC2 |
+| **Readable means** | a JSON array; an element that is not an object is readable and passes as it is (PRD 3.6 m7) | the same | no rule in the PRD: as today | as today: JSON |
+| **Local value not readable** | not exported in that run; recorded as skipped (`local_unreadable`) | the same | as today: a value that is not JSON is exported as it is (`value_for_repo`, `sync.rs:88`, returns it); a JSON value that is not an array has nothing removed | as today: not exported (`sync.rs:84` to `:96`), not recorded |
+| **Import** | `join` by `id` | `join` by `id`, else `paneId` and `startTime` | `join` by set `id`, set `name` and the entry's index | never imported |
+| **Imported value of a local field** | **never taken** | **never taken** | **taken when this machine holds none for that entry** (the PRD's rule for this row is only "keep what this machine holds", F4.9; F2's design may adopt the never-take rule, section 15, F2-2) | |
+| **Imported copy not readable** | not imported; this machine's value stays; recorded (`imported_unreadable`) | the same | as today: not JSON or not an array → the whole local value is replaced by it, since there are no entries to keep fields on | |
+| **Cleanup of the repo's current file** (OQ-14, yes) | yes: a repo copy that is a list and holds `projectDir` anywhere in an element is rewritten without it; a copy that is not a list is left as it is | yes, for `cwd` | **no** | **no** |
+| **Shown when skipped** (OQ-15, yes) | yes, until the key next syncs (9.5) | yes | no (never skipped) | no |
 
-**What remains dependent on knowledge of workspaces: nothing.** Revision 1's `Knowledge`, discovery at export, fail closed and the registry lookup are removed, with their costs: sync reads no hub file, adds no time to the launch import (`sync.ts:20`) or to the close (`App.tsx:136`), and behaves the same whether the record is present, lost, unreadable or from a newer build.
+`better-terminal-prompt-history`, `better-terminal-saved-notes`, `ade-scratchpad-draft` and every other key have no local field and no new rule: the engineer's own text (WS-7 AC3's table).
 
-**What changes for someone with no hub** (the owner's decision makes this deliberate):
+**The flag `hub` (review minor 4), one rule: each of F2's fields follows its own row's text.** In tab sets it is local (F2 OB-14 AC5: Load on another Mac opens a plain tab; this Mac keeps its flags). In `ade-session` it is **kept** in the export: the allowlist (9.4) lists it, because F2 OB-10 AC2 strips a hub tab's folders and sub-terminal names, not the flag, and a boolean holds no path. Revision 2 stripped it in tab sets by name and left it out of `ade-session` "until F2 says"; that was two rules. If F2's design wants it out of `ade-session`, it is one line of the allowlist.
 
-- An orchestrator session received from another machine has no `projectDir`. Dispatching it here creates a project folder here, as a new session does (`OrchestratorTab.tsx:391` to `:397`). Before, it pointed at the other machine's path.
-- An agent run received from another machine has no `cwd`, so the fleet does not attribute it to a project.
-- This machine's own sessions and runs keep their folders, also after an import (9.5).
+**What remains dependent on knowledge of workspaces: nothing.** Sync reads no hub file, adds no time to the launch import (`sync.ts:20`) or to the close (`App.tsx:136`), and behaves the same whether the record is present, lost, unreadable or from a newer build.
 
 ### 9.3 The functions
 
-`sync_local.rs`:
+`src-tauri/src/sync_local.rs` (S0 builds it with rows 1 and 2; w13 adds rows 3 and 4):
 
 ```rust
-/// `value` with every local field of `key` removed. None when `value` is not JSON.
-pub fn public(key: &str, value: &str) -> Option<String>;
-/// The imported copy with this machine's local fields put back. None when `imported` cannot be joined.
-pub fn join(key: &str, imported: &str, local: Option<&str>) -> Option<String>;
+pub enum Unreadable { NotJson, NotAList }
+/// `value` without the local fields of `key`. Err only where the row has an unreadable rule:
+/// rows 1 and 2 (not a JSON array), and `ade-session` (not JSON, as today).
+pub fn public<'a>(key: &str, value: &'a str) -> Result<Cow<'a, str>, Unreadable>;
+/// The imported copy with this machine's local fields put back, by the row's rule.
+/// Err only for rows 1 and 2, when `imported` is not a JSON array.
+pub fn join(key: &str, imported: &str, local: Option<&str>) -> Result<String, Unreadable>;
+/// Rows 1 and 2 only (OQ-14): the repo copy without its local fields, or None when it holds
+/// none, is not a list, or the key has no cleanup.
+pub fn clean(key: &str, repo_value: &str) -> Option<String>;
 ```
 
-- `public` returns its input text unchanged when nothing was removed. Otherwise it re-serialises, which sorts the keys (`serde_json` has no `preserve_order`). **Every comparison of two values in sync is therefore made on parsed JSON**, not on text.
-- `public` needs no shape: it removes the named keys wherever they are. Only text that is not JSON cannot be made public.
+- `public` returns its input text unchanged (`Cow::Borrowed`) when nothing was removed. Otherwise it re-serialises, which sorts the keys (`serde_json` has no `preserve_order`). **Every comparison of two values in sync is therefore made on parsed JSON**, not on text.
 
 **Entries and their ids**, used by `join` only:
 
 | Key | The value is | An entry | Its id |
 |---|---|---|---|
-| `better-terminal-orchestrator` | an array | each element | its `id` (a string) |
-| `better-terminal-agent-tracker` | an array | each element | its `id` when it is a string; else `paneId` and `startTime` together |
-| `better-terminal-workspaces` | an array of tab sets | each element of each tab set's `tabs` | the tab set's `id` and the element's index |
+| orchestrator | an array | each element that is an object | its `id` (a string) |
+| agent tracker | an array | each element that is an object | its `id` when it is a string; else `paneId` and `startTime` together |
+| tab sets | an array of tab sets | each element of each tab set's `tabs` | the tab set's `id` **and `name`**, and the element's index |
 
-- Agent-tracker entries have no id today (`agentTrackerStore.ts:6` to `:29`), and `paneId` restarts in every run. Story w12 adds an optional random `id`, minted in `startSession`. Older entries are matched by `paneId` and `startTime`; two machines produce the same pair only by starting an agent in the same millisecond in a pane with the same number.
-- Tab sets are save and delete only (`settingsStore.ts:522` to `:538`), so a set's `id` and a tab's index name an entry for good.
+- Agent-tracker entries have no id today (`agentTrackerStore.ts:6` to `:29`), and `paneId` restarts in every run. Story w12a adds an optional random `id` (`crypto.randomUUID()`), minted in `startSession`. Older entries are matched by `paneId` and `startTime`; two machines produce the same pair only by starting an agent in the same millisecond in a pane with the same number.
+- **Tab-set ids can collide** (review minor 5). An id is `Date.now().toString(36)` (`settingsStore.ts:523`), so two machines that save a set in the same millisecond give two sets one id. The id therefore includes the set's `name`. Two sets saved in the same millisecond **with the same name** on two machines still share an id; then the first local set with that id lends its entries' F2 fields to the imported one, so a hub entry can load in the other set's folder on this machine. Stated, not solved. Tab sets are save and delete only (`settingsStore.ts:522` to `:538`), so a set's id, name and a tab's index name an entry for good.
 - **The shapes are pinned across the two languages.** A vitest writes each store's persisted value for a fixed sample and asserts it equals a checked-in file under `src-tauri/src/fixtures/sync/`; the Rust tests of `join` read the same files. A store that changes its shape fails the vitest.
 
 **`join(key, imported, local)`, every case:**
 
 | Imported copy | This machine's value | Result |
 |---|---|---|
-| Not JSON, or not an array | anything | `None`: **the key is not imported in this run**; the local value stays; the key is listed in `SyncReport.skipped_keys` with `imported_unreadable` |
-| An array | absent, not JSON, or not an array | `public(imported)`: there is no local field that could be kept. (Today this local value would be overwritten too) |
+| Rows 1, 2: not a JSON array | anything | `Err`: **not imported in this run**; the local value stays; recorded as skipped (9.5) |
+| Row 3: not JSON, or not an array | anything | the imported copy as it is (today's whole replace) |
+| An array | absent, not JSON, or not an array | rows 1, 2: `public(imported)` (nothing local to keep, and nothing taken); row 3: the imported copy as it is |
 | An array | an array | each imported entry, in the imported order, built as below |
 
 For one imported entry `e` and one local field `f`:
 
-| `e` has `f` (an older build wrote it) | This machine has an entry with `e`'s id | That entry has `f` | `f` in the result |
+| This machine has an entry with `e`'s id | That entry has `f` | `f` in the result, rows 1 and 2 | `f` in the result, row 3 |
 |---|---|---|---|
-| yes or no | yes | yes | **this machine's value** |
-| yes or no | yes | no | absent |
-| yes or no | no | | absent |
+| yes | yes | **this machine's value** | **this machine's value** |
+| yes | no | absent | `e`'s value, if any |
+| no | | absent | `e`'s value, if any |
 
-- An imported value of a local field is **never taken**, whichever machine wrote it. Each machine keeps its own or none.
-- An entry that is not an object, or has no id, is taken as `public` of itself.
-- An entry only this machine has is not in the result: the other machine deleted it, or never had it. That is today's whole-replace rule (`sync.rs:285` to `:300`) and is not changed.
+- Rows 1 and 2: an imported value of a local field is **never taken**, whichever machine or build wrote it (the owner's decision; WS-7 AC3 "nothing is taken from another machine").
+- An element that is not an object, or an object with no id, is taken as `public` of itself (rows 1, 2) or as it is (row 3).
+- An entry only this machine has is not in the result: the other machine deleted it, or never had it (today's whole-replace rule, `sync.rs:285` to `:300`).
 - Two local entries with one id: the first is used.
 
-**The invariants**, each a test over a table of hand-built values per key. There is no knowledge parameter, because no rule takes one: two machines compute the same `public` for the same value.
+**The invariants**, each a test over a table of hand-built values per row:
 
-1. `public(public(v)) == public(v)`, and `public(v)` holds no local field at any depth.
-2. **`public(join(p, l)) == public(p)`** for every `p` and `l` that join. A join never looks like a local change. In particular, when `p` is already public, `public(join(p, l)) == p`.
+1. `public(public(v)) == public(v)`, and `public(v)` holds no local field of its row.
+2. **`public(join(p, l)) == public(p)`** for every `p` and `l` that join. A join never looks like a local change.
 3. **Keeps:** for every id in both `p` and `l`, each local field of `l`'s entry is in the join with `l`'s value.
-4. `join(public(v), v) == v` when `v`'s ids are unique: importing one's own export changes nothing.
+4. **`join(public(v), v) == v` when every entry of `v` that holds a local field has an id, and the ids are unique** (review minor 9: an entry with a local field and no id is joined as `public` of itself, so it loses the field; on `main` no orchestrator session lacks an `id` and every tracker entry has `paneId` and `startTime`, so the case is a hand-written value only).
 5. The join has exactly `p`'s entries, in `p`'s order.
+6. **Never take (rows 1 and 2):** no value of a local field in `join(p, l)` comes from `p`.
 
-### 9.4 `ade-session`: the allowlist
+### 9.4 `ade-session`: the allowlist (S1, w13)
 
 `ade-session` is exported to `devices/<device>/` and never imported (`sync.rs:285` reads `SHARED_KEYS` only), so there is no join for it, and the local file is never changed by sync.
 
@@ -626,52 +683,112 @@ A saved tab that has `workspace` (a string) or `hub` (`true`) is exported as a *
 
 | Field | Exported as |
 |---|---|
-| `id`, `type`, `color`, `activePaneId`, `shownView` | as saved |
+| `id`, `type`, `color`, `activePaneId`, `shownView`, `hub` | as saved |
 | `name` | as saved, except that a name equal to the last component of `workspace` becomes `"Terminal"` (WS-7 AC3's second row) |
-| `root` | its structure only: `type`, `direction`, `children`, and for a pane only `id` |
-| `subViews[]` | `id`, `activePaneId`, `root` (structure only), and `name: null` |
+| `root` | the pane tree's structure only. A split node is `{ type: "split", direction, children }` and is kept so, with each child rebuilt; a pane node is `{ type: "pane", pane: { id, serializedBuffer, savedCwd } }` (`tabStore.ts:667` to `:684`) and is exported as `{ type: "pane", pane: { id } }` (review minor 10) |
+| `subViews[]` | `id`, `activePaneId`, `root` (rebuilt as above), and `name: null` |
 
-Everything else is left out: every pane's `savedCwd` and `serializedBuffer`, the mark `workspace`, the flag `hub`, `previewPath`, F3's `viewerKey`, **and any field added to a saved tab later**. An allowlist is why `previewPath` cannot leak whichever of F4 and F3 story `s1a` merges first, and why a new field is local until someone lists it. Whether an exported hub tab should keep `hub: true` is F2's to say (section 15); until it does, `hub` is left out.
+Everything else is left out: every pane's `savedCwd` and `serializedBuffer`, the mark `workspace`, `previewPath`, F3's `viewerKey`, **and any field added to a saved tab later**. A node of any other shape is left out with its subtree. This is stricter than the PRD's two rows, on purpose: the key is never imported, so leaving out more loses nothing, and an allowlist is why `previewPath` cannot leak whichever of F4 and F3 story `s1a` merges first.
 
 A saved tab with neither field is exported as today.
 
 **Why no sequence exports a workspace tab's folders, including with a lost record.** The rule reads only the saved tab. The mark is saved in the tab itself (13.1) and restored from it, so a record that is lost, unreadable or newer changes nothing here. A session that does not parse is not exported at all (`sync.rs:84` to `:96`, unchanged). A tab that lost its mark on load (an invalid value, 13.1) is a plain tab by definition.
 
-**What the PRD's table leaves in the export, stated.** WS-7 AC3 strips "every pane of every workspace tab". So these still leave the machine, as they do today: the folder of a **plain** tab whose terminal sits in a checkout (`savedCwd`); the file of an editor tab opened on a checkout's file (`editorFilePath`, and the tab's name); a contracts tab's `contractsRoot`; a plain tab's sub-terminal names; and a tab name the engineer typed. Question O-3 recommends removing the path fields for every tab, which would make this key's rule as plain as the other three. The default built is the PRD's text.
+**What the PRD's rows leave in the export, stated** (PRD 3.7 "What still syncs"): the folder of a **plain** tab whose terminal sits in a checkout (`savedCwd`); the file of an editor tab (`editorFilePath`, and the tab's name); a contracts tab's `contractsRoot`; a plain tab's `previewPath` until F3's `s1a` strips it; a plain tab's sub-terminal names; and a tab name the engineer typed. Question O-3 asks whether to remove the path fields for every tab. The default built is the PRD's text.
 
 ### 9.5 Changes to `sync.rs`
 
-- **`value_for_repo(key, raw)`** (`sync.rs:88`): after `strip_secrets`, return `sync_local::public(key, value)`, which for `ade-session` also applies the allowlist and today's `serializedBuffer` strip. `None` (the local value is not JSON, for a key with a rule) means the key is **not exported in this run** and is listed in `skipped_keys` with `local_unreadable`. Today such a shared key is exported raw; a value that cannot be parsed cannot be shown to hold no path, so it stays. Keys without a rule are exported as today.
-- **The scrub**, new, in `export_state` before the comparison, for every shared key and this device's device keys: if the repo copy's value holds a local field, the repo file is rewritten with `public` of it, **keeping its `updated_at` and `device`**. So paths that an earlier build put in the repo leave its current files at this machine's next sync, even though nothing changed locally, and the rewrite does not look like a newer copy to any machine.
+- **`value_for_repo(key, raw)`** (`sync.rs:88`): after `strip_secrets`, return `sync_local::public(key, value)`. For rows 1 and 2, `Err` means the key is **not exported in this run** and is recorded as skipped with `local_unreadable`. For `ade-session`, `public` also applies today's `serializedBuffer` strip, and `Err` is today's "not exported", not recorded. Other keys are exported as today.
+- **The cleanup (OQ-14, yes; rows 1 and 2 only).** In `export_state`, before the comparison, for those two keys only: when the repo copy's value is a JSON array holding a `projectDir` (respectively `cwd`) anywhere in an element, the repo file is rewritten with `clean`'s result, **keeping its `updated_at` and `device`**, so no machine sees a newer copy. A copy that is not an array is left as it is: neither cleaned nor imported. No other key or field is cleaned. It runs in every sync; after a machine's first sync on this build it finds nothing. Revision 2 scrubbed every shared and device key on any JSON; that went beyond the PRD (review N-B3).
 - **`export_state`'s test** (`sync.rs:272`) is unchanged in form, `w.value != value && local_at > w.updated_at`, with both sides compared as parsed JSON.
 - **`import_state`** (`sync.rs:285`):
-  - `differs` (`:292`) becomes: `public(local)` is not equal to `public(repo copy)`, as parsed JSON. An older build's copy that differs from ours only by its paths is therefore not imported;
-  - the write (`:294`) becomes `restore_secrets(join(key, w.value, local), local)`; when `join` is `None` the key is skipped and reported.
-- **`SyncReport`** gains `skipped_keys: { key, why }[]`. Settings → Sync shows them beside the last result (section 18).
-- F3 story `s1a` adds `viewerKey` and `previewPath` to `SESSION_LOCAL_FIELDS` (its ticket, item 8). That and this change both edit `value_for_repo`; the two rules do not conflict (F3's removes two names from every tab, F4's rebuilds marked tabs), and whichever merges second resolves a textual conflict in that one function.
+  - `differs` (`:292`) becomes: `public(local)` is not equal to `public(repo copy)`, as parsed JSON, for rows 1 to 3. So a copy that differs from ours only by local fields is not imported;
+  - the write (`:294`) becomes `restore_secrets(join(key, w.value, local), local)`; for rows 1 and 2, `Err` means the key is skipped and recorded with `imported_unreadable`.
+- **Skipped keys outlive the report** (OQ-15, yes; the 3.7 review's note: imports run only at launch, `sync.ts:46`, and the next periodic sync replaces `lastReport`, `sync.ts:57`). `SyncState` (`sync.rs:130`, kept in `<app data>/sync-state.json` on this machine and never in the repo) gains `skipped: { key, why: "local_unreadable" | "imported_unreadable", sinceMs }[]`. A run that skips a key adds or keeps its entry. A `local_unreadable` entry is removed by the next run that reads this machine's value as the key's list; an `imported_unreadable` entry by the next run that reads the repo copy as the key's list (the cleanup reads it in every run, import or not; a copy that became readable is then imported at the next launch like any newer copy) or that exports this machine's value over it. **Every `SyncReport` carries `skippedKeys` from that set**, so the periodic report that replaces the launch report still carries a skip found at launch, and a restart does not lose it. Only rows 1 and 2 are ever in it.
+- **The notice (OQ-15, yes; w12a).** `SyncSettings.tsx` shows one line per entry of `report.skippedKeys`, beside the last sync result, naming the store in words ("Orchestrator sessions", "Agent runs") and saying it was not synced. The copy is the designer's (D-5). It never shows the key's name, and never the word "workspace" (WS-10 AC2). `sync-state.json` is this machine's, so no other machine shows the line.
+- F3 story `s1a` adds `viewerKey` and `previewPath` to `SESSION_LOCAL_FIELDS` (its ticket, item 8). That and w13 both edit `value_for_repo`; the two rules do not conflict (F3's removes two names from every tab, F4's rebuilds marked tabs), and whichever merges second resolves a textual conflict in that one function.
 
-**Why a join on import causes no export.** A run is pull, scrub, export, commit, push, import (`sync.rs:510` to `:556`). After an import the local file is newer than the repo copy, so the next run's export compares `public(join(p, l))` with the repo copy. The scrub has already made the repo copy `public(p)`, and invariant 2 makes the two equal, so nothing is written. The two-machine tests assert it by counting commits.
+**Why a join on import causes no export.** A run is pull, cleanup, export, commit, push, import (`sync.rs:510` to `:556`). After an import the local file is newer than the repo copy, so the next run's export compares `public(join(p, l))` with the repo copy. For rows 1 and 2 the cleanup has already made the repo copy `public(p)`; for row 3 a this-build copy is `public(p)` already, since no build exports F2's fields. Invariant 2 makes the two equal, so nothing is written. The two-machine tests assert it by counting commits.
 
 ### 9.6 Paths already in the sync repo, and older builds
 
-- **Current files.** The scrub removes them at the first sync of any machine running this build. Without the scrub they would stay until the key next changed locally (`sync.rs:272`).
-- **History.** The sync repo is a git repository. A path committed before the scrub stays in its history (`git log -p`) for good. This design does not rewrite history: a forced push would break every other machine's clone. G2 as amended (section 21) says "current files". Whether to offer a way to start the sync repository afresh is question O-2.
-- **An older build syncing to the same repo** has neither the strip nor the join. It writes its paths back whenever it exports the key, and when it imports a copy written by this build it replaces its whole local value, so **it loses its own `projectDir` and `cwd` values** for the entries it imports. A machine on this build scrubs the paths again at its next sync. So the guarantee holds from the moment every machine syncing to the repo runs a build with this change. The release note must say: update every machine. This is stated, not solved (O-2).
+- **Current files** (OQ-14, yes): the cleanup removes `projectDir` and `cwd` from the two keys' current files at the first sync of any machine on this build.
+- **History** (OQ-16, yes): the sync repo is a git repository; what was committed before stays in its history (`git log -p`). This design does not rewrite it: a forced push would break every other machine's clone. Whether to offer starting the sync repository afresh is still question O-2.
+- **An older build syncing to the same repo** (stated limit (a)) writes its folders back whenever it exports the key, and when it imports a copy written by this build it replaces its whole local value, **losing its own `projectDir` and `cwd`** for the entries it imports. A machine on this build cleans them again at its next sync. So the guarantee holds once every machine syncing to the repo runs this build. The release note says so (OQ-17, yes): devops's item, checked at release review, not a test.
+- **Values imported before this build** (stated limit (c)): a machine that synced before it upgraded holds other machines' `projectDir` and `cwd` for entries it imported then. This build cannot tell them from its own: they count as its own, the import keeps them, and they never leave the machine. For a session, OQ-21 (9.9) makes such a folder count as none when it does not exist here.
 
-### 9.7 Tests
+### 9.7 What S0 changes for everyone
+
+- An orchestrator session received from another machine has no `projectDir` here. **Dispatch all and per-task Dispatch** both make a project folder here first (9.9). Before, Dispatch all saw the other machine's path and started its agents in the home folder.
+- An agent run received from another machine has no `cwd` here and is never joined to a pane here (9.8): the fleet shows it under "Unknown project", with no tab and no cost.
+- This machine's own sessions and runs keep their folders, also after an import; runs started from the agent picker and the board now record theirs (9.8).
+- A reinstall, a new profile or cleared app state that gets its sessions and runs back only through sync gets them back with no `projectDir` and no `cwd`.
+
+### 9.8 The fleet joins only this launch's runs to live panes (OQ-20 (b′), S0, w12b)
+
+**Today.** `buildLanes` (`fleetStore.ts:133` to `:168`) gives every tracker entry the tab, tab name and live folder of `paneMeta[s.paneId]`, the live pane with the same id, before the entry's own `cwd`; `withUsage` (`:209`) then puts a Claude session's cost on the lane by that folder and time. Pane ids are `pane-${++paneCounter}` per page (`tabStore.ts:219` to `:220`), so they restart at every launch, in every window, on every machine. So an entry from an earlier launch, from another window or from another machine whose `paneId` is live here takes that pane's tab, folder and cost. And the agent picker (`AgentPicker.tsx:250` to `:256`) and the board's `dispatchAgent` (`agentLaunch.ts:91`) start their entries with **no `cwd`**, so their folder and cost come only from that join.
+
+**The change (b′):**
+
+1. **Remembered at the start, in memory only.** `agentTrackerStore.ts` keeps a module-level `Set<string>` of the `id`s that `startSession` minted in this page: `startedHere`. It is never saved and never synced. `startedThisLaunch(entry)` is `entry.id !== undefined && startedHere.has(entry.id)`. A page is the scope in which a pane id names one pane: a restart, a reload of the window or a detached window starts with an empty set and a fresh pane counter. This is "this instance started it since it launched", made exact for windows: a run started in a detached window is not joined to a main-window pane that happens to share its number either. No field is stored, and nothing compares times, so another machine's clock cannot matter.
+2. **`buildLanes(sessions, subagents, paneMeta, joinable)`**, with `joinable = startedThisLaunch` passed by `useFleetData`: `const meta = joinable(s) ? paneMeta[s.paneId] : undefined`. Every other entry has `tabId: null`, `tabName: null` and `cwd: s.cwd ?? null`. Its cost comes only from its own folder and time, through `withUsage` as today, never through a live pane. Sub-agents attach by folder as today.
+3. **The agent picker and `dispatchAgent` record the folder** (the owner's (b′)), as orchestrator dispatch already does (`OrchestratorTab.tsx:355` to `:363`). `AgentPicker.tsx:250` passes the folder it built the command for (`cwd`, `AgentPicker.tsx:201`: the pane's polled folder, else its starting folder), `?? null`; `agentLaunch.ts:91` passes `args.cwd`. So a run from an earlier launch keeps its project and its cost through its own `cwd`, and the strip (9.2) keeps that `cwd` out of sync.
+4. `getActiveSession` and `endSession` are unchanged: they match `status: "running"`, and `loadSessions` marks every loaded entry that was running as cancelled (`agentTrackerStore.ts:41` to `:45`), imported ones included, so only entries this page started can be running.
+
+The cost the owner accepted: a run from an earlier launch never shows a tab. On `main` it showed the wrong one.
+
+### 9.9 Dispatch makes the project folder first (OQ-18 (i), OQ-21 yes; S0, w12c)
+
+**Today.** Dispatch all (`OrchestratorTab.tsx:385` to `:406`) makes a folder only when the session records none, then sets it and writes `SPEC.md`. Per-task Dispatch, `dispatchOne(task, session?.projectDir)` (`:739`), passes `undefined` for a session with none, so `addTab(title, undefined)` (`:250`) starts the agent in the home folder, and the prompt has no "Read SPEC.md" (`:325`). Revision 2 said only that dispatching a received session "creates a project folder here" (its line 562): true of Dispatch all only (review N-M2). Generation also makes the folder (`:196` to `:208`), after `setTasks`, so a Dispatch clicked during that await can make a second one.
+
+**One Rust command**, new, `orchestrator_project_dir(recorded: Option<String>, name: Option<String>) -> Result<String, String>`, in `src-tauri/src/orchestrator_dir.rs`, registered in `lib.rs`:
+
+- `recorded` is used when it names an existing folder (`Path::is_dir` after `~` expansion, following links, as `path_exists` does at `lib.rs:464`). **A recorded path that is not an existing folder counts as none** (OQ-21): missing, a file, or another machine's path imported before this build.
+- Otherwise it makes `~/.ade/orchestrator/<slug>-<ms in base 36>` (the name `createProjectDir` builds today, `OrchestratorTab.tsx:56` to `:59`): `create_dir_all` of the parent, then `create_dir` of the leaf, adding `-2`, `-3` … when the leaf exists, so two sessions never share one. It answers the new folder's path, or an error message. It is ADE's own folder, so it is not an F4 pool job; a `recorded` path on a dead mount can hold this command's async thread for as long as `is_dir` blocks, never the UI.
+- Its inner function takes `home` and the time as arguments. **Rust tests run in all three CI jobs** (`backend`, `backend-macos`, `backend-windows`, each `cargo test --locked`; PRD 3.7 F4.9): an existing folder is answered and nothing is made; a missing one, a file and `None` each make a new folder under the test's home; an existing leaf gets `-2`; a parent that cannot be made (the test's `.ade` is a file) answers an error and makes nothing.
+
+**One webview function**, new, `src/lib/orchestratorProjectDir.ts`: `projectDirFor(sessionId): Promise<string>`:
+
+- **One folder per session, in any order of clicks.** A module-level `Map<sessionId, Promise<string>>` holds the folder being made. A call while one is in flight returns that same promise; a call after it settled reads the session's recorded folder again.
+- It calls `orchestrator_project_dir(session.projectDir, session.name)`. When the answer differs from what is recorded, it writes `SPEC.md` there, **then** calls `setProjectDir(sessionId, dir)`. So a failure (the command's error, or the write's) records nothing, and the old path, if any, is replaced only by a folder that holds the spec.
+- Callers: **Dispatch all** (`:390` to `:401`, replacing its own creation), **per-task Dispatch** (`dispatchOne`, `:375`, which now awaits it before `dispatchTask`), and **generation's `onTasksCreated`** (`:196`), so the generation's folder and a Dispatch clicked meanwhile are one folder. When it rejects, the button shows today's message, "Could not create the project folder: …", via `setDispatchError`, and **no agent is started**: no tab, no role file, no spawn request. Generation's failure stays a console error, as today.
+- Then `dispatchTask(task, dir)` runs as today: the tab opens in `dir` and the prompt carries the spec line.
+
+### 9.10 Tests
 
 In `sync_local.rs` and `sync.rs`, on every CI OS, on the existing harness (`sync.rs:645` to `:700`). "Marker" means a made-up path component that the test then searches for.
 
-- per key: the five invariants of 9.3; every row of the two `join` tables; the pinned shapes;
-- **WS-7 AC3's one-machine test:** a session with a workspace tab named after its hub folder, a focus sub-terminal named after a checkout, a previewed file, a tab set holding a hub entry (hand-written until F2 exists), an orchestrator session and an agent run in a checkout, **and an orchestrator session and an agent run in a folder that is no workspace**, each with markers. After `run_sync`: no marker anywhere in the repo's working tree or in `git log -p` (a fresh repo); the local `kv/` files are byte-for-byte unchanged;
-- **the PRD's two-machine case:** A exports; B imports, saves another tab set, adds a session and a run, exports; A imports. A's tab-set entry still has its `cwd`, A's session its `projectDir`, A's entry its `cwd`; B's new entries are on A; an entry B deleted is gone on A; A's next `run_sync` makes no commit;
-- **review sequence 1** (B1): B has entry E with a `cwd` in a folder that is no workspace, and exports; A imports E; A changes the key and exports; B imports. **E still has B's `cwd` on B.** The same with every one of A's hubs unreadable or missing, which no longer matters;
-- **review sequence 2** (B1): the same folder is a checkout of an open workspace on A and a plain project on B. Same steps, same result, and A's next `run_sync` makes no commit;
-- **review B2's sequence:** A has session S with `projectDir`; B imports S without one; B calls `setProjectDir` and exports; A imports. **A's S has A's `projectDir`, B's S has B's**, and neither machine's next `run_sync` makes a commit;
-- **B2's sequence with B on an older build** (simulated by writing B's repo copy by hand with `projectDir` in it): A imports; A's S keeps A's value; a session A never had arrives with no `projectDir`; A's scrub removes B's path from the repo's current file and keeps its `updated_at`; A's next run makes no further commit;
-- **paths from before F4:** a repo copy written with markers and an unchanged local file: one `run_sync` removes the markers from the current file; the test also asserts that `git log -p` still shows them, so the limit of 9.6 is pinned, not hidden;
-- **unreadable values:** a local value that is not JSON is not exported and is in `skipped_keys`; an imported value that is not an array is not imported, the local value is unchanged, and it is in `skipped_keys`;
-- **the allowlist:** a marked saved tab with an unknown extra field holding a marker exports without it; an unmarked tab is byte-for-byte what `value_for_repo` gives today;
+**w12a (S0, every OS):**
+- per row 1 and 2: the six invariants of 9.3; every row of the `join` tables; the pinned shapes;
+- **the one-machine test, S0's part** (PRD S0's list): an orchestrator session and an agent run in a checkout path and in a folder that is in no workspace, each with markers. After `run_sync`: no marker in the repo's working tree or in `git log -p` of a fresh repo; the local `kv/` files byte-for-byte unchanged;
+- **No hub, no record:** the same, in a profile with no workspace record;
+- **the two-machine case, S0's part:** A exports; B imports, adds a session and a run, exports; A imports. A's session keeps its `projectDir`, A's run its `cwd`; B's new ones are on A with neither; an entry B deleted is gone on A; A's next `run_sync` makes no commit;
+- **each machine keeps its own:** A has session S with `projectDir`; B imports S without one; B calls `setProjectDir` and exports; A imports. A's S has A's, B's has B's; neither machine's next `run_sync` commits;
+- **a copy that holds another machine's folders** (written by hand, as an older build writes it): A imports it and takes none of its `projectDir` or `cwd`; a session A did not have arrives with none;
+- **paths from before (OQ-14):** A and B on this build; the repo's current files of the two keys hold markers; A's local values unchanged since its last sync. After one sync by A, the current files hold no marker and keep their `updated_at`; A's local values are unchanged; **B's next sync leaves B's local values unchanged** (review minor 7); `git log -p` still shows the markers (OQ-16), so the limit is pinned; a repo copy that is not a list is neither cleaned nor imported; the tab-set and session files are not touched by the cleanup;
+- **unreadable:** for each of the two keys, a local value that does not parse and one that parses to an object are not exported and are in `skippedKeys`; an imported copy of either kind is not imported and the local value is byte-for-byte unchanged; a list with a number in it is readable and the number passes as it is;
+- **the skipped-key notice (OQ-15):** an unreadable local value, then a sync: `skippedKeys` names the key; a second, periodic sync with the value still unreadable still names it; after the value is fixed, the next sync does not. The same with an unreadable **imported** copy at a launch sync: still named after a periodic sync that does not import; gone after another machine exports a readable copy and a sync reads it. Machine B, syncing to the same repo, never has the entry. Vitest (`SyncSettings.test.tsx`): a report with each entry shows its line, in words, with no key name and no "workspace"; one without shows none;
+- the tracker `id`: `startSession` mints one; an entry without one still joins by `paneId` and `startTime`.
+
+**w12b (S0, vitest, no OS branch):** in `fleetAttribution.test.ts` and a new `fleetLaunch.test.ts`:
+- **same machine, sync off** (with (b′)): launch 1, a run started from the agent picker in pane P in folder F1, finishing; the module is re-imported (`vi.resetModules()`), as a restart is; a pane gets id P in folder F2 and a run starts there. The fleet shows launch 1's run under F1, with no tab and **its own cost** from F1's sessions, and this launch's run under F2 with that pane's tab and its own cost; neither takes the other's cost;
+- the picker's and `dispatchAgent`'s entries record their folder;
+- **across machines:** A's run in pane P in F; an imported entry of B's in pane P with a start time after A's launch and no `cwd`: A's run under F with A's tab and cost; B's under "Unknown project", no tab, no cost;
+- **imported before this build:** an entry with `cwd` G and pane id P, present before this page loaded: under G, no tab, nothing from pane P;
+- a run started in this page keeps its tab, live folder and cost as today; `fleetAttribution.test.ts`'s existing cases pass with `joinable` true.
+
+**w12c (S0):** Rust, as listed in 9.9, in all three CI jobs. Vitest, in `OrchestratorDispatch.test.tsx` with `invoke` mocked and recorded:
+- a session with no `projectDir`, per-task Dispatch of one task: one `orchestrator_project_dir`, a `SPEC.md` write there, the agent tab's folder and its typed prompt name that folder and carry "Read SPEC.md", the session records it;
+- folder creation made to fail: per-task Dispatch makes no tab and no spawn request, shows "Could not create the project folder: …", records nothing; the same for Dispatch all;
+- **with creation held open**, each order: per-task then per-task; per-task then Dispatch all; Dispatch all then per-task. Each: one `orchestrator_project_dir` call, every agent's folder is the one folder, the session records it; and generation's `onTasksCreated` then a per-task Dispatch, the same;
+- **a recorded folder that does not exist** (OQ-21): the command answers a new folder; Dispatch all's agents and, separately, a per-task Dispatch's agent are in the new folder, which holds the spec, and the session records it in place of the old path.
+
+**w13 (S1):**
+- **WS-7 AC3's one-machine test, S1's part:** a session with a workspace tab named after its hub folder, a focus sub-terminal named after a checkout, a previewed file, a tab set holding a hub entry (hand-written until F2 exists), with markers. After `run_sync`: no marker in the repo; the local files unchanged;
+- **No hub, with the record:** S0's orchestrator and tracker values again with the workspace record unreadable, and again with a record whose `v` is newer: the export holds no marker (review minor 7);
+- **the two-machine case, tab sets:** A's tab-set entry keeps its `cwd` and `hub` after A imports B's newer copy; an entry this machine holds none for takes the imported entry's fields (row 3); A's next `run_sync` makes no commit;
+- **review sequences 1 and 2** (revision 1's B1), on rows 1 and 2 and on row 3;
+- **the allowlist:** a marked saved tab with an unknown extra field holding a marker exports without it; `hub: true` is exported; a pane node exports as `{ type: "pane", pane: { id } }`; an unmarked tab is byte-for-byte what `value_for_repo` gives today;
 - **WS-7 AC1:** a record with markers; `run_sync` leaves none in the repo; a static test asserts `workspaces.json` is not under `kv/` and that no key in `SHARED_KEYS` or `DEVICE_KEYS` names it; a static test asserts `sync.rs` and `sync_local.rs` do not name the `workspace` module;
 - **m8:** the snapshot folder is never read by `export_state`.
 
@@ -681,22 +798,29 @@ Automatic setup is one hook in the main window, fed the active tab's own-view fo
 
 **The covered set.** For each open hub the registry keeps the keys of its discovered checkouts from the open job's latest discovery: hidden ones included (OQ-13 (a)), ones past the 50 cap included, too-broad rows and rows without a key excluded. When a file was unreadable in the latest discovery, the keys last known from it in this run are kept.
 
-**Who makes the covered set exist.** `workspaceTabs.ts` runs in **every** window, the main one and each detached one (`DetachedApp` starts it). For each hub it reports, it calls `workspace_open`. So a hub whose only tab is in a detached window gets its discovery like any other. If no window asks within 15 seconds of the registry learning of a hub (longer than the worst case of 7.4), the hub counts as having **no known coverage** from then until a view arrives. Its answer is never left open.
+**A covered set is partial until its discovery is final** (review N-B2). An open job publishes its first view at once, holding only the hub's root (7.6), then roots as they are checked. Revision 2 answered `unknown` only until the first view, so a terminal in a checkout not yet discovered got `not_covered`, and `useProjectSetup` went on to set the checkout up or add stack agents to it (`useProjectSetup.ts:216` to `:240`). That happens most on a restore, when the terminal is already in the checkout. And the hook can run before the main window has reported its tabs at all.
 
-**The command.** `workspace_setup_covered(folder, pty_id) -> "covered" | "not_covered" | "unknown"`:
+**Who makes the covered set exist.** `workspaceTabs.ts` runs in **every** window, the main one and each detached one (`DetachedApp` starts it). In the main window it starts right after `loadSession()` (`App.tsx:110`, synchronous), so its first `workspace_tabs_set` carries every restored mark. For each hub it reports, it calls `workspace_open`. If no window asks within 15 seconds of the registry learning of a hub, the hub counts as **final with an empty covered set** from then until a view arrives (a fault in ADE; stated), so `unknown` is never left open.
 
-1. No hub is open in this instance and no terminal is touched (below): `not_covered`, with no file-system call. This is the path of everyone who has no hub.
+**The command.** `workspace_setup_covered(folder, pty_id) -> "covered" | "not_covered" | "unknown"`, in this order:
+
+1. **The main window has not yet reported its tabs in this launch** (no `workspace_tabs_set` from it): `unknown`, with no file-system call. Closes the launch race.
 2. `pty_id` is a **touched terminal**: `covered` (OQ-13 (b), literally: "for the rest of that terminal's life").
-3. Some open hub has no first view yet: `unknown`.
-4. The folder's key (one job). No answer: `unknown`.
-5. The key is inside a covered checkout of any open hub: the terminal becomes touched; `covered`.
-6. Otherwise `not_covered`.
+3. No hub is open in this instance: `not_covered`, with no file-system call. This is the path of everyone who has no hub, a few milliseconds after launch.
+4. **Some open hub's discovery is not final**: `unknown`. Final means the open job published its last view (`final: true`): every row read, the 10-second cut, or a hub that is missing, not finished or failed its check. A `recheck` after a lift (7.4) does not make a final view un-final; it can only add covered keys, and sends the event.
+5. **The terminal's folder, from the terminal itself.** `pty::quick_cwd(pty_id)`: the folder of the PTY's foreground process, else its shell's, from the process table (`cwd_of`, `pty.rs:689` to `:720`). The two process ids are read under the PTY manager's lock; `cwd_of` runs after it is released, and never under the registry's lock. No `lsof` (review minor 8: `pty_cwd`'s fallback runs `/usr/bin/lsof` without `-b`, `pty.rs:768`, which can block on a dead mount and starts a process). The kernel's folder is already resolved, so it is compared with the covered keys after the macOS spelling rule of 7.2, NFC and the checkout volume's case rule, with no file-system call. Only when the process table gives no folder (the PTY has no live process) is the `folder` argument's key computed by the resolver; no answer is `unknown`.
+6. The folder is inside a covered checkout of any open hub: the terminal becomes touched; `covered`.
+7. Otherwise `not_covered`.
+
+**`ade://workspace-cover-changed`** is sent to every window when: the main window first reports its tabs; a hub's discovery becomes final; a covered set changes; a mark lifts (7.4); the 15-second lapse above.
+
+**How long `unknown` lasts.** From launch until the main window's first report (one command after `loadSession`), and, while a hub opens, until its discovery is final: at most 2 + 10 + 2 seconds after its check starts running (7.6). Setup in every folder waits that long while any hub is opening; it is delayed, never skipped.
 
 **Touched terminals (OQ-13 (b)).** The PRD's words are "a terminal whose folder was inside a covered checkout while the workspace was open gets no automatic setup and no setup question for the rest of that terminal's life". **The default built is that text**: a set of PTY ids; once a terminal is in it, the answer for it is `covered` in every folder until its PTY ends. Question P-1 recommends the narrower rule (covered only in that checkout); it would change the set to pairs of PTY id and checkout key and step 2 to an `inside` test, nothing else.
 
 How a terminal becomes touched without ever being the active one:
 
-- **The sampler.** While any hub is open, the registry reads the folder of every live PTY every 3 seconds (the lookup behind `get_pty_cwd`, `pty.rs:518`, which reads the process table and no project folder). The folder the kernel reports is already resolved, so it is compared with the covered keys after NFC and the checkout's own case rule, with no file-system call. A terminal found inside a covered checkout becomes touched.
+- **The sampler.** While any hub is open, the registry reads every live PTY's folder every 3 seconds with `pty::quick_cwd` (step 5: ids under the PTY lock, `cwd_of` outside it, outside the registry's lock, no `lsof`), and compares as step 5 does. A terminal found inside a covered checkout becomes touched. A PTY whose folder the process table does not give is not sampled in that round.
 - **At close.** When a hub's last tab has been gone for 3 seconds (the grace that keeps Move to New Window from closing and reopening the workspace), the sampler runs once more before the covered set is dropped.
 - **The limit, stated.** A terminal that was inside a covered checkout for less than one sample interval, was never the active tab there, and left before the workspace closed, is not remembered.
 - Nothing is stored. A restart starts new terminals.
@@ -706,11 +830,13 @@ How a terminal becomes touched without ever being the active one:
 - awaits `workspace_setup_covered(cwd, ptyId)` **before** `setupRootOf`;
 - `covered`: withdraw any setup question it has on screen, and stop;
 - `not_covered`: go on as today;
-- `unknown`: do nothing in this run, leave a question already on screen where it is, and **run again** when `ade://workspace-cover-changed` arrives, and once more after 5 seconds. The event is sent whenever a hub's covered set changes, which includes its first view arriving, its discovery failing, and the 15-second lapse above. So `unknown` ends by itself;
+- `unknown`: do nothing in this run, leave a question already on screen where it is, and **run again** on `ade://workspace-cover-changed`, and once more after 5 seconds. Every way `unknown` ends sends the event, so it ends by itself;
 - the command rejects (a fault in ADE): go on as today. **A failure never switches automatic setup off.** The other direction is question P-2;
 - it also runs again on `ade://workspaces-open-changed`, so a workspace opening while a terminal sits in a checkout takes its question down.
 
-**What a failed or partial discovery covers (the default built, P-2):** exactly the checkouts that were read, plus those last known in this run. A checkout named only by a file that has never been readable in this run is not covered, as the PRD's text has it ("discovered checkouts"). The workspace's notice already names the file (WS-1 AC7).
+With revision 3 a slow or dead mount no longer turns `unknown` into the common answer: step 5 makes no file-system call for a live terminal, and a mark on one mount marks nothing else (7.3).
+
+**What a failed or partial discovery covers (the default built, P-2):** exactly the checkouts that were read, plus those last known in this run, once the discovery is final. A checkout named only by a file that has never been readable in this run is not covered, as the PRD's text has it ("discovered checkouts"). The workspace's notice already names the file (WS-1 AC7).
 
 Setup the engineer asks for (the palette's project setup, the Agents tab's Set up now, the New tab dialog) does not go through the hook. Added folders are not covered. The hub folder is F2 OB-13's (section 15).
 
@@ -723,13 +849,13 @@ Setup the engineer asks for (the palette's project setup, the Agents tab's Set u
 interface WorkspaceView {
   hub: string;
   gen: number;                         // per hub, increases; an older answer is dropped
-  final: boolean;                      // false while the open job is still publishing (7.4)
+  final: boolean;                      // false while the open job is still publishing (7.6)
   state:
     | { kind: "checking" }
     | { kind: "ok" }
     | { kind: "hub_missing"; why: "missing" | "not_answering" }
     | { kind: "not_finished"; reason: "not_a_folder" | "no_hub_conf" | "no_repository" | "no_commit" | "not_committed" | "not_a_file" }
-    | { kind: "check_failed"; reason: "git_file" | "git_link" | "reftable" | "pack_index_v1" | "too_many_packs" | "delta_too_deep" | "packed_refs_too_large" | "object_too_large" | "object_missing" | "damaged" };
+    | { kind: "check_failed"; reason: "git_file" | "git_link" | "link_in_git" | "reftable" | "pack_index_v1" | "too_many_packs" | "delta_too_deep" | "packed_refs_too_large" | "object_too_large" | "object_missing" | "damaged" };
   recordState: "ok" | "read_only";     // 4.1
   roots: Root[];                       // hub first; at most 50; hidden ones left out
   hidden: string[];                    // hidden checkouts the hub's files still name
@@ -826,7 +952,7 @@ interface WorkspaceTreeProps {
 
 Roles: `tree`, `treeitem`, `aria-expanded`, `aria-level`, `aria-current`; arrow keys as the tree pattern has them (WS-4 AC5). A root's accessible name is its label, "workspace folder", and its status when it is not `ok`; the same words are on screen, not colour alone (WS-4 AC2).
 
-**The listings are F4's own in both builds, and bounded.** WS-9 AC3 names listing among the calls that run under the 2-second bound, and today's `list_directory` has no bound (`lib.rs:75`). So the workspace tree lists through a new command, `workspace_list(path) -> FileEntry[]`, which runs the same listing code as `list_directory` (the same entries, order and skipped names, so a listing's `path` strings are the ones `workspace_locate`'s `chain` holds) as one job of the pool. It fails with a code and no path: `permission`, `not_found`, `not_a_folder`, `not_answering` or `other`. `workspaceListings.ts` holds a cache by path, fed by a queue of at most 4 `workspace_list` calls, each result tagged with the `gen` it was asked under. A rejection is caught inside the queue and becomes `{ error: code }`, which the tree can show as a reason (section 18, item 21); none leaves the queue (section 14, the log). Revision 1 listed through `list_directory`; the review did not raise it, and it is corrected here.
+**The listings are F4's own in both builds, and bounded.** WS-9 AC3 names listing among the calls that run under the 2-second bound, and today's `list_directory` has no bound (`lib.rs:75`). So the workspace tree lists through a new command, `workspace_list(path) -> FileEntry[]`, one job of the pool, which gives **the same entries as `list_directory`** (the same `FileEntry` fields, skipped names, order and `path` strings, so a listing's paths are the ones `workspace_locate`'s `chain` holds) **without its calls**. `list_directory` runs `entry.metadata()`, an `lstat`, on every entry (`lib.rs:89`), and the `lstat` of a mount-point child enters that child's file system unguarded (review N-B1). `workspace_list` resolves the folder (section 6), reads names and `d_type` with `readdir` batches on its descriptor, drops the skipped names, and takes each entry's `is_dir` and size from `fstatat(folder, name, AT_SYMLINK_NOFOLLOW)`, charged to the folder's mount. An entry whose path is a mount point in the table (7.2) has that call charged to its own mount; when that mount or path is marked, or the call is blocked, the entry is listed as a folder of size 0 and the rest of the listing is unaffected. A `d_type` of `DT_UNKNOWN` changes nothing, since the `fstatat` decides. `list_directory` itself is not changed. It fails with a code and no path: `permission`, `not_found`, `not_a_folder`, `not_answering` or `other`. `workspaceListings.ts` holds a cache by path, fed by a queue of at most 4 `workspace_list` calls, each result tagged with the `gen` it was asked under. A rejection is caught inside the queue and becomes `{ error: code }`, which the tree can show as a reason (section 18, item 21); none leaves the queue (section 14, the log). Revision 1 listed through `list_directory`; the review did not raise it, and it is corrected here.
 
 **F4 never gives a workspace's roots to F3's `fileBrowserStore.show`.** F3 story `s1c` sets "one `watch_directory` per root, started and stopped by show" (its item 6), and `watch_directory` is recursive (`watcher.rs:200`). Passing up to 50 workspace roots to `show` would set up to 50 recursive watches, which WS-9 AC6 forbids. So, in a build with F3 S1, when the view in sight is a workspace tab's own view, `FileBrowser` calls `show(key, [])`: F3's store holds no root, lists nothing and watches nothing for that view, and `WorkspaceTree` renders from F4's listings and F4's watch set (11.5). What F4 takes from F3 is the expanded set and the active folder, which is what WS-5 AC2 names.
 
@@ -879,7 +1005,7 @@ A poll has none of these. It is non-recursive by nature, the same on every platf
 **The poll set** (`watchset.rs`), one per window:
 
 - `folder_watch_set(paths, on_event) -> { unwatched: string[] }` makes the window's set equal to `paths`, at most **500**. Adding a folder is one job (resolve it, read its modification time and identity). A folder that cannot be added, or is past 500, is in `unwatched`.
-- **Every 2 seconds**, while the set is not empty and the window is visible (`folder_watch_pause(bool)`, called on `visibilitychange`), **one job per mount** reads the modification time of that mount's folders, in turn. A job has the usual 2-second bound; folders it did not reach are first in the next tick. A mount whose previous job is still running is skipped. A stuck mount's folders are reported once as unwatched and skipped until the mount recovers.
+- **Every 2 seconds**, while the set is not empty and the window is visible (`folder_watch_pause(bool)`, called on `visibilitychange`), **one job per mount** reads the modification time of that mount's folders, in turn, each one `fstatat` on the folder's parent descriptor with its own 2-second bound (7.1). **A tick has no deadline of its own**: 500 fast calls that take longer than 2 seconds in all mark nothing (review N-B1). A mount whose previous tick is still running is skipped this time, and folders a tick did not reach are first in the next. A blocked call marks that folder's path (7.3); folders at or below a marked path, or on a marked mount, are reported once as unwatched and skipped. When the mark lifts (7.4), they are added again and read at the next tick.
 - A folder whose modification time or identity changed sends `{ folder, kind: "changed" }`; one that is gone sends `{ folder, kind: "gone" }`. The webview re-lists that one folder. `folder` is the string the webview gave.
 - **Coarse timestamps.** Some volumes keep whole seconds. A folder whose modification time is less than 2 seconds old when read is read as changed once more on a later tick, so a second change inside the same second is not missed.
 - **What it sees and what it does not.** A folder's modification time changes when an entry is created, removed or renamed in it, which is what a listing shows. It does not change when a file's content changes, or when something changes deeper down. So a change two levels below a watched folder sends nothing, by the file system's own rule.
@@ -893,7 +1019,8 @@ Plain tabs and sub-terminals keep today's watch, unchanged.
 
 - a file created in a watched folder sends `changed` within two ticks; a file created two levels below sends nothing in three ticks; a removed folder sends `gone`;
 - the 501st folder is in `unwatched`; a workspace of 50 roots with nothing expanded asks for 0 folders;
-- a folder on a mount the fake table marks stuck starts no job;
+- a folder on a mount the fake table marks stuck starts no job; after the mark lifts it is watched again and a change is sent;
+- 500 folders on one fake mount whose `fstatat` each takes 6 ms (3 s per tick): no folder is reported unwatched and nothing is marked;
 - two changes within one second, on a seam that reports whole-second times, send two events;
 - a static test: `src-tauri/src/workspace/` and `pathkey.rs` hold no `notify::`, no `RecursiveMode`, no `std::process` and no `Command::new`.
 
@@ -1037,11 +1164,11 @@ sequenceDiagram
 
 ### 13.4 Commands and events
 
-Every command is `async` and works in the blocking pool (7.3). Errors are a closed set of codes with no path in them (section 14). Off macOS every command but `workspace_resolve` answers `unsupported` (13.5).
+Every command is `async` and works in the blocking pool (7.5). Errors are a closed set of codes with no path in them (section 14). Off macOS every command but `workspace_resolve` answers `unsupported` (13.5).
 
 | Command | Does | Story |
 |---|---|---|
-| `workspace_open(hub, reason)` | starts or joins the open job (7.4); `open` and `restore` stamp `lastOpened` and run retention; answers the current view at once | w5 |
+| `workspace_open(hub, reason)` | starts or joins the open job (7.6); `open` and `restore` stamp `lastOpened` and run retention; answers the current view at once | w5 |
 | `workspace_view(hub)` | the last view of an open hub, from memory | w5 |
 | `workspace_tabs_set(tabs, active, showsRoots)` | 13.2 | w5 |
 | `workspace_resolve(path, reserve)`, `workspace_release(token)`, `workspace_focus(window, tabId, notice?)` | 13.2 | w6 |
@@ -1068,15 +1195,15 @@ Every command is `async` and works in the blocking pool (7.3). Errors are a clos
 
 ### 13.5 The platform gate (F4.9: macOS only)
 
-F4 is not offered off macOS. Revision 1 said so and designed no gate.
+F4's workspaces are not offered off macOS. Revision 1 said so and designed no gate. **S0 is not gated** (PRD 3.6 F4.5, F4.9): the two sync rows, the fleet's join and Dispatch apply on every OS where ADE sync runs, and none of their code reads `WORKSPACES_SUPPORTED` or `workspace::supported()`.
 
 - **Rust, one function:** `workspace::supported() -> bool`, which is `platform::IS_MACOS`. Each command's body starts with it: `workspace_resolve` answers `plain` with `unsupported_platform`; every other command answers the error code `unsupported`. The commands' inner functions take `supported` as an argument, so both answers are tested on every CI OS.
 - **The webview, one constant:** `WORKSPACES_SUPPORTED`, which is `IS_MAC` (`shortcuts.ts:14`). When it is false: `openProjectTab` does not call `workspace_resolve`; `loadSession` and `tabFromDetached` drop a `workspace` mark (a session file copied from a Mac gives plain tabs); `workspaceTabs.ts` does not start; `useProjectSetup` does not call the cover check; the palette entries cannot appear, because no tab has the mark.
 - **So on Linux and Windows nobody can get a workspace tab**, and the NFC-only key of section 6 decides nothing.
 - **What the non-macOS builds contain.** The modules are plain library code and compile everywhere, because their logic is tested on Linux CI:
   - `access`, `assemble`, `record`, `registry`, `sync_local`, `watchset`: no platform code; all tests run on every CI OS.
-  - `pathkey`: steps 1 to 3 of section 6; the case-folding step and its tests are `cfg(target_os = "macos")`.
-  - `bounded`: the mount table is `getfsstat` on macOS, `/proc/self/mountinfo` on Linux, and one mount (the path's root) on Windows; tests inject it.
+  - `pathkey`: steps 1 to 3 of section 6, and the decision of step 4 (fold or not, from the volume's answer, through a seam), on every OS; the fold itself (`CFStringFold`) and its tests are `cfg(target_os = "macos")` (review minor 3).
+  - `bounded`: the mount table is `getfsstat` on macOS, `/proc/self/mountinfo` on Linux, and one mount (the path's root) on Windows; the descriptor calls of 7.2 are `cfg(unix)`, with plain `std::fs` calls on Windows so the module compiles; tests inject the table and the file system.
   - `discover`: the read of 5.3 has a Unix form and a plain form; the FIFO and permission tests are `cfg(unix)`.
   - `repohead`: the same code everywhere; the tests that build repositories with `git` are `cfg(unix)`. On Windows (`backend-windows`, `ci.yml:222`) the module compiles and its byte-level parser tests run. **F4 is not a tested target on Windows**, because it is not offered there.
 - **Tests:** vitest, with the constant false: picking a finished hub's folder makes a plain tab and records no `workspace_*` invoke; a saved session with a mark loads plain tabs. Rust, on every CI OS: `resolve_inner(supported: false, …)` answers `unsupported_platform` and the file-system seam records no call.
@@ -1087,9 +1214,11 @@ F4 is not offered off macOS. Revision 1 said so and designed no gate.
 |---|---|
 | An `ACCESS.md` is unreadable, a FIFO, not UTF-8, over 1 MiB, or does not answer | Its rows are lost; the others stay; one notice names the file; nothing is cleaned from the record (5.3, 5.6) |
 | A checkout's folder is missing, or does not answer | A missing or not-answering root, in its place; never created, cloned or written (WS-1 AC4) |
-| A dead mount | 4 calls wait 2 s; the mount is marked stuck; every other call to it answers at once; calls to other mounts go on; the mark lifts when the calls return or the mount goes (7.2) |
-| Three or more dead mounts at once | The pool can run short; at 16 parked threads F4's file reads answer "not answering" until one recovers (7.2) |
-| A mount that is slow but not dead | Roots arrive as they are checked; discovery is cut at 10 s with a notice (7.4) |
+| A dead mount | Its calls in flight (at most 4) block for 2 s; the blocked paths are marked, and the mount when its mount point or two unrelated paths block; every other call there answers at once; calls to other mounts go on; when a mark lifts, what it hid is checked again (7.3, 7.4) |
+| A share mounted where the table does not name it | The hang marks its path only; the volume above it is not marked unless a second, unrelated path on it hangs (7.3) |
+| A hard-mounted share that never answers | Its calls stay parked and its mark stays until it is unmounted or ADE restarts; counted in the cliff (7.4) |
+| Three or more dead mounts at once | The pool can run short; at 16 parked threads F4's file reads answer "not answering" until a mark lifts (7.3) |
+| A mount that is slow but not dead | Nothing is marked: only a single call blocked past 2 s marks. A root, a file or the check that takes over 2 s in all answers "not answering" for that open; discovery is cut at 10 s with a notice (7.1, 7.6) |
 | The hub folder is gone, or does not answer | The tab keeps its mark; one missing root; Refresh only; the record is untouched (11.1) |
 | `hub.conf` is not committed for now | The tab shows as a plain tab with a notice; the record is untouched; Refresh brings the workspace back |
 | The repository is in a form the check does not read | `check_failed` with its reason; never "finished" (8.2) |
@@ -1102,10 +1231,14 @@ F4 is not offered off macOS. Revision 1 said so and designed no gate.
 | An open that fails or is cancelled after reserving | Released in a `finally`, or when its window closes, or after 10 s (13.2) |
 | F2's check says finished and F4's does not | Open Hub's tab has no mark and a notice; a second open still brings it forward (13.2) |
 | A hub's only tab is in a detached window | It counts as open; the default focuses it; the recommended case is in 13.2 (P-3) |
-| A shared key's local value is not JSON | Not exported this run; listed in the sync report (9.5) |
-| An imported copy cannot be joined | Not imported this run; the local value stays; listed in the sync report (9.3) |
-| An older build syncs to the same repo | It writes its paths back and loses its own on import; this build scrubs again (9.6) |
-| The cover check cannot answer yet | `unknown`: no setup in this run, and the hook runs again when it can (section 10) |
+| The orchestrator's or tracker's local value is not the key's list | Not exported this run; kept in `sync-state.json` and shown in Settings → Sync until the key next syncs (9.5) |
+| An imported orchestrator or tracker copy is not the key's list | Not imported; the local value stays; shown the same way until a run reads a readable copy (9.5) |
+| A tab set or session value is unreadable | As today (9.2) |
+| An older build syncs to the same repo | It writes its folders back and loses its own on import; this build cleans the two keys' current files again (9.6) |
+| Dispatch cannot make the project folder | No agent starts; "Could not create the project folder: …"; nothing recorded (9.9) |
+| A recorded project folder no longer exists | A new one is made and recorded (9.9) |
+| A tracker entry from another launch or machine shares a live pane's id | Not joined: no tab, its own folder and cost only (9.8) |
+| The cover check cannot answer yet (before the main window reports, or while a hub's discovery is not final) | `unknown`: no setup in this run, and the hook runs again when it can (section 10) |
 | The cover check rejects | Setup goes on as today; a failure never switches it off (section 10) |
 | A folder past the 500 poll entries, or that cannot be added | It refreshes when expanded and on Refresh (11.5) |
 | A path holds bidi or control characters | Shown escaped everywhere (12.2) |
@@ -1124,8 +1257,8 @@ Not handled, and said so: a hub whose files change between two reads of one disc
 
 | # | F4 needs | From | State | What F4 does about it |
 |---|---|---|---|---|
-| F2-1 | Open Hub, `Tab.hub`, the run tab and its events, tab-set hub entries, the "Hub removed" tab | F2 slice 1 (PRD revision 5.2, PR #98; design revision 7, PR #101, **not approved**) | not built | Every F2 seam is in one story, **w14**, not pulled until F2 slice 1 is on `main`. The other thirteen stories do not need F2 |
-| F2-2 | F2's design revised for F4's approved amendments and for this revision | PR #101 | Its section 8 still says the hub folder's path stays in the synced keys, and its Open Hub always opens a hub tab | F2's architect revision must: adopt `sync-local-fields.md` for OB-10 AC2 and OB-14 AC5, and say whether an exported hub tab keeps `hub`; bring Open Hub through `workspace_resolve`, with `workspace_release` in a `finally`, and act on `open` and `opening` as 13.2 says; name the run event that means "`hub.conf` is committed" (WS-2 AC7); clear `workspace` with `hub` on a finished removal; **give `workspaceTabs.ts` the hub folder of a tab that has `Tab.hub`** (today the flag is a boolean, F2 design section 8), so the registry can key a hub tab by its folder; and say whether anything knows that a persona session is still running in a tab (the UX spec's need 18) |
+| F2-1 | Open Hub, `Tab.hub`, the run tab and its events, tab-set hub entries, the "Hub removed" tab | F2 slice 1 (PRD revision 5.2, PR #98; design revision 7, PR #101, **not approved**) | not built | Every F2 seam is in one story, **w14**, not pulled until F2 slice 1 is on `main`. The other fifteen stories (S0's three and twelve of S1's) do not need F2 |
+| F2-2 | F2's design revised for F4's approved amendments and for this revision | PR #101 | Its section 8 still says the hub folder's path stays in the synced keys, and its Open Hub always opens a hub tab | F2's architect revision must: adopt `sync-local-fields.md` for OB-10 AC2 and OB-14 AC5, with its tab-set fields named `cwd` and `hub` (as F2's design has them) and the `ade-session` allowlist keeping `hub: true` unless F2 says otherwise; say whether its rows should also take the never-take and unreadable rules, which the PRD gives only to the orchestrator and tracker rows (9.2; the default built is the PRD's text); bring Open Hub through `workspace_resolve`, with `workspace_release` in a `finally`, and act on `open` and `opening` as 13.2 says; name the run event that means "`hub.conf` is committed" (WS-2 AC7); clear `workspace` with `hub` on a finished removal; **give `workspaceTabs.ts` the hub folder of a tab that has `Tab.hub`** (today the flag is a boolean, F2 design section 8), so the registry can key a hub tab by its folder; and say whether anything knows that a persona session is still running in a tab (the UX spec's need 18) |
 | F2-3 | One finished-hub check | F2 ADR `0029-…-with-ades-own-git` (Proposed) | Runs git; disagrees with section 8 for a linked worktree, a `hub.conf` committed as a link, and every form section 8 does not read | Recommended: F2's `hub_folder_kind` calls `repohead::finished_hub` for its git part. Until it does, bring-forward still holds (13.2); WS-2 AC1 is unmet for a hub the two checks disagree on, and w14's test pins that case |
 | F2-4 | One path rule | F2 design 4.10.1 (`hubmark.rs`) | not built | Section 6: `pathkey.rs`, created by whichever lands first |
 | F2-5 | Project setup kept out of the hub folder itself (OB-13) | F2 slice 1 | not built | F4 skips setup on its own route into a finished hub (13.3). **Until OB-13 is on `main`, a terminal sitting in a hub folder can still be asked the setup question, as it can today.** So WS-1 AC6's "the hub is unchanged" is proved for F4's own actions in w3 to w10, and end to end only with w14 |
@@ -1133,7 +1266,8 @@ Not handled, and said so: a hub whose files change between two reads of one disc
 | F3-2 | Three amendments to ticket `s1c` (items 4, 6 and 11), the matching row of `f3-merges-second.md`, and one line of F3's design (6.3, 10.6) | the scrum-master, at F4 S1's sharding; F3's architect at its next revision | **not made** | 11.4 gives the text |
 | F3-3 | `value_for_repo` is edited by F3 `s1a` (two names added to `SESSION_LOCAL_FIELDS`) and by F4 w13 | F3 story `s1a` | ticket | The rules do not conflict (9.5); the second to merge resolves the text |
 | P-1 | The relay's tab payload | phone-watch story 8 | sharded, not built | WS-7 AC2's relay part is [Second]. Rule for the code until then: a payload builder picks fields and never spreads a `Tab`. The scrum-master writes the mirror into story 8's ticket |
-| T-1 | Field-level writes of shared keys | ADR `0033-shared-local-keys-are-written-field-by-field` (PR #117, Proposed) | not merged | F4 adds no multi-window `localStorage` key. The new `id` on agent-tracker entries is added inside the store's existing writer |
+| T-1 | Field-level writes of shared keys | ADR `0033-shared-local-keys-are-written-field-by-field` (PR #117, Proposed) | not merged | F4 adds no multi-window `localStorage` key. The new `id` on agent-tracker entries is added inside the store's existing writer; `startedHere` is memory only |
+| S-1 | The skipped-key line's copy | the designer (D-5; PRD F4.11) | not written | w12a builds the line with placeholder words from 9.5 and takes the designer's copy when it lands |
 | F1-1 | `ProfilePaths` | F1 slice 1 | not built | The record's path is resolved from `state::state_dir` today (4.1) |
 | F1-2 | F1's rule that target-gated tests live in `macos_only` modules and on `platform-tests.txt` | F1 slice 0 | not built | F4's macOS-only tests are in modules named `macos_only` and never skip |
 | D-1 | The F4 UX spec | branch `ux-f4`, being revised | in progress | Section 18 |
@@ -1147,43 +1281,47 @@ Not handled, and said so: a hub whose files change between two reads of one disc
 
 ## 17. Stories, tests and where they run
 
-### 17.1 The split for S1
+### 17.1 The split for S0 and S1
 
-Advice to the scrum-master. "After" means merged to `main`. **Fourteen stories.**
+Advice to the scrum-master. "After" means merged to `main`. **Sixteen stories: three for S0, thirteen for S1.**
 
-| Story | Kind | Builds | After |
-|---|---|---|---|
-| **w1. Tab sets renamed** | vertical | the relabel, the guide, the scan (WS-10) | none |
-| **w2. The path rule and the bounded pool** | infrastructure | `pathkey.rs`, `workspace/bounded.rs` | none |
-| **w3. The finished-hub check** | infrastructure | `repohead.rs`, `flate2`; **creates `testhub.rs`**, the marker-fixture builder, and its first test | w2 |
-| **w4. Discovery** | infrastructure | `access.rs`, `discover.rs`, the frozen fixture, too broad, the caps | w2 |
-| **w5. The record and the open job** | infrastructure with a command contract | `record.rs` (the file, every reading outcome, retention, the format fixture; not the hand changes), `assemble.rs`, `open.rs`, `registry.rs` (the open tabs and open hubs), `workspace_open`, `workspace_view`, `workspace_tabs_set`, the Rust half of the platform gate | w3, w4 |
-| **w6. A hub folder opens as a workspace tab** | vertical | `Tab.workspace` through every tab operation; `addWorkspaceTab`; `workspace_resolve`, `release`, `focus` and reservations; `workspaceTabs.ts` in both windows; `workspaceStore.ts`; `openProjectTab`'s seam; bring-forward; the webview half of the platform gate | w5 |
-| **w7. The workspace tree** | vertical | `WorkspaceTree`, `workspaceRoots.ts`, `visibleText.ts`, `workspaceListings.ts`, `workspaceTreeState.ts`, `workspace_list`, `workspace_locate`, the extra root, `FileBrowser`'s branch | w6; **recommended:** F3 `s1c` |
-| **w8. Folder watches** | vertical | `watchset.rs`, `folderWatches.ts` | w7 |
-| **w9. Hand changes** | vertical | the five record commands in Rust, the four palette entries, the file browser's workspace menu, Show Hidden, undo | w7 |
-| **w10. States, notices and restore** | vertical | `tabNoticeStore`, `TabNoticeBar` and `announce` (also in the detached window), every state of 11.1, every `Notice`, the read-only record on screen, restore (WS-6 AC1, AC3) | w9 |
-| **w11. No automatic setup in covered checkouts** | vertical | the covered set, the sampler, `workspace_setup_covered`, the hook | w6 |
-| **w12. Project and run folders never sync** | vertical, and independent of workspaces | `sync_local.rs` for the orchestrator and agent-tracker rows; `public`, the scrub, `join` and `skipped_keys` in `sync.rs`; the tracker entry `id`; the pinned shapes; the two-machine tests; one line in `docs/guide/sync.md` | none |
-| **w13. Workspace tabs and tab-set folders in the export** | vertical | the `ade-session` allowlist; the tab-set row (hand-written entries until F2 exists); WS-7 AC1's and AC3's marker tests in full | w6, w12 |
-| **w14. The F2 seams** | vertical | Open Hub through `resolve`, WS-2 AC3's message, the run tab, the flag carried beside the mark, hub tabs in the registry, tab-set hub entries, F2's rows of the strip end to end, the review-step copy (m1) | w6, w9, w10, w13, and **F2 slice 1** |
+| Story | Slice | Kind | Builds | After |
+|---|---|---|---|---|
+| **w12a. Project and run folders never sync** | S0 | vertical, every OS | `sync_local.rs` rows 1 and 2; `public`, the cleanup, `join`, the never-take and unreadable rules in `sync.rs`; `SyncState.skipped` and `SyncReport.skippedKeys`; the Settings → Sync line (D-5's copy); the tracker entry `id`; the pinned shapes; S0's tests of 9.10; one line in `docs/guide/sync.md` | none |
+| **w12b. The fleet joins only this launch's runs** | S0 | vertical, every OS | `startedHere` and `startedThisLaunch` in `agentTrackerStore.ts`; `buildLanes`'s `joinable`; the `cwd` the agent picker and `dispatchAgent` record (9.8) | w12a (the `id`) |
+| **w12c. Dispatch makes the project folder first** | S0 | vertical, every OS | `orchestrator_dir.rs` and its command, with Rust tests in all three CI jobs; `orchestratorProjectDir.ts`; its three callers in `OrchestratorTab.tsx` (9.9) | none |
+| **w1. Tab sets renamed** | S1 | vertical | the relabel, the guide, the scan (WS-10) | none |
+| **w2. The path rule and the bounded pool** | S1 | infrastructure | `pathkey.rs`, `workspace/bounded.rs`; **creates `workspace/mod.rs` with every module of section 3.1 declared, each as an empty file holding one line naming its story**, and `mod workspace;` in `lib.rs` | none |
+| **w3. The finished-hub check** | S1 | infrastructure | `repohead.rs`, `flate2`; fills `testhub.rs`, the marker-fixture builder, and its first test | w2 |
+| **w4. Discovery** | S1 | infrastructure | `access.rs`, `discover.rs`, the frozen fixture, too broad, the caps | w2 |
+| **w5. The record and the open job** | S1 | infrastructure with a command contract | `record.rs` (the file, every reading outcome, retention, the format fixture; not the hand changes), `assemble.rs`, `open.rs` (including the recheck of 7.4), `registry.rs` (the open tabs and open hubs), `workspace_open`, `workspace_view`, `workspace_tabs_set`, the Rust half of the platform gate | w3, w4 |
+| **w6. A hub folder opens as a workspace tab** | S1 | vertical | `Tab.workspace` through every tab operation; `addWorkspaceTab`; `workspace_resolve`, `release`, `focus` and reservations; `workspaceTabs.ts` in both windows; `workspaceStore.ts`; `openProjectTab`'s seam; bring-forward; the webview half of the platform gate | w5 |
+| **w7. The workspace tree** | S1 | vertical | `WorkspaceTree`, `workspaceRoots.ts`, `visibleText.ts`, `workspaceListings.ts`, `workspaceTreeState.ts`, `workspace_list`, `workspace_locate`, the extra root, `FileBrowser`'s branch | w6; **recommended:** F3 `s1c` |
+| **w8. Folder watches** | S1 | vertical | `watchset.rs`, `folderWatches.ts` | w7 |
+| **w9. Hand changes** | S1 | vertical | the five record commands in Rust, the four palette entries, the file browser's workspace menu, Show Hidden, undo | w7 |
+| **w10. States, notices and restore** | S1 | vertical | `tabNoticeStore`, `TabNoticeBar` and `announce` (also in the detached window), every state of 11.1, every `Notice`, the read-only record on screen, restore (WS-6 AC1, AC3) | w9 |
+| **w11. No automatic setup in covered checkouts** | S1 | vertical | the covered set, finality, the first-report gate, `pty::quick_cwd`, the sampler, `workspace_setup_covered`, the hook | w6 |
+| **w13. Workspace tabs and tab-set folders in the export** | S1 | vertical | `sync_local.rs` rows 3 and 4: the `ade-session` allowlist, the tab-set row (hand-written entries until F2 exists); WS-7 AC1's and AC3's S1 tests of 9.10 | w6, w12a |
+| **w14. The F2 seams** | S1 | vertical | Open Hub through `resolve`, WS-2 AC3's message, the run tab, the flag carried beside the mark, hub tabs in the registry, tab-set hub entries, F2's rows of the strip end to end, the review-step copy (m1) | w6, w9, w10, w13, and **F2 slice 1** |
 
-**Why four stories are infrastructure, said plainly.** w2 to w5 have no behaviour a person can see. They are not layers cut for convenience: each is where a PRD criterion is decided and is tested alone in Rust (the path rule, F4.1; WS-2 AC8; WS-1 AC2 and its frozen fixture; WS-1 AC1, WS-6 AC2, WS-9 AC1 to AC3). The risk of this feature is in what touches a client's disk, and those rules must be proved before a screen calls them. Putting a screen in each would add a component and no proof. The first story a person can use is w6. w12 is cut out of the sync work because the owner's decision made it independent: it changes what every user syncs and can ship before any workspace exists.
+**S0 is its own slice and ships ahead** (OQ-19, the owner, 2026-11-15). It needs no hub, no workspace, no F2 and no F3, has no platform gate, and its tests run on every CI OS (its Rust in `backend`, `backend-macos` and `backend-windows`; its vitest on ubuntu, with no OS branch in the code). w12a builds the shared import mechanism (`sync_local.rs`) that w13 and F2 extend. Revision 2's single w12 is cut in three because it now carries the fleet and Dispatch fixes; the three share no file except that w12b reads the `id` w12a adds.
+
+**Why four stories are infrastructure, said plainly.** w2 to w5 have no behaviour a person can see. Each is where a PRD criterion is decided and is tested alone in Rust (the path rule, F4.1; WS-2 AC8; WS-1 AC2 and its frozen fixture; WS-1 AC1, WS-6 AC2, WS-9 AC1 to AC3). The risk of this feature is in what touches a client's disk, and those rules must be proved before a screen calls them. This departs from `CLAUDE.md`'s "small, vertically sliced" discipline, so it is the owner's to accept: question **O-5** (section 19). If the owner says no, the recommended re-cut folds w3 and w4 into w5 and w5 into w6, which gives two very large stories.
 
 **Order and what may run in parallel:**
 
-- w1, w2 and w12 at any time.
-- w3 and w4 in parallel after w2. They share no file: w4 does not touch `testhub.rs`.
+- S0 (w12a, then w12b; w12c at any time) first; w1 and w2 at any time.
+- w3 and w4 in parallel after w2. **They share no file** (review minor 2): w2 creates `workspace/mod.rs` with every module declared, and `testhub.rs` as an empty file; w3 fills `repohead.rs` and `testhub.rs`, w4 fills `access.rs` and `discover.rs`, and neither edits `mod.rs`.
 - w5, then w6.
-- w7, w11 and w13 in parallel after w6. w7 and w11 each add lines to the command lists in `workspace/mod.rs` and `lib.rs`; the second to merge rebases those lines.
+- w7, w11 and w13 in parallel after w6. w7 and w11 each add commands to `workspace/mod.rs`'s command list and `lib.rs`'s `invoke_handler`; the second to merge rebases those lines.
 - w8 and w9 in parallel after w7. w10 after w9.
 - w14 last.
 
-**Dependencies revision 1 had wrong.** The sync story no longer needs the registry (it needs no knowledge at all). The marker fixture has one owner (17.3). The hand-change commands and `workspace_view` have stories (w9, w5). WS-6 AC2's "made untracked, kept, back when finished" is in w10, which has the check, the open job and the hand changes before it. WS-1 AC5's refresh is in w5 (Rust) and w9 (the palette entry).
+**Dependencies revision 1 had wrong.** The sync story no longer needs the registry (it needs no knowledge at all). The marker fixture has one owner (17.3). The hand-change commands and `workspace_view` have stories (w9, w5). WS-6 AC2's "made untracked, kept, back when finished" is in w10. WS-1 AC5's refresh is in w5 (Rust) and w9 (the palette entry).
 
-**Old names to new** (revision 1 → revision 2), for tickets and notes that cite them: w1 → w2; w2 → w4; w3 → w3; w4 → w5 and w9; w5 → w12 and w13; w6 → w5 and w6; w7 → w6; w8a → w7; w8b → w8; w9 → w9 and w10; w10 → w11; w11 → w1; w12 → w14.
+**Old names to new.** Revision 1 → revision 2: w1 → w2; w2 → w4; w3 → w3; w4 → w5 and w9; w5 → w12 and w13; w6 → w5 and w6; w7 → w6; w8a → w7; w8b → w8; w9 → w9 and w10; w10 → w11; w11 → w1; w12 → w14. Revision 2 → revision 3: w12 → w12a, w12b and w12c; the rest unchanged.
 
-**The slice S1 is Done when w14 is.** Until F2 slice 1 exists, w1 to w13 can each be Done, and together they give a working workspace for a hub folder opened from the New tab dialog.
+**S0 is Done when w12a to w12c are. S1 is Done when w14 is.** Until F2 slice 1 exists, w1 to w13 can each be Done, and together they give a working workspace for a hub folder opened from the New tab dialog.
 
 ### 17.2 Test style (sharding note m6)
 
@@ -1192,6 +1330,8 @@ There is no GUI end-to-end harness. So:
 - **(a) Spawn-request assertions**, in vitest, with `invoke` mocked and recorded. "No Claude process" is: exactly one `create_pty` whose `cwd` is the hub folder, no `write_pty` carrying a launch line, and no F2 command. "One persona session" (w14) is: exactly one `hub_open_existing`.
 - **(b) Rust marker-fixture tests** drive the check, discovery, the open job and the hand changes directly.
 - Component tests render `WorkspaceTree` and `FileBrowser` in jsdom.
+- **`IS_MAC` in vitest** (review minor 1). jsdom's user agent names no Mac, so `IS_MAC` (`shortcuts.ts:14`), and with it `WORKSPACES_SUPPORTED`, is false in every vitest run. Every F4 vitest file that needs the macOS behaviour uses the existing pattern of `FileBrowserOpen.test.tsx:15`: `vi.mock("../../lib/shortcuts", async (original) => ({ ...(await original<typeof import("../../lib/shortcuts")>()), IS_MAC: true }))`, and the platform gate's own tests mock it `false`. **No F4 test may skip itself**: no `it.skipIf`, `it.runIf`, `describe.skipIf`, `.skip`, `.todo`, and no early `return` on a platform check. `scripts/workspaceWord.test.ts` gains one check that fails on any of those in the F4 test files it is given by name (the list is in its source, as its string lists are). S0's tests need no mock: their code has no platform branch.
+- **Rust tests that hang a call** each build their own `Bounded` and hold their `HangGuard` in a local (7.1), so `cargo test`'s parallel threads share nothing.
 
 ### 17.3 The marker fixture and who owns it (WS-1 AC6, WS-2 AC8)
 
@@ -1202,14 +1342,14 @@ There is no GUI end-to-end harness. So:
 - **w9 adds its own test** (in `record.rs`): add, hide, show, move.
 - **No later story edits the builder.** A story that finds it must stops and reports, as its ticket's stop rule.
 
-### 17.4 Every S1 criterion and its test
+### 17.4 Every S0 and S1 criterion and its test
 
 "Rust" is `cd src-tauri && cargo test`; "vitest" is `npm test`. **macOS** marks a test compiled only there (17.5).
 
 | Criterion | Story | Test | Runs |
 |---|---|---|---|
-| F4.1 path rule | w2 | `pathkey`: lexical cases, a missing tail, component-prefix `inside`, a forced case-sensitive volume, a link resolved step by step, 41 links refused | Rust |
-| | w2 | `pathkey::macos_only`: `/x/api`, `/x/api/`, `/X/api` are one key on the default volume; NFC and NFD are one key; a link is its target's key | Rust, **macOS** |
+| F4.1 path rule | w2 | `pathkey`: lexical cases, a missing tail, component-prefix `inside`; **with the volume seam answering case-sensitive, no fold is applied** (the decision; the fold itself is macOS only, review minor 3); a link resolved step by step through descriptors; 41 links refused; every call is made `*at` on a parent descriptor (the fake file system records it) | Rust |
+| | w2 | `pathkey::macos_only`: `/x/api`, `/x/api/`, `/X/api` are one key on the default volume (the volume answers case-insensitive and `CFStringFold` folds); NFC and NFD are one key; a link is its target's key | Rust, **macOS** |
 | WS-1 AC1 | w4, w5 | `discover`: file order; `assemble`: hub, discovered, added; a saved order wins and new roots follow | Rust |
 | WS-1 AC2 | w4 | `access`: the frozen fixture file by file; `discover`: output equals `expected.json` | Rust |
 | WS-1 AC3 | w4 | `discover`: two rows, one folder, one root at the first position; the hub named as a checkout is dropped; `<hub>/repos/web` is its own root; two rows with no key and the same text are one | Rust |
@@ -1221,8 +1361,9 @@ There is no GUI end-to-end harness. So:
 | | w2 to w5, w8 | the static test of 11.5 (no process, no `notify`, no recursive mode) | Rust |
 | | w6 | `openHubFolder.test.ts`: the spawn-request assertion | vitest |
 | WS-1 AC7 | w4, w5 | `discover` (unix): a work folder's `ACCESS.md` with no read permission gives the other files' roots and `file_unreadable`; open: a hidden entry is still in the record after that refresh; a hidden row with no key stays hidden and is not cleaned | Rust |
-| WS-1 AC8 | w11 | `registry`: covered while open; a hidden checkout is covered; a too-broad row covers nothing; a touched terminal stays covered after the last tab closes, and a new PTY is not; the sampler touches a terminal that was never active; a hub with no view after 15 s has no coverage; `unknown` before the first view | Rust |
-| | w11 | `useProjectSetup.test.tsx`: `covered` → no `setupStatus`, no setup invoke, no question, nothing added to `ade-project-setup-done`; `unknown` then the cover-changed event → the hook runs again; a rejecting command → setup as today; asked-for setup still runs; with no hub open the checkout is set up as today | vitest |
+| WS-1 AC8 | w11 | `registry`: covered while open; a hidden checkout is covered; a too-broad row covers nothing; a touched terminal stays covered after the last tab closes, and a new PTY is not; the sampler touches a terminal that was never active, with no `lsof` and no file-system call (the fake file system records none); a hub with no open job after 15 s counts as final with nothing covered. **Replacing revision 2's "`unknown` before the first view" (review N-B2):** `unknown` before the main window's first `workspace_tabs_set`; `unknown` while a hub's discovery is not final, for a folder in a checkout named by a file not yet read **and** for a folder in no checkout, with the open job held by a hang seam on the second `ACCESS.md`; after the seam is dropped, `covered` and `not_covered`, and `ade://workspace-cover-changed` was sent each time `unknown` could end | Rust |
+| | w11 | `useProjectSetup.test.tsx`: `covered` → no `setupStatus`, no setup invoke, no question, nothing added to `ade-project-setup-done`; `unknown` then the cover-changed event → the hook runs again; a rejecting command → setup as today; asked-for setup still runs; with no hub open the checkout is set up as today. **The restore case (N-B2):** `loadSession` restores a workspace tab and a plain tab whose terminal is in a checkout; `workspace_setup_covered` (mocked) answers `unknown` until the test releases its seam; **no setup invoke is made** while it is held; after release it answers `covered` and still none is made | vitest |
+| | w11 | `registry::macos_only`: a child process started in a folder under the home folder: `quick_cwd`'s folder, after the spelling rule, equals the resolver's key for that folder (pins the kernel's spelling under a firmlink) | Rust, **macOS** |
 | WS-2 AC1 | w14 | Open Hub on a fixture hub with two checkouts, one missing: a tab with both marks; three roots in order; one `hub_open_existing` | vitest |
 | WS-2 AC2 | w6, w7 | the hub folder gives a tab with the mark, no `hub`, one `create_pty` in the hub folder, nothing typed, no setup question; `<hub>/projects/acme` gives a plain tab; the roots show | vitest |
 | WS-2 AC3 | w5, w6 | `registry`: the most recently used tab; a hub tab without the mark is found by its folder; a reservation and each way it ends; a destroyed window's tabs are gone. `openHubFolder.test.ts`: a second open makes no tab and one `workspace_focus`; `opening` waits and then focuses; a failed open releases | Rust; vitest |
@@ -1244,25 +1385,28 @@ There is no GUI end-to-end harness. So:
 | WS-6 AC3 | w10 | each case: the tab, the notice, no other root, the record file byte-for-byte unchanged, Refresh only; then the full workspace after a refresh | vitest; Rust |
 | WS-6 AC4 | w6 | Duplicate, Reopen Closed Tab and Move to New Window each keep the mark; Duplicate starts nothing but `create_pty`; a plain tab in a hub folder stays plain | vitest |
 | | w14 | the same with `hub` beside the mark; a tab-set hub entry whose folder is a finished hub loads as a workspace tab with a plain shell | vitest |
-| WS-7 AC1 | w13 | 9.7: the record's markers are in no export; the static tests | Rust |
+| WS-7 AC1 | w13 | 9.10: the record's markers are in no export; the static tests | Rust |
 | WS-7 AC2 | w9, w10, w7 | a saved tab set holds no marker from the record; the agent-tracker key holds none; the error codes hold no path; the log test of section 14; the snapshot folder is not exported (m8) | vitest; Rust |
 | WS-7 AC2, relay | [Second] | with phone-watch story 8 | |
-| WS-7 AC3 | w12 | 9.7: the invariants, the `join` tables, the two-machine case, review sequences 1 and 2, B2's sequence and its older-build variant, paths from before F4, unreadable values | Rust; vitest (the pinned shapes) |
-| | w13 | 9.7: the one-machine test in full, the allowlist | Rust |
+| WS-7 AC3, S0 | w12a | 9.10 (w12a): the six invariants on rows 1 and 2, the `join` tables, the one-machine and two-machine parts, each machine keeps its own, a copy with another machine's folders, paths from before with B unchanged, unreadable, the skipped-key notice and its persistence, No hub with no record | Rust, every CI OS; vitest (shapes, `SyncSettings`) |
+| | w12b | 9.10 (w12b): same machine with a picker run that keeps its project and cost after a restart; across machines; imported before | vitest |
+| | w12c | 9.10 (w12c): `orchestrator_project_dir` in all three CI jobs; per-task Dispatch makes the folder; failure starts nothing; the three click orders and generation; a recorded folder that does not exist, for both buttons | Rust, `backend`, `backend-macos`, `backend-windows`; vitest |
+| WS-7 AC3, S1 | w13 | 9.10 (w13): the one-machine test's workspace parts, No hub with an unreadable and a newer record, the tab-set two-machine part, review sequences 1 and 2 on row 3, the allowlist | Rust |
 | | w14 | the same with entries written by F2's own code | Rust; vitest |
 | WS-7 AC4 | w5 | the written file's fields are exactly `v`, `workspaces[].{hub, added, hidden, order, lastOpened}`, `droppedNotice` | Rust |
 | WS-9 AC1 | w5, w9 | a fixture naming 60 checkouts gives 50 roots and `not_shown` with the last 10 paths; with two added folders, 47 checkouts show and both added folders do; a custom order does not change which are left out; an add past 50 is refused | Rust |
 | WS-9 AC2 | w4 | (unix) an `ACCESS.md` that is a FIFO gives `file_unreadable` within the bound; a 1 MiB + 1 file; 201 work folders; 501 candidate rows | Rust |
-| WS-9 AC3 | w2 | `bounded`: 33 calls into one hung mount park 4 threads, mark it after 2 s and answer the other 29 at once; calls to another mount still answer; a parked call that returns lifts the mark; a mount that leaves the table lifts it; a job that crosses a mount is queued again under it | Rust |
+| WS-9 AC3 | w2 | `bounded`, each test with its own `Bounded`: **a hanging `lstat` of a child that the fake table names as a mount point marks only that child's mount**, and calls to its parent's mount go on; **calls that take 2.5 s in all, none over 50 ms, mark nothing**; a blocked call below the home folder marks its path, not the volume, and a second unrelated blocked path marks the volume; a parked call leaves its mount's count of 4; 33 calls into one dead mount park at most 4 threads and answer the rest at once; calls to another mount still answer; **lifting a mark (a parked call returns; the mount leaves the table) calls the listener, and an open hub's not-answering root is re-published `ok` under a higher `gen`**; a job queued again under another mount keeps its deadline; round-robin: two submitters on one mount alternate; two `Bounded` values in one test process share nothing; every hang guard dropped leaves `parked() == 0` | Rust |
+| | w2 | `bounded::macos_only`: `lstat("/Users")`'s device is the table's entry for `/System/Volumes/Data`; a disk image attached with `hdiutil attach -mountpoint` under the home folder is a mount point by rule 1 and a call on it is charged to the image | Rust, **macOS** |
 | | w5 | open: with one checkout's check hung, a view holding every other root is published within 2 s and that root is `not_answering`; a hung finished-hub check answers within 2 s; a slow `projects/` listing does not hold back the top-level file's roots; the 10-second cut | Rust |
 | | w5 | `open::macos_only`: 20 real local checkouts, the whole open job, median of 5 under 1 s | Rust, **macOS** |
-| | w7 | `workspace_list`: a listing on a mount the fake table marks stuck answers `not_answering` at once; a hung listing answers within 2 s; its entries equal `list_directory`'s for the same folder; each error is a code | Rust |
+| | w7 | `workspace_list`: a listing on a mount the fake table marks stuck answers `not_answering` at once; a hung listing answers within 2 s; its entries equal `list_directory`'s for the same real folder (files, folders, a link to a folder, a hidden file, each skipped name); **a child that the fake table names as a mount point, whose `fstatat` hangs, is listed as a folder, the other entries arrive, and only that child's mount is marked**; each error is a code | Rust |
 | WS-9 AC4 | w5 | with WS-6 AC2 | Rust |
 | WS-9 AC5 | w4 | rows naming `/` and a folder holding the test's data folder give no roots and are counted per file; a mount point is too broad | Rust |
 | | w4 | `discover::macos_only`: rows naming `/`, `~` and `~/Library` give no roots and are counted | Rust, **macOS** |
 | WS-9 AC6 | w8 | 11.5's tests | Rust; vitest |
 | WS-10 AC1, AC2 | w1 | entries written by today's code show unchanged under Tab Sets and Load opens the same tabs; `scripts/workspaceWord.test.ts` (17.6) | vitest |
-| F4.9 platforms | w5, w6 | 13.5's tests | Rust; vitest |
+| F4.9 platforms | w5, w6; w12a to w12c | 13.5's tests; S0 reads no platform constant (a static test) | Rust; vitest |
 
 ### 17.5 macOS-only tests (sharding note m5)
 
@@ -1270,12 +1414,14 @@ In Rust, in modules named `macos_only` under `#[cfg(all(test, target_os = "macos
 
 | Test | Module | Story |
 |---|---|---|
-| one key for `/x/api`, `/x/api/`, `/X/api`; for NFC and NFD; for a link | `pathkey::macos_only` | w2 |
+| one key for `/x/api`, `/x/api/`, `/X/api` (the fold); for NFC and NFD; for a link | `pathkey::macos_only` | w2 |
+| firmlinks charged by device; a real mount point by the table | `workspace::bounded::macos_only` | w2 |
 | one root for each of those (WS-1 AC3) | `workspace::discover::macos_only` | w4 |
 | `/`, `~`, `~/Library` give no roots (WS-9 AC5) | `workspace::discover::macos_only` | w4 |
 | 20 local checkouts, the whole open job, within 1 s (WS-9 AC3) | `workspace::open::macos_only` | w5 |
+| the kernel's folder of a process, after the spelling rule, is the resolver's key | `workspace::registry::macos_only` | w11 |
 
-The watch set has no macOS-only behaviour (11.5), so w8 needs none. On Linux and Windows these four are not compiled, which is why section 20 proposes an addition to the gate for w2, w4 and w5.
+The watch set has no macOS-only behaviour (11.5), so w8 needs none. On Linux and Windows these six are not compiled, which is why section 20 proposes an addition to the gate for w2, w4, w5 and w11. S0 has none.
 
 ### 17.6 WS-10: the rename and the scan
 
@@ -1292,7 +1438,7 @@ The watch set has no macOS-only behaviour (11.5), so w8 needs none. On Linux and
 | `docs/guide/settings.md:3`, `:4`, `:33` | "workspaces", "a named workspace" | "tab sets" |
 | `docs/guide/sync.md:14`, `:44` | "saved workspaces", "workspaces" | "tab sets" |
 
-The settings tab's id (`"workspace"`, `SettingsPanel.tsx:32`, `:650`), the store key, `WorkspacePreset`, `saveWorkspace` and `deleteWorkspace` do not change: they are identifiers, and the key is shared by sync (D2). F2's review-step copy (m1) is w14's. w12 also edits `docs/guide/sync.md` (one new line); if w1 and w12 are open at once, the second to merge rebases.
+The settings tab's id (`"workspace"`, `SettingsPanel.tsx:32`, `:650`), the store key, `WorkspacePreset`, `saveWorkspace` and `deleteWorkspace` do not change: they are identifiers, and the key is shared by sync (D2). F2's review-step copy (m1) is w14's. w12a also edits `docs/guide/sync.md` (one new line); if w1 and w12a are open at once, the second to merge rebases.
 
 **The scan**, `scripts/workspaceWord.test.ts`, beside `scripts/csp.test.ts`:
 
@@ -1310,7 +1456,7 @@ The numbers are the UX spec's (`docs/superpowers/specs/2026-11-15-workspaces-ux.
 |---|---|---|
 | 1 | Per root: path, kind, state, and the `ACCESS.md` that names it | `path`; `kind` (`hub`, `checkout`, `added`; the extra root is `outside`, from `workspace_locate`, 11.3); `status`; and `source`. **Changed, two ways.** (a) There **is** a `checking` status again: opening now streams (7.4), so the hub's root is shown at once and a root can be on screen before its folder has been checked. Draft 2 removed its Checking state because revision 1 had none; it is needed. (b) `source`, the hub-relative `ACCESS.md` that names a checkout, **is** in the view (11.1), so the tooltip can name the file. The row's line number is known in Rust and can be sent at no cost |
 | 2 | Per refresh: counts by cause, the files, a reason per unread file | The `Notice` kinds of 11.1. **Changed:** the too-broad notice now has its files, each with a count, like the rows-not-read notice. New kinds that need copy: `rows_over_limit` (rows past 500 per hub), `cut_short` (discovery stopped at 10 seconds), `record_newer`, `record_unreadable`, `not_saved`. No row's text is sent |
-| 3 | The hub's state, a check that does not answer, and when it is checked | 11.1. **Changed:** there is a `checking` state; `hub_missing` carries why (`missing` or `not_answering`); `check_failed` has ten reasons, not four; and **any** step of the check that does not answer is `hub_missing` with why `not_answering`, because the whole check has one deadline (8.1). It is checked at open, at restore and at every refresh; never on a timer and never on a `cd` |
+| 3 | The hub's state, a check that does not answer, and when it is checked | 11.1. **Changed:** there is a `checking` state; `hub_missing` carries why (`missing` or `not_answering`); `check_failed` has eleven reasons, not four (revision 3 adds `link_in_git`); and **any** step of the check that does not answer is `hub_missing` with why `not_answering`, because the whole check has one deadline (8.1). It is checked at open, at restore and at every refresh; never on a timer and never on a `cd` |
 | 4 | One bar above the terminal, stacking several, holding back while F2's notice shows, with a per-tab store that is not saved | A per-tab store that is never saved, `tabNoticeStore` (`Record<tabId, TabNotice[]>`), and one component, `TabNoticeBar`, mounted in the main window and in the detached window. A notice has a `kind`, text parts (which go through `visibleText`) and up to two buttons. The bar draws a tab's notices in one fixed order, a list of kinds in the store's module, which the UX spec's 12.2 fills in. A kind can be marked exclusive: while a tab has an exclusive notice (F2's run notice), the others stay in the store and are not drawn. Story w10 builds both unless F2 slice 1 has built its own by then, in which case F4 adds its kinds to F2's |
 | 5 | Raising a toast, and a polite live region | **Toast:** F4's actions dispatch a window event, `workspace-toast`, with a `GuardToast` (`useContextGuard.ts:15`); `App.tsx` shows it with the `showToast` it has, as it does for `project-setup-done` (`App.tsx:188`). One action button gives the 15-second life (`useContextGuard.ts:38` to `:41`). **Live region:** new, `src/lib/announce.ts`: one visually hidden `aria-live="polite"` element mounted in `App` and in `DetachedApp`, and `announce(text)`. Story w10 |
 | 6 | Undo: "Add Back" at the old place | **Changed: possible.** `workspace_remove_folder` answers an `undo` token; Rust keeps the last removal per hub in memory for 60 seconds (the path, its kind, and `added` and `order` as they were). `workspace_undo(hub, token)` puts the folder back at its old place when `added` and `order` have not changed since and answers `placed: "same"`; otherwise it adds it last and answers `placed: "last"`, so the toast can say so |
@@ -1333,8 +1479,8 @@ The numbers are the UX spec's (`docs/superpowers/specs/2026-11-15-workspaces-ux.
 Also for the designer:
 
 - The consequence the UX spec records (a nested checkout's root row and its folder row inside the hub's tree open and close together) still holds: `expanded` is one set of absolute paths.
-- A first open **streams** (7.4): roots appear in steps. A second open of a hub that is being opened waits up to 10 seconds, normally milliseconds, and shows nothing (13.2; question D-3).
-- Settings → Sync needs one line for keys a sync skipped (9.5). It must not use the word "workspace" (WS-10 AC2).
+- A first open **streams** (7.6): roots appear in steps. A second open of a hub that is being opened waits up to 10 seconds, normally milliseconds, and shows nothing (13.2; question D-3).
+- Settings → Sync needs one line for each key a sync skipped, kept until that key next syncs (9.5, D-5). It must not use the word "workspace" (WS-10 AC2).
 
 ## 19. Questions
 
@@ -1342,10 +1488,24 @@ Each has a default this design is built on, so sharding is not blocked. The defa
 
 ### For the owner
 
-- **O-1. Answered 2026-11-15: strip all paths** (revision 1's Q1). Section 9 is built on it. The PRD text it needs is in section 21.
-- **O-2. Paths already synced, and older builds (9.6).** This build removes old paths from the sync repo's current files at its first sync. They stay in the repo's git history, and a machine on an older build writes its paths back and loses its own on import. *Recommend:* accept both; say "update every machine" in the release note; treat "start the sync repository afresh" as separate later work. *Default built:* that.
-- **O-3. The other path fields of `ade-session` (9.4).** The PRD's table strips workspace tabs only, so a plain tab sitting in a checkout, an editor tab on a checkout's file and a contracts tab still export a path. `ade-session` is never imported by any machine, so nothing would be lost by removing them. *Recommend:* remove `savedCwd`, `editorFilePath`, `contractsRoot` and `previewPath` from every exported tab, as your decision of 2026-11-15 does for the other two keys. *Default built:* the PRD's text.
-- **O-4. The addition to the verification command for w2, w4 and w5** (section 20). It is not in force until you approve it.
+- **O-1. Answered 2026-11-15: strip all paths** (revision 1's Q1). Section 9 is built on it.
+- **OQ-14 to OQ-21. Answered 2026-11-15, each as recommended; OQ-20 as (b′).** What is built for each:
+
+  | Question | The answer | What this design builds | Where |
+  |---|---|---|---|
+  | OQ-14 cleanup of the repo's current files | yes | the cleanup, rows 1 and 2 only, keeping `updated_at`; a copy that is not a list is left as it is | 9.2, 9.5; w12a |
+  | OQ-15 tell the engineer about a skipped key | yes | `SyncState.skipped`, kept until the key next syncs; `skippedKeys` in every report; one line per key in Settings → Sync on that machine | 9.5; w12a; D-5 |
+  | OQ-16 history | yes, not rewritten | nothing; the test pins that `git log -p` still shows old values | 9.6, 9.10 |
+  | OQ-17 release note | yes | nothing in code: devops's item, checked at release review | 9.6 |
+  | OQ-18 per-task Dispatch | (i) | `projectDirFor`: one folder per session in any click order; nothing starts on failure | 9.9; w12c |
+  | OQ-19 ship ahead | S0 ahead, with all four rules and the Dispatch and fleet fixes | S0 = w12a, w12b, w12c, every OS, no gate on platform | 17.1 |
+  | OQ-20 fleet | (b′) | `startedThisLaunch`; `buildLanes`'s `joinable`; the picker and `dispatchAgent` record `cwd` | 9.8; w12b |
+  | OQ-21 recorded folder that does not exist | yes | `orchestrator_project_dir` treats it as none | 9.9; w12c |
+
+- **O-2. Starting the sync repository afresh (9.6).** OQ-16 accepts that history keeps old folders; whether to offer a fresh start is still open. *Recommend:* separate later work. *Default built:* nothing.
+- **O-3. The other path fields of `ade-session` (9.4).** The PRD's rows strip workspace and hub tabs only, so a plain tab sitting in a checkout, an editor tab on a checkout's file and a contracts tab still export a path. `ade-session` is never imported by any machine, so nothing would be lost by removing them. *Recommend:* remove `savedCwd`, `editorFilePath`, `contractsRoot` and `previewPath` from every exported tab. *Default built:* the PRD's text.
+- **O-4. The addition to the verification command for w2, w4, w5 and w11** (section 20). It is not in force until you approve it.
+- **O-5. Four infrastructure stories (17.1).** `CLAUDE.md` asks for "small, vertically sliced, independently testable changes". w2 to w5 are independently testable but not vertical: none has behaviour a person can see. *Recommend:* accept them as cut, because each proves a rule about what touches a client's disk before any screen calls it. *If not:* fold w3 and w4 into w5 and w5 into w6, which makes two very large stories. *Default built:* the cut of 17.1, pending your answer.
 
 ### For the product manager
 
@@ -1368,10 +1528,11 @@ Each has a default this design is built on, so sharding is not blocked. The defa
 
 ### For the designer
 
-- **D-1.** Revision 2 reopens items 1, 2, 3, 6, 15 and 17 of the UX spec's section 22 (section 18 says how). In particular the **Checking** state is back, and copy is needed for: `rows_over_limit`, `cut_short`, `record_newer`, `record_unreadable`, `not_saved`; the ten `check_failed` reasons (or one line for all, with the reason as a detail); `hub_missing` with why `not_answering`; and the listing errors of item 21.
+- **D-1.** Revision 2 reopens items 1, 2, 3, 6, 15 and 17 of the UX spec's section 22 (section 18 says how). In particular the **Checking** state is back, and copy is needed for: `rows_over_limit`, `cut_short`, `record_newer`, `record_unreadable`, `not_saved`; the eleven `check_failed` reasons (or one line for all, with the reason as a detail); `hub_missing` with why `not_answering`; and the listing errors of item 21.
 - **D-2.** The detached window: it gets the bar and no toast; say what a workspace tab shows there (with P-3).
 - **D-3.** `opening` (13.2): a second open waits up to 10 seconds, normally milliseconds, and shows nothing. Say if it should show something.
-- **D-4.** Settings → Sync: one line for skipped keys (9.5).
+- **D-4.** Settings → Sync: one line for skipped keys (9.5). Now decided by the owner (OQ-15, yes), so it is **D-5**'s, below.
+- **D-5.** The skipped-key line's copy (PRD 3.7 F4.11, OQ-15): one line per skipped store, on the machine that skipped it, beside the last sync result, naming the store in words ("Orchestrator sessions", "Agent runs") and saying it was not synced; it stays until the key next syncs (9.5), so the copy must read right on later syncs too. No key name; not the word "workspace".
 
 ## 20. Verification command
 
@@ -1380,56 +1541,56 @@ The command in force is the seven lines under "Verification command" in `docs/ar
 ```
 npx tsc --noEmit                    # Tab.workspace, SerializedTab, ClosedTab, the new hook argument
 npm test                            # every vitest test of section 17.4, and the WS-10 scan
-cd src-tauri && cargo test          # pathkey, workspace/*, sync_local, the marker fixture, the two-machine tests
+cd src-tauri && cargo test          # pathkey, workspace/*, sync_local, orchestrator_dir, the marker fixture, the two-machine tests
 ```
 
-**Proposed addition, for stories w2, w4 and w5 only. It needs the owner's approval (O-4) and is not in force.**
+**S0 needs no addition.** Its code has no platform branch, so the seven lines on any machine run every one of its tests. CI also runs its Rust in `backend`, `backend-macos` and `backend-windows` (PRD 3.7 F4.9); that is CI's coverage, not part of Done.
 
-The four macOS-only tests of 17.5 are compiled only on macOS. On a Linux machine the seven lines pass without running them. So for w2, w4 and w5, Done would also need:
+**Proposed addition, for stories w2, w4, w5 and w11 only. It needs the owner's approval (O-4) and is not in force.**
+
+The six macOS-only tests of 17.5 are compiled only on macOS. On a Linux machine the seven lines pass without running them. So for w2, w4, w5 and w11, Done would also need:
 
 > A run of the `CI` workflow on the story's SHA in which the job **`Backend on macOS (cargo test)`** passed, with QA pasting from that job's log the `test … ok` line of each test listed in 17.5 for that story. If a run fails and the only failing test is `workspace::open::macos_only`'s timing test, one more dispatch on the same SHA is allowed, and QA cites both runs.
 
 Revision 1 copied the F1 gate's "dispatched once, never re-run". Combined with a timing test on a shared runner that would make Done depend on the runner's load. The timing test is built to have a wide margin (a warm-up run, then the median of 5, for work that takes milliseconds against a 1-second limit), and the one extra dispatch is for the case where the margin is still not enough. No new workflow, job or line of `ci.yml` is needed: `backend-macos` already runs `cargo test` (`ci.yml:136`). If QA runs the seven lines on a Mac, the same lines appear in the local output.
 
-## 21. Amendments the product manager must write
+## 21. Reconciliation with the PRD (revision 3.7, bae3e5f)
 
-This design does not edit `docs/prd.md`. The owner's decision of 2026-11-15 changes approved text, and the product manager applies it. The exact text:
+Revision 2's section 21 listed amendments for the product manager to write; revisions 3.4 to 3.7 wrote them, so that list is gone (review N-M3). This table reconciles the design with PRD 3.7 and the owner's answers of 2026-11-15, item by item. "Matches" means the design builds the PRD's text. "Beyond" means the design does more, and says why. "Needs PRD text" means the design builds an owner's answer the PRD does not carry yet; the product manager is recording those.
 
-**Source: the owner, 2026-11-15, asked how the sync strip should know a workspace's folders when a record is lost or a hub cannot be read: "strip all paths". An orchestrator session's `projectDir` and an agent-tracker entry's `cwd` are never synced, for anyone, hub or not; each machine keeps its own.**
-
-1. **G2, second sentence.** Replace "And 0 workspace or checkout paths in ADE sync's export from any other synced key WS-7 AC3's table strips, while this machine keeps and restores them, also after importing another machine's later copy (WS-7 AC3; OQ-5, approved by the owner 2026-11-10)." with:
-
-   > And ADE sync's export holds no orchestrator `projectDir` and no agent-tracker `cwd` at all, whatever the folder (owner, 2026-11-15), and 0 workspace or checkout paths from the other keys WS-7 AC3's table strips, while this machine keeps and restores them, also after importing another machine's later copy (WS-7 AC3; OQ-5, approved by the owner 2026-11-10, widened 2026-11-15). This is measured on the sync repository's current files, once every machine that syncs to it runs a build with F4: paths synced before then stay in the repository's git history, and an older build writes its own back.
-
-2. **WS-7 AC3's table, the `better-terminal-orchestrator` row, last column.** Replace "`projectDir` inside any workspace folder known to this profile is left out of the export" with:
-
-   > `projectDir` is left out of the export for every session, whatever its folder; each machine keeps its own (owner, 2026-11-15)
-
-3. **WS-7 AC3's table, the `better-terminal-agent-tracker` row, last column.** Replace "no `cwd` inside any workspace folder known to this profile, for any pane of a workspace tab or not" with:
-
-   > no `cwd` in the export for any entry, whatever its folder; each machine keeps its own (owner, 2026-11-15)
-
-4. **WS-7 AC3, "The import keeps this machine's paths", add at the end of the paragraph:**
-
-   > A `projectDir` or `cwd` that an imported copy holds (an older build wrote it) is not taken: this machine keeps its own value, or none. When sync finds such a field in the repository's copy of a key, it removes it from that copy.
-
-5. **WS-7 AC3's test, add:**
-
-   > The export also holds no marker from an orchestrator session or an agent run in a folder that is no workspace. Two more two-machine cases: an entry whose folder is no workspace on machine B keeps its `cwd` on B after A imports it, changes the key and exports, and B imports; and a session that A and B each gave a `projectDir` keeps A's on A and B's on B, with neither machine's next sync writing the key.
-
-6. **OQ-5's answer line, the Source's last paragraph and the History:** add "widened by the owner on 2026-11-15: the orchestrator's `projectDir` and the agent tracker's `cwd` are never synced, for any folder", as a new revision (3.4).
-
-7. **F4.11, sharding note m9.** Replace its last sentence with: "Answered by the owner 2026-11-15: a rule that needs none. The export leaves out every `projectDir` and every `cwd`."
-
-8. **F4.9, the F2 dependency note, add:** "The owner's decision of 2026-11-15 changes nothing in OB-10 AC2 or OB-14 AC5 (their fields are stripped by their own names). It makes OB-14 AC3's 'the hub folder is kept out of the agent tracker for a hub tab' true of sync's export for every tab. F2's design cites `.ade/context/sync-local-fields.md`."
-
-9. **F4.9, the note for F5, add:** "As of 2026-11-15 F5 may also cite the owner's decision that orchestrator project folders and agent-run folders never sync, for any folder. F5's own rules for its draft and prompt history are unchanged."
-
-10. **A disclosure for everyone, hub or not.** `docs/guide/sync.md` and the Sync settings copy should say that the folders of orchestrator sessions and agent runs stay on each machine. Story w12 carries one line in the guide; the product manager says whether it is a criterion.
-
-Not owner-decided, and so listed as questions, not amendments: P-1 to P-15 and O-2, O-3 (section 19).
+| PRD 3.7 item | Design | Status |
+|---|---|---|
+| G2: F4's stores never leave the machine; 0 workspace or checkout paths from the keys WS-7 AC3's table strips; 0 `projectDir` and 0 `cwd` for everyone; holds once every machine runs this build; limit (c) | 4.1, 9.2, 9.6 | Matches |
+| F4.5 and F4.9 Platforms: the two rows, their rules, the Dispatch and fleet rules exempt from "macOS only"; their Rust tests in `backend`, `backend-macos`, `backend-windows` (`cargo test --locked`); new Rust for OQ-18 and OQ-21 gets Rust tests | 13.5, 17.1 (S0), 9.9, 9.10 | Matches |
+| F4.9 Platforms: tests in TypeScript "guard themselves to skip elsewhere" | 17.2 forbids skip guards in F4 tests and mocks `IS_MAC` instead (review minor 1) | Beyond: stricter; nothing is skipped |
+| WS-7 AC1, AC2, AC4 | 4.1, 9.10 (w13), 14 | Matches |
+| WS-7 AC3 table, `ade-session` rows: every pane's `savedCwd` and the mark of a workspace tab; sub-terminal names; the tab's own name when it is the hub folder's name | 9.4: an allowlist for marked and hub tabs | Beyond: the allowlist also leaves out `previewPath`, `viewerKey` and any later field of a marked tab; the key is never imported, so nothing is lost |
+| WS-7 AC3 table, tab sets: a workspace tab saved without its folder; Load on another machine opens a plain tab | 9.2 row 3: F2's `cwd` and `hub` are local | Matches F2 OB-14 AC5 |
+| WS-7 AC3 table, orchestrator and agent tracker: every `projectDir` and `cwd` left out | 9.2 rows 1, 2 | Matches |
+| WS-7 AC3 table, prompt history, notes, scratchpad draft: not stripped | 9.2 | Matches |
+| "What still syncs" and the design's O-3 | 9.4, 19 | Matches; O-3 open |
+| "What the two rows change, for everyone" | 9.7 | Matches; Dispatch and the fleet as answered |
+| The import keeps this machine's paths, for every row; an entry deleted elsewhere stays deleted | 9.3 `join` | Matches |
+| Never take another machine's `projectDir` or `cwd`; for other rows the keep rule is the whole rule | 9.2, 9.3 (invariant 6; row 3 takes an imported value when it holds none) | Matches (revision 2 applied never-take to tab sets; review N-B3) |
+| Stated limits (a), (b), (c) | 9.6 | Matches |
+| OQ-14 [yes]: the two keys' current files hold no `projectDir` or `cwd` at any depth after a machine's first sync; not a newer copy; a copy that is not the key's list is neither cleaned nor imported; no other key or field cleaned | 9.5 cleanup | Matches (revision 2 scrubbed every key; review N-B3) |
+| A value sync cannot read (the two keys): not exported; an imported copy not imported; a list with non-object elements is readable; recorded as skipped | 9.2, 9.3, 9.5 | Matches |
+| OQ-15 [yes]: on the machine that skipped it only, the Settings → Sync result names the store in words and says it was not synced | 9.5; D-5 | Matches. **Beyond:** the skip is kept in `sync-state.json` until the key next syncs, because a later periodic report replaces the one that found it (the 3.7 review's note); **needs PRD text** for that persistence |
+| OQ-18 (i): per-task Dispatch makes the folder first; failure starts nothing and records nothing; one folder per session in any of the three click orders | 9.9; w12c | Matches. Beyond: generation's own folder creation goes through the same function, so a click during generation is the fourth order, tested |
+| OQ-21 yes: a recorded `projectDir` that is not a folder counts as none, for both buttons; the old path is replaced | 9.9 | Matches |
+| OQ-20: the criterion is written for (b) | 9.8 | **Needs PRD text:** the owner chose (b′), which adds the agent picker's and `dispatchAgent`'s `cwd`, and the same-machine test's picker run that keeps its project and cost after a restart |
+| OQ-20 (b): "this running instance started that entry since it launched" | 9.8: a set per page | Beyond: per window page, the scope of a pane id, so a detached window's run is not joined to a main-window pane either |
+| OQ-16 yes; OQ-17 yes (devops) | 9.6 | Matches |
+| OQ-19: S0 ahead with the never-take rule, the unreadable rule, OQ-14, OQ-15, OQ-18, OQ-20, OQ-21; S1 takes the rest | 17.1 | Matches |
+| S0's test list | 9.10 w12a, w12b, w12c | Matches, plus "B's next sync leaves B's local values unchanged" and the persistence of the notice |
+| S1's part of WS-7 AC3: `ade-session`, names and tab-set rows, the tab-set import, the one-machine test's workspace parts, the two-machine tab-set part, the No-hub variants that need the record | 9.10 w13 | Matches |
+| F4.11 m9 note (3.7): no row needs the workspace folders at export | 9.2 | Matches |
+| WS-1, WS-2, WS-3, WS-4, WS-5, WS-6, WS-9, WS-10 | 17.4 | Matches 3.3's approved text, which 3.4 to 3.7 do not change. WS-9 AC3's "2-second bound" is built as a 2-second deadline per root, per `ACCESS.md` and per check, with a 2-second bound per system call deciding what is marked (7.1, 7.6) |
+| The product questions of section 19 (P-1 to P-15) and the UX spec's | 19 | Open; each has its default built |
 
 ## 22. Review findings and their answers
+
+The section numbers in this table are revision 2's. In revision 3, 7.3 is 7.5, 7.4 is 7.6, 7.2's mount guard is 7.2 to 7.4, and 9.7 is 9.10; the answers to B4, M1 and M2 are revised by N-B1 (section 23).
 
 The adversarial review of revision 1: four blockers, sixteen majors, eleven minors. "Fixed" means the design changed. "Question" means the decision is someone else's; it is listed in section 19 with a recommendation, the PRD's text is the default built, and the recommended case is designed.
 
@@ -1468,3 +1629,31 @@ The adversarial review of revision 1: four blockers, sixteen majors, eleven mino
 | **m11** blocking inside an async command | Fixed: every command works in the blocking pool; a static test | 7.3 |
 | "Unverified" notes the review settled | Closed: the crates and versions in the lock file; `notify` filtering `NonRecursive` itself; `ci.yml:136`; the files ref backend of Apple Git 2.50.1 | 6, 8.2, 11.5 |
 | Still unverified, and marked | Whether a newer git defaults to reftable; whether the three direct dependencies leave the lock file unchanged; whether `getfsstat(MNT_NOWAIT)` can block; whether anything outside ADE's own code logs a window's address; git's lazy fetch through a promisor remote | 6, 7.2, 8.2, 8.3, 13.1 |
+
+## 23. Delta review of revision 2: findings and their answers
+
+The delta review of revision 2 (3c9354a) confirmed every revision 1 blocker closed, and most majors, and was BLOCKED on three new blockers, four new majors and twelve new minors. "Fixed" means the design changed. The owner's answers of 2026-11-15 to OQ-14 to OQ-21 arrived during this revision, so what revision 2 built as conditional is built here as decided.
+
+| Finding | Answer | Where |
+|---|---|---|
+| **N-B1** one slow or wrongly charged job marks a whole mount stuck, the boot volume included; jobs touch mounts they never declare; nothing re-checks | Fixed, as the review proposed. The bound is per system call (2 s), not per job; a job's own deadline answers its caller and marks nothing. Every call is made through the resolved folder's descriptor, follows no link, and is charged by device, or to a mount-point child's own mount from the table. `ACCESS.md` is resolved and opened with `O_NOFOLLOW`; `.git` follows nothing (`link_in_git`); the tree's listing uses `d_type`, `fstatat` on the folder's descriptor and the table. A blocked call marks its path; a mount is marked only at its mount point or on a second unrelated blocked call; a parked call leaves its mount's count. Queued jobs keep their deadlines, and each call has its own bound. When a mark lifts, the hub check, the not-answering roots and the unread files under it are checked again and re-published, and watch sets re-add their folders. The hard-mount case that never returns is stated. Tests: a hanging child `lstat` marks only the child's mount; 2.5 s of fast calls marks nothing; lifting a mark re-publishes; and more (17.4) | 5.3, 6, 7.1 to 7.4, 8.1, 11.4, 11.5, ADR 0041 |
+| N-B1, the firmlink suspicion | Right in mechanism, checked by reading, not run (this revision was written on Linux). `/Users` and the other firmlinked folders on `/` live on the data volume at `/System/Volumes/Data`, and `realpath` keeps the `/Users` spelling, so revision 2's prefix match charged home-folder calls to the system volume. Revision 3 charges by device, matches table entries in both spellings, and contains a missed mount point with the path mark. Two `macos_only` tests pin it, and join O-4's gate | 7.2, 17.5 |
+| **N-B2** while streaming, the covered set is partial, so automatic setup can write into a client checkout | Fixed. `unknown` until every open hub's discovery is final, and until the main window's first `workspace_tabs_set`; `workspaceTabs.ts` reports right after `loadSession`. The terminal's folder comes from the process table, so a live terminal's answer needs no file-system call. The w11 test that pinned the gap is replaced: a restore with a terminal in a checkout and discovery held back by a seam makes no setup invoke | 10, 17.4 |
+| **N-B3** section 9 and ADR 0040 contradict the PRD's sync rules | Fixed, key by key (9.2's table). Unreadable means "not the key's list of entries" for the two keys, with non-object elements readable; the other rows keep today's handling. `public` has a shape per row. The cleanup covers only `projectDir` and `cwd` in the two keys, only on a list, and is built because OQ-14 is answered yes. The never-take, unreadable and skipped-key rules cover only those two keys; tab sets keep this machine's F2 fields and otherwise take the import; `skipped_keys` holds only the two keys. ADR 0040 and `sync-local-fields.md` state the scope per row | 9.1 to 9.5, ADR 0040 |
+| **N-M1** the PRD's fleet criterion is not designed; "the fleet does not attribute it" was false | Fixed, for the owner's (b′): a set of runs this page started, `buildLanes` joins only those to live panes, and the picker and `dispatchAgent` record `cwd`. The false line is replaced. In S0 (w12b), with its tests | 9.7, 9.8, 9.10 |
+| **N-M2** per-task Dispatch starts in the home folder; revision 2's line was wrong | Fixed. The line is corrected (9.9 says what `main` does). Built as answered: per-task Dispatch makes the folder first, one folder per session in any click order (generation included), nothing starts and nothing is recorded on failure (OQ-18 (i)); a recorded folder that is not a folder counts as none (OQ-21); S0 ships ahead (OQ-19). The new Rust command has Rust tests in `backend`, `backend-macos` and `backend-windows` | 9.9, 9.10, 17.1 (w12c) |
+| **N-M3** section 21 stale; section 19 lacks OQ-14 to OQ-21; header cites 3.3 only; handoff note line 33 | Fixed. Section 21 is a reconciliation table against 3.7; section 19 lists OQ-14 to OQ-21 with their answers and what is built; the header cites 3.3 as approved and 3.4 to 3.7 as pending; the handoff note says the PRD now carries the decision | header, 19, 21; handoff note |
+| **N-M4** the process-wide pool makes `cargo test` flaky | Fixed. `Bounded` (pool, spares, watchdog, mount table) is a value in Tauri managed state, passed in; each test builds its own; a static test forbids process-wide state in the modules; every hang seam is a guard that releases on drop, and each test ends with nothing parked | 7.1 |
+| **minor 1** `IS_MAC` is false in vitest | Fixed. F4's vitest files use the pattern of `FileBrowserOpen.test.tsx:15`, `vi.mock("../../lib/shortcuts", …IS_MAC: true)` (and `false` for the gate's tests); skip guards are forbidden in F4 tests, and a scan checks it | 17.2 |
+| **minor 2** w3 and w4 share `workspace/mod.rs` | Fixed. w2 creates `mod.rs` with every module declared and each file empty, `testhub.rs` included; w3 and w4 fill only their own files | 17.1 |
+| **minor 3** the case-folding test is listed for every OS but compiles on macOS only | Fixed. On every OS: with the volume seam answering case-sensitive, no fold is applied. macOS only: a case-insensitive answer folds, with `CFStringFold`. The two tables agree | 13.5, 17.4, 17.5 |
+| **minor 4** `hub` in tab sets stripped by name, left to F2 in `ade-session` | Fixed: one rule, each F2 field follows its own row's PRD text. Local in tab sets (F2 OB-14 AC5); kept in `ade-session`'s allowlist (F2 OB-10 AC2 strips folders and names, not the flag) | 9.2, 9.4 |
+| **minor 5** tab-set ids can collide across machines | Fixed: the id now includes the set's name; the case left (same millisecond, same name) is stated with its effect | 9.3 |
+| **minor 6** the 1,024-job queue per mount can overflow | Fixed: no refusing cap; each open job keeps at most 16 queued; round-robin by submitter, so many hubs on one mount progress together | 7.1 |
+| **minor 7** PRD tests 9.7 lacked | Fixed: No hub with no record (w12a), with an unreadable record and with a newer `v` (w13); "B's next sync leaves B's local values unchanged" (w12a) | 9.10 |
+| **minor 8** the sampler's `pty_cwd` falls back to `lsof` without `-b` | Fixed: `pty::quick_cwd` uses `cwd_of` only, with the process ids read under the PTY lock and `cwd_of` run outside it and outside the registry's lock | 10 |
+| **minor 9** invariant 4 false for an entry with a local field and no id | Fixed: restricted to values whose entries holding a local field all have unique ids | 9.3 |
+| **minor 10** the allowlist named a shape that does not exist | Fixed: a pane node is `{ type: "pane", pane: { id, serializedBuffer, savedCwd } }` and is exported as `{ type: "pane", pane: { id } }`; a split keeps `type`, `direction`, `children` | 9.4 |
+| **minor 11** does a re-queued job restart its deadline | Answered: no. The deadline runs from the job's first start; only the per-call bound restarts, at each call | 7.1 |
+| **minor 12** the infrastructure stories depart from "vertically sliced" | Listed as owner question O-5, with the re-cut if the answer is no | 17.1, 19 |
+| Still unverified, and marked | `f_fsid.val[0]` equals `st_dev` on macOS (a mismatch only splits a mount's limit); the data-volume spelling of mount points below a firmlink; that `getfsstat(MNT_NOWAIT)` never blocks; the kernel's spelling of a process's folder under a firmlink (a `macos_only` test pins it); and revision 2's list (reftable defaults, the lock file, window addresses in logs, git's lazy fetch) | 7.2, 10, 17.5 |
