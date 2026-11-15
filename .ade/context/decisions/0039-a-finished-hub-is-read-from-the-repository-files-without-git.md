@@ -1,25 +1,27 @@
 # 0039: A finished hub is read from the repository's files, without git
 
-- Status: Proposed (2026-11-15), with the F4 design revision 1; not reviewed or approved. The number is provisional (see the README's numbering notes). It disagrees with ADR `0029-a-finished-hub-is-judged-by-head-with-ades-own-git` (Proposed, on branch `onboarding-arch`, not merged); it does not supersede it, because F4 does not change F2. It recommends that F2's design adopt this check.
+- Status: Proposed (2026-11-15), with the F4 design revision 2 (revised after the blocked review of revision 1: one deadline, every outcome stated, a retry, `.git` as a file is unsupported); not approved. The number is provisional (see the README's numbering notes). It disagrees with ADR `0029-a-finished-hub-is-judged-by-head-with-ades-own-git` (Proposed, on branch `onboarding-arch`, not merged); it does not supersede it, because F4 does not change F2. It recommends that F2's design adopt this check.
 - Context:
   - F4 WS-2 AC8: wherever F4 decides whether a folder is a finished hub, it runs nothing that the hub's repository config, the global config or the system config names. The PRD leaves the way to the architect: git with those settings neutralised, or reading the repository's objects without git.
   - F4.1: the folder must be the top level of its own repository, and that repository's current commit must hold `hub.conf` at its root.
   - ADR 0029 chose ADE's own `/usr/bin/git` with the system and global config off, because reading `.git` "is reimplementing git". It was written before WS-2 AC8 existed, and it still reads the repository's own config.
   - The criterion is a negative over all of git's configuration. The commands needed run no hook, filter or pager today, but which config keys can start a program changes with git's version, and ADE runs whatever git the Mac has.
-  - F4's check runs when a folder is opened, when a session is restored and, in S2, for up to ten folders each time a list is shown.
+  - WS-9 AC3 names the finished-hub check among the calls that run under a 2-second bound.
   - Spec: `docs/superpowers/specs/2026-11-15-workspaces-design.md`, section 8.
 - Decision:
   - `repohead::finished_hub(path)` reads files and starts no process. It opens no config file.
-  - Order: the folder exists; it holds a regular file `hub.conf` (the cheap exit, so an ordinary project's repository is never opened); `path/.git` is a folder (only the folder's own, never a parent's); `HEAD` is resolved through loose refs and `packed-refs`; the commit and its root tree are read from loose objects or from packs through index version 2, deltas included; the root tree has `hub.conf` with mode `100644` or `100755`.
-  - Every step is a bounded call (2 seconds) with size caps. Ref names from `HEAD` are checked before they are joined to a path.
-  - Outcomes: `Finished`; `Missing`; `NotHub`; `NotFinished` (no repository of its own, `.git` is a file, no commit, not committed, not a regular file); `Failed` (unsupported format, object missing, damaged, not answering). `Failed` is never treated as finished.
-  - Not read, each `Failed`: reftable refs; alternates and partial clones; pack index version 1.
+  - **The whole check is one job with one 2-second deadline** in the bounded pool (ADR 0041). No answer is `Failed(NotAnswering)`.
+  - Order: the folder exists (`stat`); it holds a regular file `hub.conf` by `lstat`, never following a link (the cheap exit, so an ordinary project's repository is never opened); `path/.git` is a folder (only the folder's own, never a parent's); `HEAD` is resolved through loose refs and `packed-refs`; the commit and its root tree are read from loose objects or from packs through index version 2, deltas included; the root tree has `hub.conf` with mode `100644` or `100755`.
+  - Ref names from `HEAD` are checked before they are joined to a path.
+  - Outcomes: `Finished`; `Missing` (does not exist, and only that); `NotHub` (not a folder, no `hub.conf`); `NotFinished` (no repository of its own, no commit, not committed, not a regular file); `Failed` (not answering, unsupported with its reason, object missing, damaged). `Failed` is never treated as finished.
+  - Not read, each `Failed(Unsupported)` with its reason: reftable refs; pack index version 1; `.git` as a file (a linked worktree or a submodule); `.git` as a link; more than 200 packs; a delta chain deeper than 64; a `packed-refs` over 16 MiB; a commit over 1 MiB or a tree over 8 MiB. An object reached only through alternates or a partial clone is `Failed(ObjectMissing)`.
+  - When the read ends in `ObjectMissing` or `Damaged`, the check resolves `HEAD` and reads once more inside the same deadline, because `git gc` replaces packs while a persona commits.
   - Object ids of 20 and 32 bytes are both read. Hashes are not verified.
 - Consequences:
   - "Runs nothing the config names" is true by construction, on every git version, with or without the Command Line Tools.
   - The check costs file reads only.
-  - ADE owns about 450 lines that read git's on-disk formats, and one new direct dependency (`flate2`, already in the lock file through others).
-  - A repository using reftable shows "check failed" and has no workspace until a reftable reader is added. If git makes reftable the default for new repositories, that work becomes necessary.
-  - A hub checked out as a linked worktree (`.git` is a file) has no workspace.
-  - Until F2 uses this check, F2 and F4 can disagree on a folder: Open Hub opens a hub tab that F4 gives no workspace, with a notice. A test pins that case.
+  - ADE owns an estimated 600 to 900 lines, tests included, that read git's on-disk formats (not measured), and one new direct dependency (`flate2`, already in the lock file through others).
+  - A repository using reftable shows "check failed" and has no workspace until a reftable reader is added. The default `git init` of Apple Git 2.50.1 uses the files backend; whether a newer git from another source defaults to reftable is not verified.
+  - A hub checked out as a linked worktree has no workspace, and is told it is unsupported, not that it is unfinished.
+  - Until F2 uses this check, F2 and F4 can disagree on a folder: for a linked worktree, for a `hub.conf` committed as a link, and for every unsupported form, F2's git commands answer finished. Open Hub then opens a hub tab that F4 gives no workspace, with a notice. Bring-forward still works, because the registry is keyed on the hub folder for any hub tab and is asked before this check (design 13.2). A test pins the case.
   - Rejected: git with overrides (above); the `gix` crate (a large dependency tree for one question); reading the index (it holds `hub.conf` after `git add` with no commit).

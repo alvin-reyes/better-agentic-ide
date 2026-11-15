@@ -1,0 +1,26 @@
+# 0041: Workspace file-system calls run in one bounded pool guarded by mount, and folder watches are a poll
+
+- Status: Proposed (2026-11-15), with the F4 design revision 2; not approved. New in revision 2, in answer to the review of revision 1 (findings B4, M1, M2, M10, m11). The number is provisional (see the README's numbering notes).
+- Context:
+  - F4 WS-9 AC3: every file-system call F4 makes for one root or one `ACCESS.md` runs off the UI thread under a 2-second bound, and a root that does not answer never delays the others by more than that bound. WS-9 AC6: no recursive watch of a root; at most 500 watches per window.
+  - A hub's checkouts are paths a file names. They can be on a network mount that is dead, and a blocked `stat` on a hard mount cannot be cancelled: its thread stays blocked until the kernel answers.
+  - Revision 1 ran each call on its own thread, checked all candidates at once, guarded only paths inside the folder of a stuck call, and stopped every call once 32 threads were blocked. The review showed that 33 sibling checkouts on one dead mount would park 33 threads and switch F4 off for the whole process until restart, and that nothing capped the number of candidates or threads.
+  - Revision 1 kept folder watches in a `notify` watcher with `NonRecursive` mode. In `notify` 7.0.0's `fsevent.rs` every `watch()` and `unwatch()` stops and restarts the one FSEvents stream (lines 283 to 297), `NonRecursive` is a filter inside `notify` over a stream that delivers whole subtrees (lines 524 to 541), and events carry canonical paths (line 367).
+  - Spec: `docs/superpowers/specs/2026-11-15-workspaces-design.md`, sections 6, 7 and 11.5.
+- Decision:
+  - **One fixed pool.** Every file-system call F4 makes on a hub, a checkout, an added folder or a watched folder is a job of `workspace::bounded`: 8 worker threads, at most 4 jobs in flight per mount, at most 1,024 waiting per mount. A job's bound is 2 seconds from when it starts running.
+  - **Guard by mount.** A snapshot of the mount table (`getfsstat` with `MNT_NOWAIT` on macOS, `/proc/self/mountinfo` on Linux), refreshed by its own thread, gives each path its mount. The path rule resolves a path one component at a time and declares the mount it is about to touch, so the mount charged is the one really touched, also through a link. A job about to cross to another mount is queued again under that mount.
+  - **Stuck and recovery.** A job that does not return in 2 seconds answers "not answering" and marks its mount stuck: every other job for that mount answers at once and starts no thread. The blocked thread is parked and replaced, at most 8 replacements. The mark lifts when a parked job returns or the mount leaves the table.
+  - **Caps on work.** Discovery checks at most 500 candidate rows per hub and reads at most 201 files, and is cut 10 seconds after the finished-hub check. The finished-hub check is one job with one deadline.
+  - **Opening streams.** The open job publishes a first view at once and better views as roots are checked, each under a higher `gen`.
+  - **Commands never block an async worker.** Every F4 command is `async` and works inside `tauri::async_runtime::spawn_blocking`.
+  - **Folder watches are a poll.** A workspace view sets no operating-system watch. Each window has a set of at most 500 folders whose modification time is read every 2 seconds while the window is visible, one job per mount.
+- Consequences:
+  - One dead mount parks at most 4 threads, costs 2 seconds once, and does not stop calls to other mounts.
+  - With three or more mounts dead at once the pool can run short, and at 16 parked threads F4's file reads answer "not answering" until a mount recovers. That limit is stated, not solved. Nothing outside F4 uses the pool.
+  - A mount that is slow at every call without ever exceeding 2 seconds is served 4 calls at a time; its roots arrive as they are checked and discovery is cut at 10 seconds with a notice.
+  - Watches are non-recursive by nature, the same on every platform, and tested on Linux CI. A change shows up to 2 seconds late, where today's recursive watch is near-instant. A window with a workspace view in sight makes up to 500 `stat` calls every 2 seconds.
+  - A change to a file's content does not change its folder's modification time. The tree shows names, so that is enough for S1. S2's live refresh must also poll the `ACCESS.md` files themselves.
+  - That `getfsstat(MNT_NOWAIT)` never blocks on a dead mount is taken from its manual page and is not verified. The refresher is its own thread, so a refresh that blocked would freeze the snapshot and stop nothing else.
+  - New code that reads a hub or a checkout uses this pool and does not start its own threads.
+  - Rejected: a thread per call with a global cap (revision 1; the outage above); guarding by folder (siblings each hang separately); `notify` with `NonRecursive` (a stream restart per folder, subtree delivery on macOS, a shared watcher a dead mount can hold); a `notify` watch per root in recursive mode with F4's own filter (the same operating-system cost as non-recursive on FSEvents, but it is a recursive watch in name and in the PRD's words); kqueue (one open descriptor per watched folder, against launchd's soft limit of 256 open files, read with `launchctl limit maxfiles` on the design machine).

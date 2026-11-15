@@ -68,4 +68,15 @@
   - F2's design (branch `onboarding-arch`, 4.10.1) already specifies the path key (realpath of the nearest existing ancestor, NFC by `icu_normalizer` 2.1.1, `CFStringFold` on a case-insensitive volume); reuse it, do not write a second. `flate2` 1.1.9 and `miniz_oxide` are in `Cargo.lock` transitively.
   - Agent-tracker entries have no id (`paneId` restarts each run); tab sets are immutable after save; orchestrator sessions have `id`.
   - A second designer or architect may be working in a sibling worktree (`ux-f4` here): check `.claude/worktrees/` before assuming a spec does not exist.
-
+- 2026-11-15: F4 design revision 2 (after the blocked review of revision 1; same file, branch `arch-f4`).
+  - A strip that depends on what one machine knows cannot have a sound import: two machines compute different public parts for one value. Make sync's local fields a matter of key and field name (or of the value itself), never of outside state. The owner chose "strip all" for `projectDir` and `cwd` on 2026-11-15.
+  - `export_state` rewrites a key only when the local file is newer (`sync.rs:272`), so a new strip never reaches paths already in the repo: it needs a scrub of the repo copy that keeps `updated_at`. `serde_json` here has no `preserve_order`, so compare values parsed, not as text. `run_sync` is pull, export, commit, push, import (`sync.rs:510`).
+  - `saveSession` writes no `previewPath` today (`tabStore.ts:761`); `SavedTab` only declares and restores it. An allowlist for exported tabs is safer than a list of fields to remove.
+  - `notify` 7.0.0 on macOS: every `watch()`/`unwatch()` restarts the one FSEvents stream, `NonRecursive` is notify's own filter over whole-subtree events, events are canonical paths (`fsevent.rs:283`, `:524`, `:367`). For many small non-recursive watches, poll folder modification times instead.
+  - launchd's soft limit on open files is 256 (`launchctl limit maxfiles` on this Mac), so one descriptor per watched folder (kqueue) does not scale to 500.
+  - A blocked `stat` cannot be cancelled: bound work with a fixed pool, a per-mount limit and a stuck mark keyed on the mount, and learn the mount from the mount table, not from another blocking call. Resolve paths one component at a time so the mount charged is the one touched.
+  - The delta path of a pack reader is testable with real git: commit 300 files, delete one, commit, `git repack -adf --depth=50 --window=50`; `git verify-pack -v` then shows the HEAD tree at depth 1 (Apple Git 2.50.1). A tree only becomes a delta when the newer one is smaller.
+  - The hook `useProjectSetup` gets only the active tab's own-view folder, so "which terminal was ever inside a folder" needs a sampler over every PTY (`get_pty_cwd`'s lookup reads the process table, not the folder).
+  - F3 ticket `s1c` starts one recursive `watch_directory` per root inside `fileBrowserStore.show`; a feature with many roots must pass `show(key, [])` and keep its own listings. `DetachedApp` mounts no file browser, palette or toast.
+  - When a finding is a product decision, list it with the PRD's literal text as the default built and design the recommended case too; do not pick a narrower reading as the default.
+  - Next free ADR is 0042 (0041 taken by this revision, provisional).

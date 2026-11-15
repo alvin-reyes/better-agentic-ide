@@ -1,23 +1,31 @@
 # 0040: Sync splits a key into a public part and a local part, and the import joins them back
 
-- Status: Proposed (2026-11-15), with the F4 design revision 1; not reviewed or approved. The number is provisional (see the README's numbering notes).
+- Status: Proposed (2026-11-15), with the F4 design revision 2; not approved. Rewritten after the blocked review of revision 1 (findings B1, B2, B3) and the owner's decision of 2026-11-15. The number is provisional (see the README's numbering notes).
 - Context:
-  - The owner approved F4 OQ-5: workspace and checkout paths are stripped from ADE sync's export in the keys F4 WS-7 AC3 lists, while this machine keeps them. F2 OB-10 AC2 and OB-14 AC5 (revisions 5 and 5.1) need the same for hub tabs. The PRD asks for one design for both.
-  - Today `import_state` replaces a shared key's whole local value when the repo copy is newer and puts back only secret fields (`sync.rs:285`, `:99`). A plain strip at export would lose this machine's paths as soon as another machine exports the key (the M1 finding of F4 revision 3.2).
-  - The orchestrator and agent-tracker rows strip a path "inside any workspace folder known to this profile", and discovered checkouts are never stored (F4 D4), so the export needs knowledge it does not have on disk (sharding note m9).
+  - The owner approved F4 OQ-5 on 2026-11-10: workspace and checkout paths are stripped from ADE sync's export in the keys F4 WS-7 AC3 lists, while this machine keeps them. F2 OB-10 AC2 and OB-14 AC5 (revisions 5 and 5.1) need the same for hub tabs. The PRD asks for one design for both.
+  - Today `import_state` replaces a shared key's whole local value when the repo copy is newer and puts back only secret fields (`sync.rs:285`, `:99`). A plain strip at export would lose this machine's paths as soon as another machine exports the key.
+  - Revision 1 stripped an orchestrator `projectDir` or an agent-tracker `cwd` only when it was inside a workspace folder "known to this profile". Discovered checkouts are never stored (F4 D4), so the export ran discovery for every recorded hub and stripped everything when that knowledge was incomplete. The review showed that this lost other machines' paths (two machines know different things, so one machine's public part was not the other's), left `join` undefined when both sides held a field, exported paths whenever a record was dropped, lost or unreadable, and added seconds to the launch and close syncs.
+  - **The owner decided on 2026-11-15: strip all paths.** A `projectDir` and a `cwd` are never synced, for anyone, hub or not. Each machine keeps its own. This goes beyond WS-7 AC3's table as approved; the PRD amendment is written out in the design's section 21.
   - Spec: `docs/superpowers/specs/2026-11-15-workspaces-design.md`, section 9. Contract: `.ade/context/sync-local-fields.md`.
 - Decision:
-  - One module, `sync_local.rs`, with `split(key, value, knowledge) -> (public, local)` and `join(key, public, local)`. The export writes `public`. The import computes `local` from this machine's value and writes `join(imported public, local)`.
+  - **Local fields are fixed by the key and the field's name, or by a field of the same saved tab.** Sync looks at no workspace, no record, no discovery and no folder.
+    - `better-terminal-orchestrator`: every `projectDir`.
+    - `better-terminal-agent-tracker`: every `cwd`.
+    - `better-terminal-workspaces` (tab sets): every `cwd` and `hub` (F2's fields).
+    - `ade-session` (exported, never imported): a saved tab that has `workspace` or `hub` is exported as an allowlist of fields that cannot hold a path. Any field added later is left out until it is listed.
+  - One module, `sync_local.rs`: `public(key, value)` removes the local fields; `join(key, imported, local)` puts this machine's local fields back onto the imported entries.
   - It is re-apply, not a three-way merge: the newer copy still wins whole, then this machine's local fields go back onto the entries that are still there. An entry deleted elsewhere stays deleted.
-  - Invariant, tested per key: `split(join(p, l)).public == p`.
-  - A value that is not the expected shape is not exported in that run.
-  - Entries are matched by id: a tab set's `id` and tab index; an orchestrator session's `id`; an agent-tracker entry's new `id`, or `paneId` and `startTime` for older entries.
-  - `ade-session`'s rows are decided by the mark in the saved tab itself and need no other knowledge.
-  - For `projectDir` and `cwd`, the export **runs discovery for each recorded hub**, bounded, and adds the open workspaces' last discoveries. If that knowledge is incomplete, the run takes out every `projectDir` and every `cwd` (fail closed).
+  - **`join` is defined for every case.** For an imported entry and a local field: this machine's value when this machine has an entry with the same id that holds the field; otherwise absent. A value of a local field found in an imported copy is never taken, whichever machine wrote it.
+  - Entries are matched by id: an orchestrator session's `id`; an agent-tracker entry's new `id`, or `paneId` and `startTime` for older entries; a tab set's `id` and the tab's index.
+  - **Invariants, tested per key:** `public(join(p, l)) == public(p)`; every local field this machine holds for an id in both is kept; `join(public(v), v) == v`; the join has exactly the imported entries. No invariant takes a knowledge parameter, because no rule does.
+  - Values are compared as parsed JSON, not as text.
+  - A local value that is not JSON is not exported in that run. An imported copy that cannot be joined is not imported in that run. Both are reported in `SyncReport.skipped_keys`.
+  - **The scrub:** a repo copy that holds a local field is rewritten without it, keeping its timestamp and device, so paths synced before this change leave the repo's current files at the next sync without any local change.
 - Consequences:
-  - F2's hub-tab strip and F4's workspace strip are rows of one table, with one two-machine test.
-  - Sync now reads the hubs' `ACCESS.md` files on every run. For a few hubs that is a few dozen small reads; a hub on a dead mount adds up to 2 seconds and then fails closed.
-  - A recorded hub that is gone for good keeps the machine failing closed until its record goes.
-  - Two gaps remain inside the PRD's wording: a folder of a hub whose record was dropped, and a checkout whose row was removed, are no longer known, and entries inside them are exported at the next write of their key.
-  - **An alternative is put to the owner (design Q1):** take `projectDir` and `cwd` out of every exported entry, whatever the folder. It needs no discovery, has no fail-closed state and closes both gaps, but it changes what every engineer syncs today. If the owner chooses it, only the predicate changes; `split`, `join`, the invariant and the tests stay.
-  - Rejected: marking entries when they are written (needs the same knowledge at write time and misses older entries); a three-way merge (needs a base copy per key that sync does not keep for state).
+  - F2's hub-tab strip and F4's workspace strip are rows of one table, with one set of two-machine tests, which include the review's three sequences.
+  - Sync reads no hub file, has no fail-closed state, does not depend on the workspace record, and adds no time to the launch import or the close.
+  - **It changes what everyone syncs, hub or not.** An orchestrator session received from another machine has no project folder; dispatching it creates one on this machine. An agent run received from another machine is not attributed to a project. Each machine's own sessions and runs keep their folders.
+  - Paths synced before this change stay in the sync repo's git history. This decision does not rewrite history.
+  - A machine on an older build writes its paths back when it exports, and loses its own `projectDir` and `cwd` values for the entries it imports. The guarantee holds once every machine syncing to the repo runs this build. The release note must say so.
+  - `ade-session` still exports, as today, the folder of a plain tab, an editor tab's file and a contracts tab's root: the PRD's table strips workspace tabs only. The design asks the owner whether to remove those too.
+  - Rejected: stripping only inside known workspace folders, with discovery at export (revision 1; the findings above); marking entries when they are written (needs the same knowledge at write time and misses older entries); a three-way merge (needs a base copy per key that sync does not keep for state); taking an imported path when this machine has none (the owner's rule is that each machine keeps its own).

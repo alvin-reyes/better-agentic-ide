@@ -1,10 +1,10 @@
 # 0038: A workspace is the folders of one hub
 
-- Status: Proposed (2026-11-15), with the F4 design revision 1; not reviewed or approved. The product decision behind it is the owner's (F4 OQ-1 and OQ-2, answered 2026-11-10). The number is provisional (see the README's numbering notes).
+- Status: Proposed (2026-11-15), with the F4 design; unchanged in substance by design revision 2 (the review of revision 1 found it in reasonable shape); not approved. The product decision behind it is the owner's (F4 OQ-1 and OQ-2, answered 2026-11-10). The number is provisional (see the README's numbering notes).
 - Context:
   - "Workspace" named three things: today's *Settings → Workspace → Saved Workspaces* (tab names and split directions, `WorkspacePreset`, key `better-terminal-workspaces`); F1's live set of an instance's terminals (F1.1, D16, D24); and F4's multi-folder project of a hub.
   - The owner chose one meaning (OQ-1) and renamed today's saved workspaces to tab sets (OQ-2). F1 revision 9m, F2 revision 5 and F3's wording follow.
-  - Spec: `docs/superpowers/specs/2026-11-15-workspaces-design.md`, sections 13 and 17.5; PRD F4.1, D1, D2, WS-10.
+  - Spec: `docs/superpowers/specs/2026-11-15-workspaces-design.md`, sections 13 and 17.6; PRD F4.1, D1, D2, WS-10.
 - Decision:
   - **A workspace** is the folders of one finished hub, shown together, and the tabs opened on them. It has one owner, its hub, and is identified by the hub folder's path under the path rule (`workspaces.md`). A hub has exactly one.
   - **In code**, new names that say "workspace" mean this: `Tab.workspace`, `workspaceStore`, `src-tauri/src/workspace/`, the `workspace_*` commands.

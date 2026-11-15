@@ -9,9 +9,12 @@ the UX are approved.
   `prd-workspaces`, PR #113). Not merged, not sharded.
 - **Design** (branch `arch-f4`): `2026-11-15-workspaces-design.md`, with
   `.ade/context/workspaces.md`, `.ade/context/sync-local-fields.md` and ADRs 0037 to
-  0040 (Proposed, numbers provisional). Revision 1 was BLOCKED in adversarial review:
+  0041 (Proposed, numbers provisional). Revision 1 was BLOCKED in adversarial review:
   four blockers, sixteen majors, eleven minors
-  (`2026-11-15-workspaces-design-review-1.md`). Revision 2 is being written.
+  (`2026-11-15-workspaces-design-review-1.md`). **Revision 2 is written** and answers
+  every finding (its section 22 is the findings table). It has not had its delta review.
+  Nothing in it was compiled. It builds in the owner's decision below, proposes 14
+  stories for S1 (section 17), and lists the exact PRD amendments needed (section 21).
 - **UX** (branch `ux-f4`): `2026-11-15-workspaces-ux.md` and
   `2026-11-15-workspaces-mockup.html`. Draft 1 was BLOCKED in adversarial review: one
   blocker, ten majors, thirteen minors (`2026-11-15-workspaces-ux-review-1.md` on that
@@ -32,23 +35,28 @@ lists the exact amendment; the PRD is not yet changed.
 ## Still open for the owner
 
 - A new shortcut, ⌘⇧E "Focus File Browser" (UX).
-- The proposed gate addition for the macOS-only tests (`docs/architecture.md`, "F4
-  stories w1 and w2: proposed addition, NOT in force").
-- The product questions each revision lists (design section 19, UX section 23), among
+- The proposed gate addition for the macOS-only tests of stories w2, w4 and w5
+  (`docs/architecture.md`, marked NOT in force; design O-4).
+- Paths already in the sync repo's git history, and older builds writing paths back:
+  accept, with "update every machine" in the release note? (design O-2)
+- Extend "strip all paths" to `ade-session`'s path fields for every tab? (design O-3)
+- The product questions each revision lists (design section 19, P-1 to P-15; UX section
+  23, P1 to P23), among
   them: what a workspace tab shows in a detached window, whether opening a workspace
   opens the file browser, and what Open Hub says when the tab it brings forward has no
   persona session.
 
 ## Next steps
 
-1. Finish design revision 2, answering every finding with a findings table. (UX draft 2
-   is done.)
+1. The designer answers the six UX items design revision 2 reopened (design section 18
+   and D-1 to D-4; the Checking state is back because opening now streams).
 2. Delta review of each by the adversarial reviewer.
 3. The product manager applies the PRD amendments and answers the product questions; the
    owner approves the changed PRD text.
 4. The owner approves the design and the UX; the architect records it in
    `.ade/session.md`.
-5. The scrum-master shards S1 (F4.11), including the amendment to F3 `s1c` item (11).
+5. The scrum-master shards S1 (F4.11), including the amendments to F3 `s1c` items 4, 6 and (11)
+   that the design lists.
 
 ## Dependencies on unmerged work
 
