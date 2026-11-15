@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Better Terminal: Workspaces (F4) mockup, draft 2</title>
+<style>
+:root {
+  --bg-primary:#0A0B0D; --bg-secondary:#0F1013; --bg-tertiary:#15171B; --bg-elevated:#1B1E23; --bg-surface:#262A31;
+  --text-primary:#E8EAED; --text-secondary:#9BA1AC; --text-muted:#5A616D;
+  --accent:#7C8FFF; --accent-subtle:rgba(124,143,255,.15); --accent-solid:#4A5FE0;
+  --green:#4CC38A; --red:#F4756B; --red-subtle:rgba(244,117,107,.15); --yellow:#D9A441; --yellow-subtle:rgba(217,164,65,.15);
+  --border:rgba(255,255,255,.055); --border-strong:rgba(255,255,255,.10);
+  --radius-sm:4px; --radius:6px; --radius-lg:8px;
+  --font-ui:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;
+  color-scheme: dark;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:#050607; color:var(--text-primary); font-family:var(--font-ui); font-size:13px; letter-spacing:-0.011em; }
+button, select { font:inherit; color:inherit; }
+:focus-visible { outline:1.5px solid var(--accent); outline-offset:-1.5px; }
+header.page { max-width:1240px; margin:0 auto; padding:24px 16px 8px; }
+header.page h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+header.page p { margin:0 0 4px; color:var(--text-secondary); font-size:12px; line-height:1.5; max-width:900px; }
+.layout { max-width:1240px; margin:0 auto; padding:12px 16px 24px; display:grid; grid-template-columns:minmax(0,1fr) 290px; gap:20px; align-items:start; }
+@media (max-width:980px){ .layout{ grid-template-columns:minmax(0,1fr);} }
+section.extra { max-width:1240px; margin:0 auto; padding:0 16px 40px; }
+h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary); margin:18px 0 8px; font-weight:600; }
+.side { font-size:12px; }
+.side button.sc { display:block; width:100%; text-align:left; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:5px 8px; margin:0 0 4px; cursor:pointer; color:var(--text-secondary); }
+.side button.sc:hover { background:var(--bg-tertiary); color:var(--text-primary); }
+.side button.sc[aria-pressed="true"] { border-color:var(--accent); color:var(--text-primary); background:var(--accent-subtle); }
+.side .rowb { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
+.side .rowb button { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:3px 7px; cursor:pointer; color:var(--text-secondary); font-family:var(--font-mono); font-size:11px; }
+.side .rowb button:hover { color:var(--text-primary); background:var(--bg-tertiary); }
+.side label { display:flex; gap:6px; align-items:flex-start; color:var(--text-secondary); margin:4px 0; line-height:1.4; }
+.side select { background:var(--bg-secondary); border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:2px 4px; }
+.say { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px 8px; min-height:44px; color:var(--text-secondary); line-height:1.45; overflow-wrap:anywhere; }
+.note { color:var(--text-secondary); font-size:11px; line-height:1.5; }
+kbd { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:4px; padding:1px 5px; background:var(--bg-tertiary); }
+
+/* ---------- window ---------- */
+.win { position:relative; background:var(--bg-primary); border:1px solid var(--border-strong); border-radius:10px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.45); height:660px; display:flex; flex-direction:column; }
+.tabbar { display:flex; align-items:flex-end; gap:4px; height:40px; padding:4px 12px 0 76px; background:var(--bg-secondary); border-bottom:1px solid var(--border); position:relative; user-select:none; flex-shrink:0; }
+.titlebar { height:38px; background:var(--bg-secondary); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:500; color:var(--text-secondary); position:relative; flex-shrink:0; }
+.lights { position:absolute; left:14px; top:14px; display:flex; gap:8px; }
+.lights i { width:12px; height:12px; border-radius:50%; background:#3a3d44; display:block; }
+.tab { display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:var(--radius) var(--radius) 0 0; color:var(--text-secondary); cursor:pointer; height:32px; background:none; border:0; }
+.tab:hover { background:var(--bg-tertiary); }
+.tab.active { background:var(--bg-primary); color:var(--text-primary); font-weight:500; }
+.tab .num { font-family:var(--font-mono); font-size:11px; opacity:.45; }
+.tab .hubicon { color:var(--accent); font-size:12px; }
+.tabbar .tools { margin-left:auto; display:flex; gap:6px; align-self:center; }
+.tabbar .tools button { background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); height:24px; padding:0 8px; font-size:11px; cursor:pointer; color:var(--text-secondary); }
+.body { flex:1; display:flex; min-height:0; }
+
+/* ---------- file browser ---------- */
+.fb { flex-shrink:0; display:flex; flex-direction:column; background:var(--bg-secondary); border-right:1px solid var(--border); min-height:0; }
+.fb-h { display:flex; align-items:center; gap:4px; padding:5px 6px 5px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.fb-h b { font-size:12px; font-weight:600; flex:1; }
+.ib { background:none; border:0; border-radius:var(--radius-sm); min-width:24px; min-height:24px; display:grid; place-items:center; cursor:pointer; color:var(--text-secondary); padding:0; }
+.ib:hover, .ib[aria-expanded="true"] { background:var(--bg-elevated); color:var(--text-primary); }
+.ib.dot { font-family:var(--font-mono); font-size:9px; font-weight:600; }
+.ib.dot span { border:1px solid var(--border); border-radius:var(--radius-sm); padding:1px 4px; }
+.crumb { padding:4px 10px; border-bottom:1px solid var(--border); font:10px var(--font-mono); color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }
+.crumb.plain { color:var(--text-muted); }
+.crumb .pr { color:var(--accent); margin-right:4px; }
+.fb-st { padding:5px 10px; border-bottom:1px solid var(--border); font-size:11px; color:var(--text-secondary); display:flex; gap:6px; align-items:center; flex-shrink:0; }
+.wn { border-bottom:1px solid var(--border); flex-shrink:0; max-height:34%; overflow-y:auto; }
+.wn-line { display:flex; gap:6px; align-items:flex-start; padding:6px 6px 6px 10px; font-size:11px; line-height:1.45; color:var(--text-primary); background:var(--yellow-subtle); border-left:3px solid var(--yellow); border-top:1px solid var(--border); }
+.wn-line:first-child { border-top:0; }
+.wn-line .ic { color:var(--yellow); font-weight:700; flex-shrink:0; width:12px; text-align:center; }
+.wn-line .tx { flex:1; min-width:0; overflow-wrap:anywhere; }
+.wn-line .tx small { display:block; font-size:11px; }
+.wn-line code, .vbar code, .dlg code, .fb-foot code, .fb-detail code { font:10.5px var(--font-mono); }
+.link { background:none; border:0; padding:0; color:var(--accent); cursor:pointer; text-decoration:underline; font-size:11px; min-height:24px; }
+.tree { flex:1; overflow-y:auto; overflow-x:hidden; min-height:0; position:relative; scroll-padding-top:44px; }
+.row { padding:3px 8px; font-size:12px; line-height:16px; color:var(--text-secondary); white-space:nowrap; cursor:pointer; min-height:22px; overflow:hidden; }
+.row .l1 { display:flex; align-items:center; gap:4px; }
+.row:hover { background:var(--bg-elevated); color:var(--text-primary); }
+.row .nm { overflow:hidden; text-overflow:ellipsis; min-width:0; white-space:pre; }
+.row.here { background:var(--accent-subtle); color:var(--text-primary); }
+.row.msg { cursor:default; font-style:italic; font-size:11px; white-space:normal; }
+.row.msg:hover { background:none; color:var(--text-secondary); }
+.here-mark { margin-left:auto; flex-shrink:0; font:600 10px var(--font-mono); color:var(--accent); padding-left:6px; }
+.root { position:sticky; top:0; z-index:1; background:var(--bg-secondary); border-top:1px solid var(--border); padding:0 4px 0 8px; color:var(--text-primary); }
+.root .l1 { min-height:26px; }
+.root:first-child { border-top:0; }
+.root:hover { background:var(--bg-tertiary); }
+.root.new { background:var(--accent-subtle); }
+.root .nm { font-weight:600; flex:0 1 auto; }
+.root .nm .sfx { font-weight:400; color:var(--text-secondary); }
+.root .pth { flex:1 1000 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:10px var(--font-mono); color:var(--text-secondary); padding-left:4px; }
+.root .l1 .here-mark { margin-left:auto; }
+.root .l1 .pth + .here-mark { margin-left:0; }
+.root .word { flex-shrink:0; font-size:10px; font-weight:600; border:1px solid var(--border-strong); border-radius:3px; padding:0 5px; line-height:15px; color:var(--text-secondary); white-space:nowrap; }
+.root .word.warn { color:var(--yellow); border-color:rgba(217,164,65,.45); }
+.root .l2 { display:flex; align-items:center; gap:6px; padding:0 4px 5px 28px; }
+.root .l2 .pth { padding-left:0; }
+.root.off .nm { color:var(--text-secondary); font-weight:500; }
+.root.outside { border-top:1px dashed var(--border-strong); }
+.root.outside .nm { font-style:italic; font-weight:500; }
+.root .more { visibility:hidden; flex-shrink:0; }
+.root:hover .more, .root:focus .more, .root .more[aria-expanded="true"] { visibility:visible; }
+.chev { width:10px; flex-shrink:0; display:inline-grid; place-items:center; color:var(--text-secondary); font-size:9px; transition:transform .1s; }
+.chev.open { transform:rotate(90deg); }
+.ico { width:14px; flex-shrink:0; text-align:center; font-size:11px; color:var(--accent); }
+.ico.file, .ico.dash { color:var(--text-secondary); }
+.spin { width:9px; height:9px; border:1.5px solid var(--border-strong); border-top-color:var(--accent); border-radius:50%; animation:sp 0.8s linear infinite; flex-shrink:0; display:inline-block; }
+@keyframes sp { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation:none; } .chev { transition:none; } }
+.fb-foot { border-top:1px solid var(--border); padding:4px 10px; font-size:11px; color:var(--text-secondary); flex-shrink:0; line-height:1.45; overflow-wrap:anywhere; }
+.fb-detail { border-top:1px solid var(--border); padding:6px 10px; font-size:11px; color:var(--text-secondary); flex-shrink:0; line-height:1.45; overflow-wrap:anywhere; }
+.fb-detail .p { font:10.5px var(--font-mono); color:var(--text-primary); display:block; }
+.esc { font:600 9.5px var(--font-mono); color:var(--yellow); border:1px solid rgba(217,164,65,.5); border-radius:2px; padding:0 2px; margin:0 1px; white-space:nowrap; font-style:normal; }
+.empty { display:grid; place-items:center; height:100%; color:var(--text-secondary); font-size:12px; }
+
+/* ---------- view (terminal) ---------- */
+.view { flex:1; min-width:0; display:flex; flex-direction:column; }
+.strip { display:flex; gap:2px; padding:3px 8px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.strip button { background:none; border:0; border-radius:var(--radius-sm); padding:3px 9px; font-size:12px; color:var(--text-secondary); cursor:pointer; min-height:24px; }
+.strip button[aria-selected="true"] { background:var(--bg-elevated); color:var(--text-primary); }
+.bars { flex-shrink:0; max-height:40%; overflow-y:auto; }
+.vbar { display:flex; align-items:flex-start; gap:8px; padding:7px 12px; background:var(--yellow-subtle); border-bottom:1px solid var(--border); border-left:3px solid var(--yellow); font-size:12px; line-height:1.45; }
+.vbar .ic { color:var(--yellow); font-weight:700; }
+.vbar .tx { flex:1; min-width:0; overflow-wrap:anywhere; }
+.vbar .acts { display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; }
+.btn { background:var(--bg-elevated); border:1px solid var(--border-strong); border-radius:var(--radius-sm); height:24px; padding:0 9px; font-size:11px; font-weight:500; cursor:pointer; color:var(--text-primary); white-space:nowrap; }
+.btn:hover { background:var(--bg-surface); }
+.btn.primary { background:var(--accent-solid); border-color:transparent; color:#fff; }
+.term { flex:1; padding:12px 14px; font:12px/1.6 var(--font-mono); color:var(--text-secondary); overflow:hidden; white-space:pre-wrap; }
+.term .p { color:var(--green); } .term .a { color:var(--accent); } .term .w { color:var(--text-primary); }
+
+/* ---------- menus, overlays ---------- */
+.menu { position:absolute; z-index:30; min-width:230px; max-width:300px; background:var(--bg-secondary); border:1px solid var(--border-strong); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.5); padding:4px 0; }
+.menu .cap { padding:6px 14px; font-size:11px; color:var(--text-secondary); line-height:1.4; border-bottom:1px solid var(--border); white-space:normal; }
+.menu button { display:flex; width:100%; text-align:left; gap:8px; padding:6px 14px; font-size:12px; font-weight:500; color:var(--text-primary); background:none; border:0; cursor:pointer; align-items:baseline; }
+.menu button:hover:not([aria-disabled="true"]), .menu button:focus-visible { background:var(--bg-elevated); }
+.menu button[aria-disabled="true"] { color:var(--text-secondary); cursor:default; flex-wrap:wrap; }
+.menu button small { color:var(--text-secondary); font-weight:400; font-size:11px; flex-basis:100%; white-space:normal; }
+.menu button .cnt { margin-left:auto; font:11px var(--font-mono); color:var(--text-secondary); }
+.menu hr { border:0; border-top:1px solid var(--border); margin:4px 0; }
+.scrim { position:absolute; inset:0; z-index:40; background:rgba(0,0,0,.5); display:flex; justify-content:center; align-items:flex-start; padding-top:48px; }
+.dlg { width:min(520px,92%); max-height:86%; background:var(--bg-secondary); border:1px solid var(--border-strong); border-radius:10px; box-shadow:0 24px 80px rgba(0,0,0,.6); display:flex; flex-direction:column; overflow:hidden; }
+.dlg-h { display:flex; align-items:center; padding:10px 8px 10px 16px; border-bottom:1px solid var(--border); }
+.dlg-h h3 { margin:0; font-size:13px; font-weight:600; flex:1; }
+.dlg-b { padding:12px 16px; overflow-y:auto; }
+.dlg-f { display:flex; justify-content:flex-end; gap:8px; padding:10px 16px; border-top:1px solid var(--border); }
+.dlg-f .btn { height:28px; padding:0 12px; font-size:12px; }
+.dlg p.lead { margin:0 0 10px; font-size:12px; color:var(--text-secondary); line-height:1.5; }
+.dlg input[type=text] { width:100%; background:var(--bg-primary); border:1px solid var(--border-strong); border-radius:6px; padding:8px 10px; font:12px var(--font-mono); color:var(--text-primary); outline:none; }
+.dlg input[type=text]:focus { border-color:var(--accent); }
+.dlg .q { padding:10px 16px; border-bottom:1px solid var(--border); }
+.dlg label.f { display:block; font-size:12px; font-weight:500; margin-bottom:5px; }
+.dlg .fhint { font-size:11px; color:var(--text-secondary); margin-top:5px; line-height:1.45; }
+.dlg .ferr { font-size:11.5px; color:var(--text-primary); margin-top:8px; padding:7px 9px; background:var(--red-subtle); border-left:3px solid var(--red); border-radius:2px; line-height:1.45; overflow-wrap:anywhere; }
+.dlg .ferr .x { color:var(--red); font-weight:700; margin-right:5px; }
+.dlg .dnote { padding:6px 16px; font-size:11px; color:var(--text-secondary); border-top:1px solid var(--border); line-height:1.45; overflow-wrap:anywhere; }
+.list { margin:0; padding:6px; overflow-y:auto; }
+.list [role=option] { display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:8px; cursor:pointer; }
+.list [role=option][aria-selected="true"] { background:var(--bg-elevated); box-shadow:inset 2px 0 0 var(--accent); }
+.list [role=option][aria-disabled="true"] { cursor:default; }
+.list [role=option][aria-disabled="true"] b { color:var(--text-secondary); }
+.list .li-ic { width:26px; height:26px; display:grid; place-items:center; border-radius:7px; background:var(--bg-tertiary); color:var(--accent); font:12px var(--font-mono); flex-shrink:0; }
+.list .li-m { flex:1; min-width:0; display:grid; }
+.list .li-m b { font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.list .li-m b .sfx { font-weight:400; color:var(--text-secondary); }
+.list .li-m small { font:10.5px var(--font-mono); color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.list .li-w { font-size:11px; color:var(--text-secondary); flex-shrink:0; }
+.list .rowwrap { display:flex; align-items:center; gap:6px; }
+.list .rowwrap [role=option] { flex:1; min-width:0; }
+.list .head { padding:8px 10px 2px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary); }
+.list .nothing { padding:18px; text-align:center; color:var(--text-secondary); font-size:12px; }
+.foot { padding:7px 16px; border-top:1px solid var(--border); display:flex; gap:14px; font:11px var(--font-mono); color:var(--text-secondary); flex-wrap:wrap; }
+.pal .cat { font:700 9px var(--font-mono); padding:2px 5px; border-radius:3px; min-width:62px; text-align:center; color:var(--accent); background:var(--accent-subtle); }
+.pal .cat.o { color:var(--text-secondary); background:var(--bg-tertiary); }
+.pal [role=option] { border-radius:0; }
+.pal .lb { flex:1; font-size:13px; }
+.tag { font:600 9px var(--font-mono); color:var(--text-secondary); border:1px dashed var(--border-strong); border-radius:3px; padding:0 4px; }
+.chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:10px; }
+.chips button { background:var(--bg-tertiary); border:1px dashed var(--border-strong); border-radius:10px; padding:2px 8px; font:10.5px var(--font-mono); color:var(--text-secondary); cursor:pointer; min-height:24px; }
+.toast { position:absolute; right:16px; bottom:16px; z-index:35; max-width:320px; background:var(--bg-elevated); border:1px solid var(--border-strong); border-radius:var(--radius); padding:10px 14px; box-shadow:0 8px 32px rgba(0,0,0,.4); }
+.toast b { display:block; font-size:13px; margin-bottom:2px; overflow-wrap:anywhere; }
+.toast span { font-size:12px; color:var(--text-secondary); line-height:1.45; display:block; overflow-wrap:anywhere; }
+.toast .btn { margin-top:8px; }
+/* settings */
+.set-tabs { display:flex; gap:2px; padding:0 16px; border-bottom:1px solid var(--border); }
+.set-tabs span { padding:8px 10px; font-size:12px; color:var(--text-secondary); border-bottom:2px solid transparent; }
+.set-tabs span.on { color:var(--text-primary); border-bottom-color:var(--accent); }
+.set-l { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary); display:block; margin:14px 0 6px; }
+.set-r { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:var(--radius-sm); background:var(--bg-tertiary); border:1px solid var(--border); font-size:12px; margin-bottom:4px; }
+.set-r .g { flex:1; }
+.set-r small { color:var(--text-secondary); font-size:11px; }
+.changed { box-shadow:0 0 0 1px var(--yellow); border-radius:3px; padding:0 2px; }
+/* gallery */
+.gal { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
+.card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+.card .demo { border-bottom:1px solid var(--border); }
+.card .demo .root { position:static; }
+.card .capn { padding:8px 10px; font-size:11px; color:var(--text-secondary); line-height:1.5; }
+.card .capn b { color:var(--text-primary); }
+table.t { border-collapse:collapse; width:100%; font-size:12px; }
+table.t th, table.t td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+table.t th { color:var(--text-secondary); font-weight:600; font-size:11px; }
+.sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Workspaces (F4): one multi-folder workspace per agent hub</h1>
+  <p>Mockup for <code>2026-11-15-workspaces-ux.md</code>, draft 2. Self-contained: no network, invented names and paths. Pick a scenario on the right, then click or use the keys. Everything tagged <span class="tag">S2</span> belongs to slice 2. Scenarios whose behaviour waits on an answer from the product manager name the question (P13 to P20) in their caption and draw the recommended case.</p>
+  <p>The tab bar shows <b>no workspace mark</b>: a workspace tab opened by Open Hub looks like F2's hub tab (◇ Agent hub), one opened from a hub folder looks like a plain tab. The file browser and the palette are where a workspace shows.</p>
+</header>
+
+<div class="layout">
+  <div>
+    <div class="win" id="win"></div>
+    <p class="note" id="cap" style="margin:8px 2px 0"></p>
+  </div>
+  <aside class="side">
+    <h2 style="margin-top:0">Scenarios</h2>
+    <div id="scs"></div>
+    <h2>The own view's shell</h2>
+    <div class="rowb" id="cds"></div>
+    <div class="rowb"><button id="answer">Mockup: discovery answers now</button></div>
+    <h2>Mockup switches</h2>
+    <label><input type="checkbox" id="f3"> <span>F3 S1 is on <code>main</code> (WS-5 AC2: a sub-terminal shows its single root)</span></label>
+    <label><input type="checkbox" id="byhub" checked> <span>Opened by Open Hub (off: from a hub folder, plain shell)</span></label>
+    <label><input type="checkbox" id="exists"> <span>A missing folder the shell enters now exists (cloned since the last refresh)</span></label>
+    <label><input type="checkbox" id="hubback" checked> <span>Refresh finds the hub finished again (off: still missing)</span></label>
+    <label><input type="checkbox" id="det" checked> <span>A detached window has F4's bar, toast and live region (P13, recommended)</span></label>
+    <label><span>File browser width</span> <select id="fbw" aria-label="File browser width"><option value="180">180 px (narrowest)</option><option value="300" selected>300 px</option><option value="500">500 px (widest)</option></select></label>
+    <h2>Keys</h2>
+    <p class="note"><kbd>⌘P</kbd> palette (here also <kbd>Ctrl</kbd>+<kbd>P</kbd>) · <kbd>⌘⇧E</kbd> focus the file browser (here also <kbd>Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>E</kbd>) · in the tree: <kbd>↑</kbd><kbd>↓</kbd> move, <kbd>→</kbd><kbd>←</kbd> open, close, parent · <kbd>↵</kbd> open or close · <kbd>⌥↵</kbd> a file in a file tab · <kbd>⌥↑</kbd><kbd>⌥↓</kbd> move a root · <kbd>⌘⌫</kbd> hide or remove a root (here also <kbd>Ctrl</kbd>+<kbd>⌫</kbd>) · <kbd>⇧F10</kbd> root menu · <kbd>Esc</kbd> back to the terminal.</p>
+    <h2>Last announcement (screen reader)</h2>
+    <div class="say" id="say" aria-live="polite">Nothing yet.</div>
+  </aside>
+</div>
+
+<section class="extra">
+  <h2>Root row states</h2>
+  <div class="gal" id="gal"></div>
+  <h2>Hostile text: shown, never applied</h2>
+  <div class="gal" id="g-hostile"></div>
+  <h2>Notices: where each appears</h2>
+  <table class="t" id="ntable"></table>
+</section>
+
+<script>
+/* ------------------------------------------------------------------ helpers */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const h = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+/** A character from its code point. Hostile samples are built with this, so this file holds no control character. */
+const U = (...cps) => String.fromCodePoint(...cps);
+const LA = "⟨", RA = "⟩";
+// Escaped: every Cc and Cf (all planes), the line and paragraph separators, and a literal ⟨ (so "⟨U+" on screen always means an escaped character).
+const ESC_ONE = new RegExp("^[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}" + LA + "]$", "u");
+const ESC_ANY = new RegExp("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "u");
+const ESC_ALL = new RegExp("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "gu");
+const ZS = /^\p{Zs}$/u;
+// U+200C and U+200D are spelling in these scripts and join emoji; kept only between two such characters (P3).
+const JOIN_OK = /^[\p{Script=Arabic}\p{Script=Syriac}\p{Script=Mongolian}\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gurmukhi}\p{Script=Gujarati}\p{Script=Oriya}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Sinhala}\p{Script=Khmer}\p{Script=Myanmar}\p{Extended_Pictographic}\p{Emoji_Modifier}]$/u;
+const code = (c) => "U+" + c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0");
+/** The one escaping function: text in, runs of ordinary text and escaped code points out. */
+function tokens(s) {
+  const cps = Array.from(String(s)), out = [];
+  let buf = "";
+  const first = cps.findIndex((c) => c !== " "), last = cps.length - 1 - [...cps].reverse().findIndex((c) => c !== " ");
+  const near = (i, d) => { let j = i + d; while (cps[j] === U(0xFE0F)) j += d; return cps[j]; };
+  cps.forEach((c, i) => {
+    const cp = c.codePointAt(0);
+    let esc = ESC_ONE.test(c);
+    if (esc && (cp === 0x200C || cp === 0x200D)) { const a = near(i, -1), b = near(i, 1); if (a && b && JOIN_OK.test(a) && JOIN_OK.test(b)) esc = false; }
+    if (!esc && ZS.test(c)) esc = cp !== 0x20 || first < 0 || i < first || i > last || cps[i - 1] === " ";
+    if (esc) { if (buf) out.push({ v: buf }); buf = ""; out.push({ esc: code(c) }); } else buf += c;
+  });
+  if (buf) out.push({ v: buf });
+  return out;
+}
+/** For the screen: each escaped character is a chip. */
+const vis = (s) => tokens(s).map((t) => (t.esc ? `<span class="esc">${LA}${t.esc}${RA}</span>` : h(t.v))).join("");
+/** For plain-text places (tooltips, toasts, accessible names, announcements, the Add Folder field). */
+const plain = (s) => tokens(s).map((t) => (t.esc ? LA + t.esc + RA : t.v)).join("");
+/** For an HTML attribute. */
+const attr = (s) => h(plain(s));
+const base = (p) => p.replace(/\/+$/, "").split("/").pop() || "/";
+const parentOf = (p) => p.replace(/\/+$/, "").split("/").slice(0, -1).join("/") || "/";
+const inside = (child, parent) => child === parent || child.startsWith(parent.replace(/\/$/, "") + "/");
+/** A path cut from the left by whole segments, to about `max` characters. */
+function shortPath(p, max) {
+  if (p.length <= max) return p;
+  const seg = p.split("/"); let out = seg.pop();
+  while (seg.length && (seg[seg.length - 1] + "/" + out).length + 2 <= max) out = seg.pop() + "/" + out;
+  return "…/" + out;
+}
+/** WS-4 AC1: same-named roots get the shortest part of the parent path that tells them apart. */
+function labels(roots) {
+  const by = {};
+  roots.forEach((r) => (by[r.name.normalize("NFC")] ||= []).push(r));
+  const out = {};
+  Object.values(by).forEach((g) => {
+    if (g.length < 2) { out[g[0].id] = ""; return; }
+    const segs = g.map((r) => parentOf(r.path).split("/").filter(Boolean));
+    let k = 1;
+    const tail = (s) => (s.slice(-k).join("/") || "/");
+    while (k < 12 && new Set(segs.map(tail)).size < g.length) k++;
+    g.forEach((r, i) => (out[r.id] = tail(segs[i])));
+  });
+  return out;
+}
+const plural = (n, one, many) => (n === 1 ? one : many);
+
+/* ------------------------------------------------------------------ data */
+const T = (name, kids, x) => Object.assign({ name, kids }, x || {});
+const REPO = () => [T("src", [T("routes", [T("auth.ts"), T("users.ts")]), T("index.ts")]), T("test", [T("auth.test.ts")]), T("package.json"), T("README.md")];
+const HUB_TREE = () => [T("bin", [T("doctor"), T("setup")]), T("ops", [T("release", [T("ACCESS.md")])]), T("projects", [T("acme", [T("ACCESS.md"), T("STATE.md")]), T("beta", [T("ACCESS.md")])]), T("repos", [T("web", REPO())]), T("ACCESS.md"), T("CLAUDE.md"), T("hub.conf")];
+const HUB = "~/hubs/acme-staff-engineer";
+let uid = 0;
+const R = (path, kind, st = "ok", tree, x) => Object.assign({ id: "r" + ++uid, name: base(path), path, kind, st, tree: tree || (kind === "hub" ? HUB_TREE() : REPO()) }, x || {});
+const hubRoot = (st = "ok") => R(HUB, "hub", st);
+
+const S = {};
+function reset(over) {
+  Object.assign(S, {
+    sc: "", kind: "ws", hubState: "finished", why: "", roots: [], hidden: [], left: [], notices: [], bars: [], exp: new Set(), cwd: HUB, unreadHidden: "",
+    view: "own", hasSub: false, overlay: null, menu: null, toast: null, focus: null, kbd: false, fbOpen: true, loading: false, refreshing: false, detached: false, persona: true,
+    q: "", cur: 0, addVal: "", addErr: null, addBad: false, dlgNote: "", setAfter: true, dismissed: new Set(), want: null, ret: null, newRoot: null, tooBroad: false,
+    recents: [
+      { name: "acme-staff-engineer", path: HUB, st: "open" },
+      { name: "beta-data-engineer", path: "~/hubs/beta-data-engineer", st: "ok" },
+      { name: "northwind-sre", path: "/Volumes/work/hubs/northwind-sre", st: "gone" },
+      { name: "old-client-engineer", path: "~/hubs/old-client-engineer", st: "unfinished", hand: true },
+    ],
+  }, over || {});
+}
+const std = () => [hubRoot(), R("~/Project/acme/api", "disc"), R("~/Project/beta/api", "disc"), R("~/Project/acme-web", "disc", "missing"), R("~/Documents/design-notes", "added", "ok", [T("2026-11-kickoff.md"), T("decisions.md")])];
+
+const SCENARIOS = [
+  ["open", "A hub's workspace (Open Hub)", "WS-1 AC1, AC4 · WS-2 AC1 · WS-4 AC1, AC2. Five roots: the hub folder first, two checkouts with the same name told apart, one missing, one added by hand (a folder with a plus). Opening a workspace shows the file browser (P14, recommended).", () => reset({ roots: std(), exp: new Set([HUB]) })],
+  ["loading", "Opening: the hub's folders are being read", "WS-9 AC3. Only the hub folder is known before discovery answers, so only its root shows, with one status line above the tree. The button “Mockup: discovery answers now” on the right ends it.", () => reset({ roots: [hubRoot()], exp: new Set([HUB]), loading: true })],
+  ["none", "A hub with no checkouts", "WS-1 AC1. One root; the hint and its Add link sit under the tree, outside it, in the tab order.", () => reset({ roots: [hubRoot()], exp: new Set([HUB]) })],
+  ["allmissing", "Every checkout missing", "WS-1 AC4. A new Mac: nothing cloned yet. Missing rows show their path, cannot open and open nothing.", () => reset({ roots: std().map((r) => (r.kind === "disc" ? { ...r, st: "missing" } : r)).slice(0, 4), exp: new Set([HUB]) })],
+  ["slow", "A root that does not answer", "WS-9 AC3 · F4.1. A folder that does not answer in 2 s is a missing root with a reason: the word reads Missing · not answering, and “missing” is in its name (P16).", () => { reset({ roots: std(), exp: new Set([HUB]) }); S.roots.splice(3, 0, R("/Volumes/archive/acme-legacy", "disc", "slow")); }],
+  ["fifty", "50 roots, 10 checkouts left out", "WS-9 AC1. The hub names 58 checkouts and one folder was added: the hub, 48 checkouts and the added folder show; the last 10 checkouts in the workspace's order are left out. The notice opens the list where they can be seen and hidden. An add is refused; hiding one lets the next in.", () => { reset({ roots: [hubRoot()], exp: new Set() }); for (let i = 1; i <= 58; i++) (i <= 48 ? S.roots : S.left).push(R(`~/Project/acme/service-${String(i).padStart(2, "0")}`, "disc", i % 9 === 0 ? "missing" : "ok")); S.roots.push(R("~/Documents/design-notes", "added", "ok", [T("decisions.md")])); S.notices = [{ k: "cap" }]; }],
+  ["notices", "Discovery notices", "WS-1 AC2, AC7 · WS-9 AC2, AC5. One workspace notice block above the roots; each line stays until its cause is gone or it is dismissed.", () => reset({ roots: std(), exp: new Set([HUB]), unreadHidden: "projects/beta/ACCESS.md", notices: [{ k: "unread", file: "projects/beta/ACCESS.md", why: "no permission" }, { k: "tilde", n: 1, files: "projects/acme/ACCESS.md" }, { k: "broad", n: 3 }, { k: "work", n: 12 }] })],
+  ["outside", "The shell leaves the workspace (cd /tmp)", "WS-5 AC3. One extra root after the others, marked Not in workspace; it goes when the shell is back inside. cd / shows a line under the tree and no root.", () => { reset({ roots: std(), exp: new Set([HUB]) }); cd("/tmp/scratch"); }],
+  ["hostile", "Hostile names and a very long path", "Sharding note m11. Bidi and control characters show as chips and are never applied; a real right-to-left name does not reorder its neighbours; spaces that would hide show; a long path is cut from the left; stacked marks are clipped to their row.", () => reset({ roots: hostileRoots(), exp: new Set([HUB]), notices: [{ k: "unread", file: "projects/evil" + U(0x202E) + "gnp.md/ACCESS.md", why: "not a regular file" }] })],
+  ["hidden", "Two checkouts hidden", "WS-3 AC2, AC3. The line under the tree counts them; Show Hidden Workspace Folders lists them and brings each back to its place.", () => { reset({ roots: std(), exp: new Set([HUB]) }); const [a] = S.roots.splice(2, 1); const [b] = S.roots.splice(2, 1); S.hidden = [{ ...a, ord: 2 }, { ...b, ord: 3 }]; }],
+  ["nested", "A checkout inside the hub folder", "WS-1 AC3. The checkout repos/web is its own root and is also a folder inside the hub's tree. The terminal mark, aria-current and ⌘⇧E's landing are on the row under the checkout's own root (the deepest root), never on the row inside the hub's tree. Try the cd buttons.", () => { reset({ roots: std(), exp: new Set([HUB, HUB + "/repos"]) }); S.roots.splice(1, 0, R(HUB + "/repos/web", "disc")); cd(HUB + "/repos/web/src"); }],
+  ["nolist", "A folder that cannot be listed, and one deleted since the last refresh", "A root that exists but cannot be listed stays an ordinary root; opening it shows one line under it. The same for a root whose folder went after the last refresh. Both lines are tree items, reached with the arrows.", () => { reset({ roots: std(), exp: new Set() }); S.roots[1].listErr = "Can't list this folder: no permission."; S.roots[2].listErr = "This folder is no longer there. Refresh Workspace Folders checks it again."; S.exp = new Set([S.roots[1].path, S.roots[2].path]); }],
+  ["gone", "Restored: the hub folder is gone", "WS-6 AC3 · WS-2 AC6. One missing root, a bar above the terminal, and only Refresh in the menu and the palette. Refresh brings the workspace back (switch “Refresh finds the hub finished again” off to see Still missing).", () => reset({ hubState: "gone", roots: [hubRoot("missing")], bars: ["gone"], persona: false })],
+  ["unfinished", "Restored: not a finished hub right now", "WS-6 AC3 · WS-2 AC6. Shown as a plain tab (one root, following the shell) with a bar that gives the reason; only Refresh is offered.", () => reset({ hubState: "unfinished", why: "hub.conf is not committed", roots: [], bars: ["unfinished"], exp: new Set([HUB]), persona: false })],
+  ["checkfailed", "Restored: the hub could not be checked", "The architect's proposed third outcome (design 8, 11.1, its Q4): the repository is in a format the check does not read, or does not answer. Shown as the row above, with its own words.", () => reset({ hubState: "failed", why: "its repository uses a format Better Terminal does not read", roots: [], bars: ["failed"], exp: new Set([HUB]), persona: false })],
+  ["already", "Open Hub, setup asked, on a hub that is already open", "WS-2 AC3. The hub's tab came forward, nothing ran, and a bar says so. Without the setup option it is a 4-second toast (reach it through Open Workspace… S2 in the palette).", () => reset({ roots: std(), exp: new Set([HUB]), bars: ["already"] })],
+  ["nopersona", "Open Hub on a hub whose open tab has no persona", "P15. The only open tab of this hub was opened from the hub folder (or restored, or is a Duplicate): it comes forward, nothing starts, and a bar says how to get the persona.", () => { reset({ roots: std(), exp: new Set([HUB]), bars: ["nopersona"], persona: false }); }],
+  ["dropped", "A kept record was dropped (200 limit), with another bar", "WS-6 AC2. The bar names the hub whose hand changes were dropped and stays until dismissed, in whichever workspace tab is in sight (P18). Two causes meet here: the bars stack in a fixed order.", () => reset({ roots: std(), exp: new Set([HUB]), bars: ["already", "dropped"] })],
+  ["sub", "A focus sub-terminal in sight", "WS-5 AC1 and AC2, D6. Toggle “F3 S1 is on main”: before it, the tab's one file browser keeps showing the workspace; with it, the sub-terminal shows only its own root and results come as toasts.", () => reset({ roots: std(), exp: new Set([HUB]), hasSub: true, view: "sub" })],
+  ["fbclosed", "Restored with the file browser closed", "P14. Restore does not open the file browser. Notices that would go unseen come as one toast with Show Files; results of palette actions come as toasts.", () => { reset({ roots: std(), exp: new Set([HUB]), fbOpen: false, persona: false, notices: [{ k: "unread", file: "projects/beta/ACCESS.md", why: "no permission" }, { k: "tilde", n: 1, files: "projects/acme/ACCESS.md" }] }); setToast({ title: "2 workspace notices", body: "The file browser lists them.", action: "Show Files", run: "fbopen" }); }],
+  ["plain", "A plain tab", "WS-4 AC4 · WS-2 AC6. Unchanged: one root, today's rows and breadcrumb, no workspace menu, no workspace entries in the palette.", () => reset({ kind: "plain", roots: [], cwd: "~/Project/acme/api", exp: new Set(["~/Project/acme/api"]) })],
+  ["broadhub", "A hub folder that is too broad", "WS-2 AC4 · WS-9 AC5. The home folder holds a hub.conf: from the New tab dialog it opens as a plain tab, with a bar. Open Hub on it is P19.", () => reset({ kind: "plain", roots: [], cwd: "~", bars: ["broadhub"], exp: new Set() })],
+  ["removed", "F2's “Hub removed” tab", "WS-2 AC7. After Remove Hub Folder the tab is neither a hub tab nor a workspace tab: a plain shell in the home folder.", () => reset({ kind: "removed", roots: [], cwd: "~", exp: new Set() })],
+  ["detached", "A workspace tab in its own window, brought forward", "P13 (the review's B1). A detached window has no file browser and no palette today, for any tab. Recommended: it gains only F4's bar, the toast and a live region, so WS-2 AC3's message has a place. Switch the recommendation off to see today's window.", () => reset({ roots: std(), detached: true, bars: ["already"] })],
+  ["detachedgone", "A workspace tab in its own window, hub folder gone", "P13. With the bar, WS-6 AC3's notice and “only Refresh” have a place in a detached window. Without it the window shows the terminal alone.", () => reset({ hubState: "gone", roots: [hubRoot("missing")], detached: true, bars: ["gone"], persona: false })],
+];
+function hostileRoots() {
+  return [hubRoot(),
+    R("~/Project/reports" + U(0x202E) + "fdp.tools", "disc"),
+    R("~/Project/notes" + U(0x0007, 0x0085) + "old", "disc", "missing"),
+    R("~/Project/לקוח-api", "disc"),
+    R("~/Project/  spaced  out ", "disc"),
+    R("~/Project/" + LA + "U+202E" + RA + "literal", "disc"),
+    R("~/Project/pay" + U(0x200D) + "pal", "disc"),
+    R("~/Project/می" + U(0x200C) + "خواهم", "disc"),
+    R("~/Project/z" + U(0x0301, 0x0302, 0x0303, 0x0304, 0x0306, 0x0307, 0x0308, 0x030A, 0x030B, 0x030C, 0x0311, 0x0312, 0x0313, 0x0314, 0x033D, 0x033E, 0x033F, 0x0346, 0x034A, 0x034B, 0x034C, 0x0350, 0x0351, 0x0352) + "algo", "disc"),
+    R("~/Project/clients/northwind-traders-international/platform/services/payments/reconciliation-engine-v2", "added")];
+}
+
+/* ------------------------------------------------------------------ model */
+/** A row's key: a short id for (root, path). No path text is ever put in an attribute that is not escaped. */
+const KEYS = new Map();
+const kid = (s) => { if (!KEYS.has(s)) KEYS.set(s, "k" + (KEYS.size + 1)); return KEYS.get(s); };
+const f3on = () => $("#f3").checked;
+const showsWs = () => !S.detached && S.kind === "ws" && S.hubState !== "unfinished" && S.hubState !== "failed" && !(S.view === "sub" && f3on());
+const outOfSight = () => !S.fbOpen || !showsWs();
+const real = () => S.roots.filter((r) => r.kind !== "outside");
+/** The current root: the deepest workspace folder that holds the terminal's folder, whatever its state (M5). */
+const curRoot = () => real().filter((r) => inside(S.cwd, r.path)).sort((a, b) => b.path.length - a.path.length)[0];
+const say = (t) => { $("#say").textContent = t; };
+const rkey = (r) => kid(r.id + "|" + r.path);
+const lbl = (r) => { const l = labels(S.roots)[r.id]; return r.name + (l ? " — " + l : ""); };
+const kindLine = (r) => (r.kind === "hub" ? "Hub folder" : r.kind === "disc" ? "Checkout the hub lists" : r.kind === "added" ? "Added by you" : "Not part of this workspace: the terminal is here");
+const stateLine = (r) => (r.st === "missing" ? "Missing: no folder at this path on this Mac. It shows here after a refresh once it exists." : r.st === "slow" ? "Missing: the folder did not answer within 2 seconds. Refresh Workspace Folders tries again." : "");
+function cd(path) {
+  S.cwd = path;
+  S.roots = real();
+  S.tooBroad = false;
+  if (S.kind !== "ws" || S.hubState !== "finished") return "";
+  const cr = curRoot();
+  if (cr) {
+    if (cr.st !== "ok") {
+      if (!$("#exists").checked) return `The terminal is in ${plain(lbl(cr))}, which is shown as missing. Refresh Workspace Folders checks it again.`;
+      cr.st = "ok";
+      for (let p = path; ; p = parentOf(p)) { S.exp.add(p); if (p === cr.path) break; }
+      return `${plain(lbl(cr))} is no longer missing.`;
+    }
+    for (let p = path; ; p = parentOf(p)) { S.exp.add(p); if (p === cr.path) break; }
+    return "";
+  }
+  if (path === "/" || path === "~") { S.tooBroad = true; return `The terminal is in ${path}, which is too broad to show here.`; }
+  S.roots.push(R(path, "outside", "ok", [T("build.log"), T("notes.txt")]));
+  S.exp.add(path);
+  return "";
+}
+function flat() {
+  const out = [];
+  const walk = (nodes, dir, depth, root) => {
+    const rk = root ? root.id : "one";
+    if (!nodes.length) { out.push({ t: "msg", key: kid(rk + "|" + dir + "|empty"), text: "Empty", depth }); return; }
+    nodes.forEach((n, i) => {
+      const path = dir + "/" + n.name;
+      out.push({ t: "node", key: kid(rk + "|" + path), path, n, depth, root, pos: i + 1, size: nodes.length });
+      if (n.kids && S.exp.has(path)) walk(n.kids, path, depth + 1, root);
+    });
+  };
+  if (!showsWs()) {
+    const single = S.kind === "ws" && S.view === "sub" ? "~/Project/acme/api" : S.cwd;
+    walk(single === HUB ? HUB_TREE() : single === "~" ? [T("Documents", []), T("Project", []), T("hubs", [])] : REPO(), single, 0, null);
+    return out;
+  }
+  S.roots.forEach((r, i) => {
+    out.push({ t: "root", key: rkey(r), path: r.path, r, pos: i + 1, size: S.roots.length });
+    if (r.st === "ok" && S.exp.has(r.path)) { if (r.listErr) out.push({ t: "msg", key: kid(r.id + "|" + r.path + "|err"), text: r.listErr, depth: 1 }); else walk(r.tree, r.path, 1, r); }
+  });
+  return out;
+}
+
+/* ------------------------------------------------------------------ rows */
+let did = 0;
+function rootRow(r, lab, opts = {}) {
+  const off = r.st !== "ok", cr = curRoot();
+  const here = !opts.noHere && cr && cr.id === r.id;
+  const atRoot = here && S.cwd === r.path;
+  const open = !off && S.exp.has(r.path);
+  const out = r.kind === "outside";
+  const sfx = lab ? `<span class="sfx"> — <bdi>${vis(lab)}</bdi></span>` : "";
+  const kindWord = r.kind === "hub" ? "hub folder, workspace folder" : out ? "folder, not part of the workspace" : r.kind === "added" ? "workspace folder, added by you" : "workspace folder";
+  const stWord = r.st === "missing" ? ", missing" : r.st === "slow" ? ", missing, not answering" : "";
+  const name = `${plain(r.name)}${lab ? " — " + plain(lab) : ""}, ${kindWord}${stWord}${here ? ", the terminal is here" : ""}`;
+  const desc = [plain(r.path) + ".", kindLine(r) + ".", stateLine(r)].filter(Boolean).join(" ");
+  const tip = [plain(r.path), kindLine(r), stateLine(r)].filter(Boolean).join("\n");
+  const lead = off ? `<span class="chev" aria-hidden="true"></span>` : `<span class="chev ${open ? "open" : ""}" aria-hidden="true">▶</span>`;
+  const ico = r.kind === "hub" && !off ? `<span class="ico" aria-hidden="true">◇</span>` : off ? `<span class="ico dash" aria-hidden="true">${r.st === "slow" ? "◷" : "⬚"}</span>` : `<span class="ico" aria-hidden="true">${r.kind === "added" ? "⊞" : "▣"}</span>`;
+  const two = off || out;
+  const word = r.st === "missing" ? `<span class="word">Missing</span>` : r.st === "slow" ? `<span class="word warn">Missing · not answering</span>` : out ? `<span class="word">Not in workspace</span>` : "";
+  const pth = (n) => `<span class="pth" dir="ltr"><bdi>${vis(shortPath(r.path, n))}</bdi></span>`;
+  const more = out || opts.static ? "" : `<button class="ib more" tabindex="-1" aria-hidden="true" data-act="rowmenu" data-id="${r.id}" ${S.menu && S.menu.id === r.id ? 'aria-expanded="true"' : ""}>⋯</button>`;
+  const d = "d" + ++did, key = rkey(r);
+  return `<div class="row root ${off ? "off" : ""} ${out ? "outside" : ""} ${S.newRoot === r.id ? "new" : ""}" role="treeitem" aria-level="1" aria-setsize="${opts.size || 1}" aria-posinset="${opts.pos || 1}" ${off ? "" : `aria-expanded="${open}"`} ${atRoot ? 'aria-current="location"' : ""} aria-label="${h(name)}" aria-describedby="${d}" title="${h(tip)}" tabindex="${opts.static ? -1 : S.focus === key || opts.first ? 0 : -1}" data-key="${h(key)}" data-root="${r.id}">
+    <span class="l1">${lead}${ico}<span class="nm"><bdi>${vis(r.name)}</bdi>${sfx}</span>${two ? "" : pth(30)}${here ? `<span class="here-mark" aria-hidden="true">›_</span>` : ""}${more}</span>
+    ${two ? `<span class="l2">${word}${pth(40)}</span>` : ""}<span class="sr" id="${d}">${h(desc)}</span></div>`;
+}
+function nodeRow(it, first) {
+  const dir = !!it.n.kids, open = dir && S.exp.has(it.path), cr = curRoot();
+  const here = it.path === S.cwd && (!it.root || (cr && cr.id === it.root.id));
+  const alsoRoot = it.root && real().some((r) => r.id !== it.root.id && r.path === it.path);
+  const d = "d" + ++did;
+  return `<div class="row ${here ? "here" : ""}" role="treeitem" aria-level="${it.depth + 1}" aria-setsize="${it.size}" aria-posinset="${it.pos}" ${dir ? `aria-expanded="${open}"` : ""} ${here ? 'aria-current="location"' : ""} aria-label="${attr(it.n.name)}${dir ? ", folder" : ""}${here ? ", the terminal is here" : ""}" aria-describedby="${d}" title="${attr(it.path)}${alsoRoot ? "\nAlso a workspace folder, listed as its own root." : ""}" tabindex="${S.focus === it.key || first ? 0 : -1}" data-key="${h(it.key)}" data-in="${it.root ? it.root.id : ""}" style="padding-left:${8 + it.depth * 16}px">
+    <span class="l1">${dir ? `<span class="chev ${open ? "open" : ""}" aria-hidden="true">▶</span>` : `<span class="chev"></span>`}<span class="ico ${dir ? "" : "file"}" aria-hidden="true">${dir ? "▢" : "≡"}</span><span class="nm"><bdi>${vis(it.n.name)}</bdi></span>${here ? `<span class="here-mark" aria-hidden="true">›_</span>` : ""}</span><span class="sr" id="${d}">${attr(it.path)}.${alsoRoot ? " Also a workspace folder, listed as its own root." : ""}</span></div>`;
+}
+const msgRow = (it, first) => `<div class="row msg" role="treeitem" aria-level="${it.depth + 1}" aria-setsize="1" aria-posinset="1" aria-label="${h(it.text)}" tabindex="${S.focus === it.key || first ? 0 : -1}" data-key="${h(it.key)}" style="padding-left:${8 + it.depth * 16 + 14}px">${h(it.text)}</div>`;
+
+/* ------------------------------------------------------------------ notices and bars */
+function noticeLine(n) {
+  if (n.k === "tilde") return [`${n.n} ${plural(n.n, "row names a path", "rows name paths")} Better Terminal does not read`, `In <code><bdi>${vis(n.files)}</bdi></code>. A Checkout cell may start with <code>/</code>, or with <code>~</code> alone or <code>~/</code>; <code>~name/…</code> is not read.`];
+  if (n.k === "broad") return [`${n.n} ${plural(n.n, "row names a folder", "rows name folders")} too broad to show`, `A workspace folder can't be <code>/</code>, your home folder, a whole volume, or a folder that holds Better Terminal's own data.`];
+  if (n.k === "unread") return [`Better Terminal could not read <code><bdi>${vis(n.file)}</bdi></code> (${h(n.why)})`, `The folders it names are not shown; the rest of the workspace is. Folders you hid from it stay hidden.`];
+  if (n.k === "cap") return [`${S.left.length} ${plural(S.left.length, "folder", "folders")} not shown`, `A workspace shows at most 50 folders: the hub folder, the folders you added, and the first checkouts in its order. Hide some to see the others. <button class="link" data-act="remove">Choose Folders to Hide…</button>`];
+  if (n.k === "work") return [`${n.n} work folders skipped`, `Better Terminal reads the ACCESS.md of at most 200 work folders.`];
+}
+const noticeKey = (n) => JSON.stringify(n) + (n.k === "cap" ? S.left.length : "");
+const liveNotices = () => S.notices.filter((n) => !(n.k === "cap" && !S.left.length) && !S.dismissed.has(noticeKey(n)));
+const hubCode = () => `<code><bdi>${vis(HUB)}</bdi></code>`;
+const BAR_ORDER = ["already", "nopersona", "gone", "unfinished", "failed", "dropped", "recordlost", "broadhub"];
+const BARS = {
+  already: () => [`This hub is already open, so bin/setup and bin/doctor were not run. To run them, close the hub's tabs, then choose Open Hub again.`, false],
+  nopersona: () => [`This hub is already open in this tab, and no persona session is running here. Open Hub starts the persona only when the hub is not open: close the hub's tabs, then choose Open Hub again.`, false],
+  gone: () => [`The hub folder ${hubCode()} is missing: deleted, moved, or on a volume that is not connected. Its workspace is kept and comes back when the folder does.`, true],
+  unfinished: () => [`${hubCode()} is not a finished hub right now: ${h(S.why)}. Its workspace is kept and comes back when it is.`, true],
+  failed: () => [`Better Terminal could not check whether ${hubCode()} is a finished hub: ${h(S.why)}. Its workspace is kept; this tab shows one folder until a refresh can check it.`, true],
+  dropped: () => [`Better Terminal keeps the folders you added, hid or reordered for 200 workspaces. To make room, it dropped them for <code><bdi>~/hubs/old-client-engineer</bdi></code>, the one opened longest ago. If you open that hub again, its workspace starts from the hub's own list.`, false],
+  recordlost: () => [`Better Terminal could not read the folders you added, hid or reordered, so every workspace starts from its hub's own list. The unreadable file was set aside, not deleted.`, false],
+  broadhub: () => [`This folder has a hub.conf, but it opened as a plain tab: Better Terminal opens no workspace on <code>/</code>, your home folder, a whole volume, or a folder that holds its own data.`, false],
+};
+const barsHTML = () => { const b = BAR_ORDER.filter((id) => S.bars.includes(id)); return b.length ? `<div class="bars">${b.map((id) => { const [tx, re] = BARS[id](); return `<div class="vbar" role="status"><span class="ic" aria-hidden="true">!</span><span class="tx">${tx}</span><span class="acts">${re ? `<button class="btn" data-act="refresh" data-id="bar">Refresh Workspace Folders</button>` : ""}<button class="btn" data-act="bardismiss" data-id="${id}">Dismiss</button></span></div>`; }).join("")}</div>` : ""; };
+
+/* ------------------------------------------------------------------ render */
+function render() {
+  did = 0;
+  // Remember what has focus, so a redraw does not lose it.
+  const ae = document.activeElement;
+  let keep = null;
+  if (ae && ae.closest && ae.closest("#win")) keep = ae.dataset.key ? { k: "row", key: ae.dataset.key } : ae.dataset.act ? { k: "act", act: ae.dataset.act, id: ae.dataset.id || "", i: ae.dataset.i || "" } : ae.id ? { k: "id", id: ae.id } : null;
+  const hadOverlay = !!$("#win .dlg"), hadMenu = !!$("#menu");
+  const ws = showsWs(), items = flat(), lab = labels(S.roots);
+  const byHub = $("#byhub").checked;
+  const tabName = S.kind === "removed" ? "Hub removed" : S.kind === "plain" ? (S.sc === "broadhub" ? "~" : "api") : byHub ? "Agent hub" : "acme-staff-engineer";
+  const hubIcon = S.kind === "ws" && byHub;
+  const sub3 = S.kind === "ws" && S.view === "sub" && f3on();
+  const crumb = sub3 ? "~/Project/acme/api" : S.cwd;
+  const persona = S.kind === "ws" && byHub && S.persona && S.view === "own";
+  const term = S.view === "sub" ? `<span class="p">~/Project/acme/api</span> <span class="a">(focus/auth)</span> $ <span class="w">claude</span>\n\n  Focus session: auth refresh tokens` :
+    persona ? `<span class="a">▸</span> <span class="w">claude</span>\n\n  Staff Engineer for Acme. Reading STATE.md and the journal…\n\n<span class="w">&gt;</span> ` :
+    `<span class="p">${attr(S.cwd)}</span> $ `;
+  const modal = !!S.overlay;
+
+  if (S.detached) {
+    const hosts = $("#det").checked;
+    $("#win").innerHTML = `<div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>${h(tabName)}</div>
+      <div class="body"><div class="view">${hosts ? barsHTML() : ""}<div class="term" id="term" tabindex="0" aria-label="Terminal">${term}</div></div></div>${hosts ? toastHTML() : ""}`;
+  } else {
+    let tree = "";
+    const first = !items.some((it) => it.key === S.focus);
+    if (ws) tree = items.map((it, i) => (it.t === "root" ? rootRow(it.r, lab[it.r.id], { pos: it.pos, size: it.size, first: first && i === 0 }) : it.t === "msg" ? msgRow(it, first && i === 0) : nodeRow(it, first && i === 0))).join("");
+    else tree = items.map((it, i) => (it.t === "msg" ? msgRow(it, first && i === 0) : nodeRow(it, first && i === 0))).join("") || `<div class="empty">Loading...</div>`;
+
+    const nl = ws ? liveNotices() : [];
+    const notices = nl.length ? `<div class="wn" role="group" aria-label="Workspace notices">${nl.map((n, i) => { const [a, b] = noticeLine(n); return `<div class="wn-line"><span class="ic" aria-hidden="true">!</span><span class="tx"><b>${a}</b><small>${b}</small></span><button class="ib" data-act="dismiss" data-i="${i}" aria-label="Dismiss this notice" title="Dismiss">✕</button></div>`; }).join("")}</div>` : "";
+    const hasMenu = S.kind === "ws" && !sub3;
+    const busy = S.loading || S.refreshing;
+    const status = ws && busy ? `<div class="fb-st" role="status"><span class="spin" aria-hidden="true"></span>${S.loading ? "Reading the hub's folders…" : "Refreshing the workspace's folders…"}</div>` : "";
+    const fi = S.kbd && items.find((it) => it.key === S.focus && it.t === "root");
+    const detail = ws && fi ? `<div class="fb-detail" aria-hidden="true"><span class="p" dir="ltr"><bdi>${vis(fi.r.path)}</bdi></span>${h(kindLine(fi.r))}${fi.r.kind === "disc" ? " · ⌘⌫ hides it" : fi.r.kind === "added" ? " · ⌘⌫ removes it" : fi.r.kind === "hub" ? " · always in the workspace" : ""}${fi.r.st !== "ok" ? "<br>" + h(stateLine(fi.r)) : ""}</div>` : "";
+    const noCheckouts = ws && S.hubState === "finished" && !busy && real().length === 1 && !S.hidden.length && !S.left.length;
+    const foot = ws ? [
+      S.tooBroad ? `<div class="fb-foot" role="note">The terminal is in <code>${attr(S.cwd)}</code>, which is too broad to show here.</div>` : "",
+      noCheckouts ? `<div class="fb-foot">The hub's ACCESS.md files name no checkouts. <button class="link" data-act="add">Add Folder to Workspace…</button></div>` : "",
+      S.hidden.length ? `<div class="fb-foot">${S.hidden.length} ${plural(S.hidden.length, "folder", "folders")} hidden · <button class="link" data-act="hidden" aria-label="Show hidden workspace folders, ${S.hidden.length}">Show…</button></div>` : "",
+    ].join("") : "";
+    const refName = busy ? "Refreshing workspace folders" : hasMenu ? "Refresh Workspace Folders" : "Refresh";
+    const fb = !S.fbOpen ? "" : `<div class="fb" style="width:${+$("#fbw").value}px">
+      <div class="fb-h"><span class="ico" aria-hidden="true">▢</span><b>Files</b>
+        <button class="ib dot" data-act="dot" title="Hidden files hidden" aria-label="Show hidden files" aria-pressed="false"><span>.*</span></button>
+        ${hasMenu ? `<button class="ib" data-act="wsmenu" aria-label="Workspace menu" aria-haspopup="menu" aria-expanded="${!!(S.menu && S.menu.id === "ws")}" title="Workspace menu">⋯</button>` : ""}
+        <button class="ib" data-act="refresh" data-id="head" title="${refName}" aria-label="${refName}" ${busy ? 'aria-disabled="true"' : ""}>${busy && hasMenu ? `<span class="spin" aria-hidden="true"></span>` : "↻"}</button>
+        <button class="ib" data-act="fbclose" title="Close file browser (⌘B)" aria-label="Close file browser">✕</button></div>
+      <div class="crumb ${ws ? "" : "plain"}" title="${attr(crumb)}" dir="ltr">${ws ? `<span class="pr" aria-hidden="true">›_</span>` : ""}<bdi>${vis(crumb)}</bdi></div>
+      ${notices}${status}
+      <div class="tree" id="tree" role="tree" aria-label="${ws ? "Workspace folders of " + attr(base(HUB)) : "Files in " + attr(base(crumb))}">${tree}</div>
+      ${detail}${foot}
+    </div>`;
+    const strip = S.hasSub ? `<div class="strip" role="tablist" aria-label="Terminals in ${h(tabName)}"><button role="tab" data-act="view" data-id="own" aria-selected="${S.view === "own"}">› ${h(tabName)}</button><button role="tab" data-act="view" data-id="sub" aria-selected="${S.view === "sub"}">● focus: api</button></div>` : "";
+    $("#win").innerHTML = `
+      <div class="tabbar" ${modal ? "inert" : ""}><div class="lights"><i></i><i></i><i></i></div>
+        <button class="tab active" data-act="noop" data-id="t1">${hubIcon ? '<span class="hubicon" aria-hidden="true">◇</span>' : '<span aria-hidden="true" style="color:var(--accent);font-size:10px">❯</span>'}<span class="num">1</span><span>${h(tabName)}</span></button>
+        <button class="tab" data-act="noop" data-id="t2"><span aria-hidden="true" style="opacity:.4;font-size:10px">❯</span><span class="num">2</span><span>notes</span></button>
+        <div class="tools"><button data-act="palette">Palette ⌘P</button><button data-act="settings">Settings ⌘,</button>${S.fbOpen ? "" : `<button data-act="fbopen">Files ⌘B</button>`}</div>
+      </div>
+      <div class="body" ${modal ? "inert" : ""}>${fb}<div class="view">${strip}${barsHTML()}<div class="term" id="term" tabindex="0" aria-label="Terminal">${term}</div></div></div>
+      ${menuHTML()}${overlayHTML()}${toastHTML()}`;
+  }
+
+  const sc = SCENARIOS.find((s) => s[0] === S.sc);
+  $("#cap").innerHTML = sc ? `<b>${h(sc[1])}.</b> ${h(sc[2])}` : "";
+  $$("#scs .sc").forEach((b) => b.setAttribute("aria-pressed", b.dataset.sc === S.sc));
+  placeMenu();
+  // Focus: a dialog's field when it opens, a menu's first item when it opens, a place asked for, else where it was.
+  const find = (w) => !w ? null : w.k === "term" ? $("#term") : w.k === "row" ? $$("#tree [data-key]").find((e) => e.dataset.key === w.key) || null : w.k === "id" ? document.getElementById(w.id) : $$(`#win [data-act="${w.act}"]`).find((e) => (e.dataset.id || "") === (w.id || "") && (e.dataset.i || "") === (w.i || "")) || null;
+  let el = null;
+  if (S.overlay && (!hadOverlay || S.want === "auto")) el = $("#win .dlg [data-autofocus]");
+  else if (S.menu && !hadMenu) el = $("#menu button:not([aria-disabled=true])") || $("#menu button");
+  else if (S.want && S.want !== "auto") el = find(S.want) || (S.want.k === "row" ? $("#tree [tabindex='0']") || $("#term") : $("#term"));
+  else if (keep) el = find(keep);
+  S.want = null;
+  if (el) { el.focus(); if (el.dataset.key) el.scrollIntoView({ block: "nearest" }); if (el.type === "text" && el.dataset.autofocus !== undefined) el.setSelectionRange(el.value.length, el.value.length); }
+  const ao = $("#olist [aria-selected='true']"); if (ao) ao.scrollIntoView({ block: "nearest" });
+}
+
+/* ------------------------------------------------------------------ menus */
+function menuHTML() {
+  if (!S.menu) return "";
+  const dis = (label, why) => `<button role="menuitem" aria-disabled="true">${label}<small>${why}</small></button>`;
+  if (S.menu.id === "ws") {
+    const paused = S.hubState !== "finished";
+    const cap = S.hubState === "gone" ? "The hub folder is missing." : S.hubState === "failed" ? "This hub could not be checked." : "Not a finished hub right now.";
+    return `<div class="menu" role="menu" aria-label="Workspace" id="menu">
+      ${paused ? `<div class="cap" id="mcap">${cap} Its workspace is kept; only Refresh is offered until it is back.</div>` : ""}
+      <button role="menuitem" data-act="refresh" data-id="menu" ${paused ? 'aria-describedby="mcap"' : ""}>Refresh Workspace Folders</button>
+      ${paused ? "" : `<button role="menuitem" data-act="add">Add Folder to Workspace…</button>
+      <button role="menuitem" data-act="remove">Remove Folder from Workspace…</button>
+      <button role="menuitem" data-act="hidden">Show Hidden Workspace Folders<span class="cnt">${S.hidden.length || ""}</span></button>`}
+    </div>`;
+  }
+  const i = S.roots.findIndex((r) => r.id === S.menu.id), r = S.roots[i];
+  if (!r) return "";
+  const nm = `aria-label="Actions for ${attr(lbl(r))}"`;
+  if (r.kind === "hub") return `<div class="menu" role="menu" ${nm} id="menu">${dis("Remove from Workspace", "The hub folder is always part of its workspace.")}</div>`;
+  const last = real().length - 1;
+  return `<div class="menu" role="menu" ${nm} id="menu">
+    <button role="menuitem" ${i <= 1 ? 'aria-disabled="true"' : `data-act="up" data-id="${r.id}"`}>Move Up<span class="cnt">⌥↑</span></button>
+    <button role="menuitem" ${i >= last ? 'aria-disabled="true"' : `data-act="down" data-id="${r.id}"`}>Move Down<span class="cnt">⌥↓</span></button><hr>
+    <button role="menuitem" data-act="drop" data-id="${r.id}">${r.kind === "disc" ? "Hide from Workspace" : "Remove from Workspace"}<span class="cnt">⌘⌫</span></button></div>`;
+}
+function placeMenu() {
+  const m = $("#menu"); if (!m) return;
+  const t = S.menu.id === "ws" ? $('[data-act="wsmenu"]') : $(`#tree [data-root="${S.menu.id}"]`);
+  const w = $("#win").getBoundingClientRect(), b = (t || $("#win")).getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(S.menu.id === "ws" ? b.left - w.left : b.left - w.left + 40, w.width - 310)) + "px";
+  m.style.top = Math.max(8, Math.min(b.bottom - w.top + 2, w.height - m.offsetHeight - 8)) + "px";
+}
+function closeMenu(back) { const m = S.menu; S.menu = null; if (back && m) S.want = m.ret; }
+
+/* ------------------------------------------------------------------ overlays */
+function paletteItems() {
+  const wsTab = S.kind === "ws", ok = S.hubState === "finished";
+  const all = [
+    ["Tabs", "New Tab", "⌘T"], ["Panels", "Toggle File Browser", "⌘B", "fbtoggle"], ["Panels", "Focus File Browser", "⌘⇧E", "focusfb"], ["Panels", "Open Settings", "⌘,", "settings"],
+    ...(wsTab ? [["Workspace", "Refresh Workspace Folders", "", "refresh"]] : []),
+    ...(wsTab && ok ? [["Workspace", "Add Folder to Workspace…", "", "add"], ["Workspace", "Remove Folder from Workspace…", "", "remove"], ["Workspace", "Show Hidden Workspace Folders", "", "hidden"]] : []),
+    ["Workspace", "Open Workspace…", "", "openws", "S2"],
+    ["Project", "Agent hub: Set up your agentic environment…", ""], ["Project", "Project: Set up BMAD, methodology and agents", ""], ["Help", "Help: Keyboard shortcuts", "⌘/"],
+  ];
+  const q = S.q.toLowerCase();
+  return all.filter((x) => !q || x[1].toLowerCase().includes(q) || x[0].toLowerCase().includes(q));
+}
+const match = (r) => (r.name + r.path).toLowerCase().includes(S.q.toLowerCase());
+function overlayRows() {
+  if (S.overlay === "palette") return paletteItems();
+  if (S.overlay === "remove") return [...real().filter(match), ...S.left.filter(match).map((r) => ({ ...r, leftOut: true }))];
+  if (S.overlay === "hidden") return S.hidden.filter(match);
+  if (S.overlay === "openws") return [...S.recents.filter(match), { fixed: true }];
+  return [];
+}
+/** What a screen reader hears for a row of a list dialog: everything on the row, in one name. */
+function optName(o, x) {
+  if (o === "palette") return `${x[0]}: ${x[1]}${x[2] ? ", " + x[2] : ""}`;
+  if (o === "remove") return `${plain(x.leftOut ? x.name : lbl(x))}, ${plain(x.path)}, ${x.kind === "hub" ? "always in the workspace: the hub folder can't be removed" : (x.leftOut ? "not shown, over the 50-folder limit, " : "") + (x.kind === "disc" ? "Hide" : "Remove")}`;
+  if (o === "hidden") return `${plain(x.name)}, ${plain(x.path)}, hidden, Show Again`;
+  if (x.fixed) return "Open Hub Folder…, a finished hub's folder: opens its workspace with a plain shell";
+  return `${plain(x.name)}, ${plain(x.path)}${x.st === "open" ? ", already open" : x.st === "gone" ? ", unavailable: its folder is missing. Command Delete removes it from the list" : x.st === "unfinished" ? ", unavailable: not a finished hub right now. Command Delete removes it from the list" : ""}`;
+}
+const opt = (o, x, i, ic, main, small, right, dis) => `<div role="option" id="opt-${i}" aria-selected="${i === S.cur}" ${dis ? 'aria-disabled="true"' : ""} aria-label="${h(optName(o, x))}" data-act="pick" data-i="${i}"><span class="li-ic" aria-hidden="true">${ic}</span><span class="li-m"><b>${main}</b><small dir="ltr"><bdi>${small}</bdi></small></span>${right}</div>`;
+const SAMPLES = () => S.overlay === "add" ? [["~/Project/acme-infra", "valid"], ["", "empty"], ["notes", "not a full path"], ["~bob/x", "~name"], ["~/Project/reports" + U(0x202E) + "fdp.tools", "pasted: control characters"], ["~/Project/nowhere", "does not exist"], ["~/Project/acme/api/package.json", "not a folder"], ["~/Library", "too broad"], ["~/Project/acme/api", "already a root"], ["/Volumes/archive/old", "not answering"], ...(S.hidden[0] ? [[S.hidden[0].path, "hidden checkout"]] : [])] : [["~/hubs/beta-data-engineer", "finished hub"], ["~/Project/acme/api", "not a hub"], ["~/hubs/half-made", "unfinished"], ["~", "too broad"]];
+function overlayHTML() {
+  const o = S.overlay; if (!o) return "";
+  const rows = overlayRows(), lab = labels(S.roots);
+  const input = (ph, aria) => `<div class="q"><input type="text" dir="ltr" data-autofocus data-act-input="q" value="${h(S.q)}" placeholder="${ph}" aria-label="${aria}" role="combobox" aria-expanded="true" aria-controls="olist" aria-autocomplete="list" ${rows.length ? `aria-activedescendant="opt-${S.cur}"` : ""}></div>`;
+  const head = (t) => `<div class="dlg-h"><h3 id="dt">${t}</h3><button class="ib" data-act="close" aria-label="Close" title="Close (Esc)">✕</button></div>`;
+  const nm = (r, withLab) => `<bdi>${vis(r.name)}</bdi>${withLab && lab[r.id] ? `<span class="sfx"> — <bdi>${vis(lab[r.id])}</bdi></span>` : ""}`;
+  let inner = "";
+  if (o === "palette") inner = `${input("Type a command...", "Command")}<div class="list pal" id="olist" role="listbox" aria-label="Commands" style="padding:4px 0">${rows.length ? rows.map((x, i) => `<div role="option" id="opt-${i}" aria-selected="${i === S.cur}" aria-label="${h(optName(o, x))}" data-act="pick" data-i="${i}"><span class="cat ${x[0] === "Workspace" ? "" : "o"}">${x[0]}</span><span class="lb">${h(x[1])} ${x[4] ? `<span class="tag">${x[4]}</span>` : ""}</span>${x[2] ? `<kbd>${x[2]}</kbd>` : ""}</div>`).join("") : `<div class="nothing" role="presentation">No matching commands</div>`}</div><div class="foot"><span>↑↓ navigate</span><span>↵ select</span><span>esc close</span></div>`;
+  if (o === "remove") {
+    const shown = rows.filter((r) => !r.leftOut), left = rows.filter((r) => r.leftOut);
+    const row = (r) => { const i = rows.indexOf(r); return opt(o, r, i, r.kind === "hub" ? "◇" : r.kind === "added" ? "⊞" : "▣", nm(r, !r.leftOut), vis(r.path), `<span class="li-w">${r.kind === "hub" ? "Always in the workspace" : r.kind === "disc" ? "Hide" : "Remove"}</span>`, r.kind === "hub"); };
+    inner = `${head("Remove Folder from Workspace")}${input("Remove folder: name or path", "Search workspace folders")}<div class="dlg-b" style="padding:8px 16px 0"><p class="lead" id="dlead" style="margin:0">Checkouts the hub lists are hidden and can be shown again. Folders you added are removed. Nothing on disk changes.</p></div><div class="list" id="olist" role="listbox" aria-label="Workspace folders" aria-describedby="dlead">${rows.length ? shown.map(row).join("") + (left.length ? `<div role="group" aria-label="Not shown: over the 50-folder limit"><div class="head" aria-hidden="true">Not shown: over the 50-folder limit</div>${left.map(row).join("")}</div>` : "") : `<div class="nothing" role="presentation">No folder matches</div>`}</div><div class="foot"><span>↑↓ navigate</span><span>↵ hide or remove</span><span>esc close</span></div>`;
+  }
+  if (o === "hidden") inner = `${head("Hidden Workspace Folders")}${input("Show again: name or path", "Search hidden folders")}<div class="list" id="olist" role="listbox" aria-label="Hidden folders">${rows.length ? rows.map((r, i) => opt(o, r, i, "▣", nm(r), vis(r.path), `<span class="li-w">Show Again</span>`)).join("") : `<div class="nothing" role="presentation">${S.hidden.length ? "No folder matches" : "No hidden folders. Remove Folder from Workspace… hides a checkout the hub lists."}</div>`}</div>${S.unreadHidden ? `<div class="dnote">Folders hidden from <code><bdi>${vis(S.unreadHidden)}</bdi></code> are not listed: Better Terminal could not read that file. They stay hidden.</div>` : ""}${S.dlgNote ? `<div class="dnote" role="status">${h(S.dlgNote)}</div>` : ""}<div class="foot"><span>↑↓ navigate</span><span>↵ show again</span><span>esc close</span></div>`;
+  if (o === "openws") inner = `${head('Open Workspace <span class="tag">S2</span>')}${input("Open workspace: name or path", "Search recent workspaces")}<div class="list" id="olist" role="listbox" aria-label="Recent workspaces"><div class="head" aria-hidden="true">Recent workspaces</div>${S.recents.length ? "" : `<div class="nothing" role="presentation">No workspaces opened yet.</div>`}${rows.map((r, i) => r.fixed ? `<div class="head" aria-hidden="true" style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px"></div>` + opt(o, r, i, "⌂", "Open Hub Folder…", "A finished hub's folder: opens its workspace with a plain shell", "") : `<div class="rowwrap" role="presentation">${opt(o, r, i, "◇", nm(r), vis(r.path) + (r.st === "gone" ? " · folder is missing" : r.st === "unfinished" ? " · not a finished hub right now" : ""), r.st === "open" ? `<span class="li-w">Already open</span>` : r.st === "ok" ? "" : `<span class="li-w">Unavailable</span>`, r.st === "gone" || r.st === "unfinished")}${r.st === "gone" || r.st === "unfinished" ? `<button class="btn" data-act="forget" data-i="${i}" tabindex="-1" aria-hidden="true">Remove from List</button>` : ""}</div>`).join("")}</div><div class="foot"><span>↑↓ navigate</span><span>↵ open (plain shell, no persona)</span><span>⌘⌫ remove an unavailable one</span><span>esc close</span></div>`;
+  if (o === "add" || o === "openhub") {
+    const add = o === "add";
+    inner = `${head(add ? "Add Folder to Workspace" : 'Open Hub Folder <span class="tag">S2</span>')}<div class="dlg-b">
+      <label class="f" for="pf">${add ? "Folder" : "Hub folder"}</label>
+      <div style="display:flex;gap:8px"><input type="text" id="pf" dir="ltr" spellcheck="false" autocomplete="off" data-autofocus data-act-input="addVal" value="${h(S.addVal)}" aria-describedby="pfh pfe" ${S.addErr ? 'aria-invalid="true"' : ""}><button class="btn" style="height:auto" data-act="browse">Browse…</button></div>
+      <div class="fhint" id="pfh">${add ? "Type a full path; ~ is your home folder. The folder is added to this workspace only. Nothing is written to it or to the hub." : "The hub's folder, the one that holds hub.conf. It opens with a plain shell; Open Hub is what starts the persona."}</div>
+      ${S.addErr ? `<div class="ferr" id="pfe" role="alert"><span class="x" aria-hidden="true">✕</span>${S.addErr}</div>` : `<span id="pfe"></span>`}
+      <div class="chips"><span class="note" style="flex-basis:100%">Mockup only: fill a sample</span>${SAMPLES().map(([, w], i) => `<button data-act="chip" data-i="${i}">${w}</button>`).join("")}${add ? `<button data-act="browsebad">Browse… returns control characters</button>` : ""}</div>
+    </div><div class="dlg-f"><button class="btn" data-act="close" data-id="cancel">Cancel</button><button class="btn primary" data-act="${add ? "doadd" : "doopen"}">${add ? "Add Folder" : "Open Workspace"}</button></div>`;
+  }
+  if (o === "settings") {
+    const a = S.setAfter, c = (b4, af) => `<span class="${a ? "changed" : ""}">${a ? af : b4}</span>`;
+    inner = `${head("Settings")}<div class="set-tabs"><span>Themes</span><span>Terminal</span><span class="on">${c("Workspace", "Tabs")}</span><span>AI API</span><span>Sync</span></div>
+    <div class="dlg-b"><label style="display:flex;gap:6px;font-size:11px;color:var(--text-secondary);margin-bottom:12px"><input type="checkbox" data-autofocus data-act="setafter" ${a ? "checked" : ""}> Mockup only: show the new labels (changed strings are outlined)</label>
+      <span class="set-l" style="margin-top:0">Open Tabs</span><div class="set-r"><small>1</small><span class="g">Agent hub</span><small>Rename</small></div><div class="set-r"><small>2</small><span class="g">notes</span><small>Rename</small></div>
+      <span class="set-l">${c("Save Current Workspace", "Save Current Tabs")}</span><div style="display:flex;gap:8px"><input type="text" placeholder="${a ? "Tab set name..." : "Workspace name..."}"><button class="btn primary" style="height:auto" data-act="noop" data-id="save">Save</button></div>
+      <span class="set-l">${c("Saved Workspaces", "Tab Sets")}</span><div class="set-r"><span class="g"><b>morning</b></span><small>3 tabs</small><small>Nov 12</small><button class="btn" data-act="noop" data-id="load">Load</button><button class="ib" data-act="noop" data-id="del">×</button></div>
+      <div style="padding:10px;font-size:12px;color:var(--text-secondary);font-style:italic">Empty state: ${c("No workspaces saved yet.", "No tab sets saved yet.")}</div>
+    </div>`;
+  }
+  return `<div class="scrim" data-act="scrim"><div class="dlg" role="dialog" aria-modal="true" ${o === "palette" ? 'aria-label="Command palette"' : 'aria-labelledby="dt"'}>${inner}</div></div>`;
+}
+function toastHTML() {
+  if (!S.toast) return "";
+  return `<div class="toast" role="status"><b>${h(S.toast.title)}</b><span>${h(S.toast.body)}</span>${S.toast.action ? `<button class="btn" data-act="toastdo">${h(S.toast.action)}</button>` : ""}</div>`;
+}
+let toastTimer;
+/** A toast is plain text: title, body and at most one button. Text is escaped when drawn. */
+function setToast(t) { S.toast = t; clearTimeout(toastTimer); toastTimer = setTimeout(() => { S.toast = null; render(); }, t.action ? 15000 : 4000); }
+function toast(t) { setToast(t); say(`${t.title}. ${t.body}`); }
+
+/* ------------------------------------------------------------------ actions */
+function openOverlay(name) {
+  // Where focus goes back to: what opened the menu, else where focus was (the palette keeps what it remembered).
+  if (S.menu) S.ret = S.menu.ret;
+  else if (!S.overlay) { const ae = document.activeElement; S.ret = ae && ae.dataset && ae.dataset.key ? { k: "row", key: ae.dataset.key } : ae && ae.dataset && ae.dataset.act && ae.closest(".fb") ? { k: "act", act: ae.dataset.act, id: ae.dataset.id || "" } : { k: "term" }; }
+  S.menu = null; S.overlay = name; S.q = ""; S.cur = 0; S.addVal = ""; S.addErr = null; S.addBad = false; S.dlgNote = ""; S.want = "auto";
+  if (name === "remove") { const i = overlayRows().findIndex((r) => r.kind !== "hub"); S.cur = Math.max(0, i); }
+}
+function closeOverlay() { S.overlay = null; S.want = S.ret || { k: "term" }; }
+const sumLine = () => { const n = real().length, m = real().filter((r) => r.st !== "ok").length, s = real().filter((r) => r.st === "slow").length; return `${n} ${plural(n, "folder", "folders")}${m ? `, ${m} missing` : ""}${s ? ` (${s} not answering)` : ""}.`; };
+function refresh(from) {
+  if (from !== "menu") S.menu = null; else closeMenu(true);
+  if (S.overlay) closeOverlay();
+  if (S.kind !== "ws") { say("Files refreshed."); return; }
+  if (S.loading || S.refreshing) { say("Already refreshing."); return; }
+  S.refreshing = true;
+  setTimeout(() => {
+    S.refreshing = false;
+    if (S.hubState !== "finished") {
+      const kind = S.hubState;
+      if (!$("#hubback").checked) {
+        if (!S.bars.includes(kind)) S.bars.push(kind);
+        say(kind === "gone" ? "Still missing." : kind === "failed" ? "Still could not be checked." : "Still not a finished hub.");
+        return render();
+      }
+      S.hubState = "finished"; S.bars = S.bars.filter((b) => b !== kind); S.roots = std(); S.exp = new Set([HUB]); cd(HUB);
+      say("Workspace restored: " + sumLine());
+      if (S.detached || outOfSight()) setToast({ title: "Workspace restored", body: sumLine() });
+      return render();
+    }
+    if (S.loading !== false) S.loading = false;
+    say("Workspace folders refreshed: " + sumLine());
+    if (outOfSight()) setToast({ title: "Workspace folders refreshed", body: sumLine() });
+    render();
+  }, 500);
+}
+function finishLoading() { S.loading = false; S.roots = std(); say("Workspace ready: " + sumLine()); }
+function promote() { if (S.left.length && real().length < 50) { const r = S.left.shift(); const at = S.roots.findIndex((x) => x.kind === "added" || x.kind === "outside"); S.roots.splice(at < 0 ? S.roots.length : at, 0, r); } }
+function drop(id) {
+  const li = S.left.findIndex((r) => r.id === id);
+  if (li >= 0) { const [r] = S.left.splice(li, 1); S.hidden.push(r); S.undo = () => showAgain(r.id); toast({ title: `Hid ${plain(r.name)}`, body: "The hub still lists it. Show Hidden Workspace Folders brings it back.", action: "Show Again", run: "undo" }); return; }
+  const i = S.roots.findIndex((r) => r.id === id), r = S.roots[i];
+  if (!r || r.kind === "outside") return;
+  if (r.kind === "hub") { say("The hub folder is always part of its workspace."); return; }
+  const name = plain(lbl(r));
+  S.roots.splice(i, 1);
+  if (S.focus === rkey(r)) { const next = S.roots[Math.min(i, S.roots.length - 1)]; S.focus = rkey(next); S.want = { k: "row", key: S.focus }; }
+  if (r.kind === "disc") { S.hidden.push({ ...r, ord: i }); S.undo = () => showAgain(r.id); promote(); toast({ title: `Hid ${name}`, body: "The hub still lists it. Show Hidden Workspace Folders brings it back.", action: "Show Again", run: "undo" }); }
+  else { S.undo = () => { S.roots.splice(i, 0, r); cd(S.cwd); }; toast({ title: `Removed ${name} from the workspace`, body: "The folder itself is untouched.", action: "Add Back", run: "undo" }); }
+  if (inside(S.cwd, r.path)) cd(S.cwd);
+}
+function showAgain(id) {
+  const i = S.hidden.findIndex((r) => r.id === id); if (i < 0) return "";
+  const [r] = S.hidden.splice(i, 1);
+  S.roots = real();
+  // Back to its WS-1 place: before the first added folder, or the first checkout that comes later in the hub's files.
+  const n = +r.id.slice(1);
+  let at = S.roots.findIndex((x) => x.kind === "added" || (x.kind === "disc" && +x.id.slice(1) > n));
+  if (at < 0) at = S.roots.length;
+  S.roots.splice(at, 0, r);
+  let msg;
+  if (S.roots.length > 50) {
+    // Past the limit, the last checkout in the workspace's order is left out; added folders never are.
+    const li = S.roots.map((x) => x.kind).lastIndexOf("disc"), [cut] = S.roots.splice(li, 1);
+    S.left.unshift(cut);
+    if (!S.notices.some((x) => x.k === "cap")) S.notices.push({ k: "cap" });
+    msg = cut === r ? `${plain(r.name)} is no longer hidden, but it is past the 50-folder limit, so it is not shown.` : `${plain(lbl(r))} is shown again, ${S.roots.indexOf(r) + 1} of ${S.roots.length}. ${plain(cut.name)} is now past the 50-folder limit and is not shown.`;
+  } else msg = `${plain(lbl(r))} is shown again, ${S.roots.indexOf(r) + 1} of ${S.roots.length}.`;
+  cd(S.cwd);
+  say(msg);
+  return msg;
+}
+function move(id, d) {
+  const list = S.roots, i = list.findIndex((r) => r.id === id), j = i + d, last = real().length - 1;
+  if (i < 1) return;
+  if (j < 1) { say(`${plain(lbl(list[i]))} is already first after the hub folder.`); return; }
+  if (j > last) { say(`${plain(lbl(list[i]))} is already last.`); return; }
+  [list[i], list[j]] = [list[j], list[i]];
+  say(`${plain(lbl(list[j]))} moved ${d < 0 ? "up" : "down"}, now ${j + 1} of ${last + 1}.`);
+}
+const BADCHARS = "The path can't contain invisible formatting marks (such as right-to-left marks or zero-width spaces) or other control characters.";
+/** The Add Folder field never holds a control character: each one is replaced, on entry, by its visible form, and the path is refused. */
+function setField(v) {
+  if (ESC_ANY.test(v)) { S.addVal = v.replace(ESC_ALL, (c) => LA + code(c) + RA); S.addBad = true; S.addErr = BADCHARS; say(BADCHARS); }
+  else { S.addVal = v; S.addBad = false; S.addErr = null; }
+}
+/** One refusal at a time, the first that applies, in this order (spec section 8). */
+function checkAdd(v) {
+  const p = v.trim(), sh = `<code><bdi>${vis(p)}</bdi></code>`, q = p.replace(/\/$/, "");
+  if (!p) return "Enter a folder.";
+  if (S.addBad) return BADCHARS;
+  if (!/^(\/|~$|~\/)/.test(p)) return "Use a full path, such as <code>~/Project/acme-api</code>.";
+  if (p.startsWith("/Volumes/archive")) return `${sh} did not answer within 2 seconds. Check that its volume is connected, then try again.`;
+  if (/nowhere/.test(p)) return `${sh} doesn't exist.`;
+  if (/package\.json$/.test(p)) return `${sh} exists but isn't a folder.`;
+  if (["/", "~", "~/Library"].includes(q || "/") || /^\/Volumes\/[^/]+$/.test(q)) return `${sh} is too broad to add. A workspace folder can't be <code>/</code>, your home folder, a whole volume, or a folder that holds Better Terminal's own data.`;
+  if (real().some((r) => r.path === q)) return `${sh} is already in this workspace.`;
+  const hd = S.hidden.find((r) => r.path === q);
+  if (hd) return `${sh} is a checkout of this hub that you hid. <button class="btn" data-act="unhide" data-id="${hd.id}" style="margin-left:6px">Show It Again</button>`;
+  if (real().length >= 50) return "This workspace already has 50 folders, the most it can hold. Remove or hide one to add another.";
+  return null;
+}
+function checkOpen(v) {
+  const p = v.trim(), sh = `<code><bdi>${vis(p)}</bdi></code>`;
+  if (!p) return "Enter the hub's folder.";
+  if (S.addBad) return BADCHARS;
+  if (!/^(\/|~$|~\/)/.test(p)) return "Use a full path, such as <code>~/hubs/acme-staff-engineer</code>.";
+  if (["/", "~"].includes(p)) return `Better Terminal opens no workspace on <code>/</code>, your home folder, a whole volume, or a folder that holds its own data.`;
+  if (/half-made/.test(p)) return "This hub was not finished: hub.conf is not committed.";
+  if (!/^~\/hubs\//.test(p)) return `${sh} is not a hub: it has no hub.conf.`;
+  return null;
+}
+const strip = (s) => s.replace(/<button.*<\/button>/, "").replace(/<[^>]+>/g, "").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+function doAdd() {
+  S.addErr = checkAdd(S.addVal);
+  if (S.addErr) { say(strip(S.addErr)); S.want = { k: "id", id: "pf" }; return; }
+  const p = S.addVal.trim().replace(/\/$/, ""), r = R(p, "added");
+  const out = S.roots.findIndex((x) => x.kind === "outside");
+  S.roots.splice(out < 0 ? S.roots.length : out, 0, r);
+  closeOverlay(); cd(S.cwd);
+  S.newRoot = r.id; setTimeout(() => { if (S.newRoot === r.id) { S.newRoot = null; render(); } }, 2000);
+  const n = real().length;
+  say(`Added ${plain(lbl(r))} to the workspace, ${n} of ${n}.`);
+  if (outOfSight()) setToast({ title: `Added ${plain(lbl(r))} to the workspace`, body: `It is the last of ${n} folders.`, ...(S.fbOpen ? {} : { action: "Show Files", run: "fbopen" }) });
+}
+function pick(i) {
+  const rows = overlayRows(), x = rows[i]; if (!x) return;
+  if (S.overlay === "palette") { openThing(x[3]); return; }
+  if (S.overlay === "remove") { if (x.kind === "hub") { say("The hub folder is always part of its workspace."); return; } closeOverlay(); drop(x.id); return; }
+  if (S.overlay === "hidden") { S.dlgNote = showAgain(x.id); S.cur = Math.min(S.cur, Math.max(0, S.hidden.length - 1)); return; }
+  if (S.overlay === "openws") {
+    if (x.fixed) { S.overlay = "openhub"; S.addVal = ""; S.addErr = null; S.addBad = false; S.want = "auto"; return; }
+    if (x.st === "gone" || x.st === "unfinished") { say(`${x.name} is unavailable: ${x.st === "gone" ? "its folder is missing" : "not a finished hub right now"}. Command Delete removes it from the list.`); return; }
+    closeOverlay();
+    if (x.st === "open") toast({ title: "This hub is already open", body: "Showing its tab." });
+    else toast({ title: `Opened ${plain(x.name)}`, body: "Mockup: a workspace tab with a plain shell would open." });
+  }
+}
+function openThing(a) {
+  if (a === "refresh") { S.overlay = null; S.want = S.ret || { k: "term" }; refresh(); }
+  else if (a === "add" || a === "remove" || a === "hidden" || a === "openws" || a === "settings") openOverlay(a);
+  else if (a === "fbtoggle") { closeOverlay(); S.fbOpen = !S.fbOpen; }
+  else if (a === "focusfb") { S.overlay = null; focusTree(); }
+  else closeOverlay();
+}
+function focusTree() {
+  S.fbOpen = true; S.menu = null; S.kbd = true;
+  const items = flat(), cr = curRoot();
+  // The terminal's folder under the current root; else the current root; else the first row.
+  const here = items.find((it) => it.t === "node" && it.path === S.cwd && (!it.root || (cr && it.root.id === cr.id)));
+  const root = cr && items.find((it) => it.t === "root" && it.r.id === cr.id);
+  S.focus = (here || root || items[0] || {}).key || null;
+  S.want = S.focus ? { k: "row", key: S.focus } : { k: "act", act: "dot" };
+}
+function start(id) { clearTimeout(toastTimer); const s = SCENARIOS.find((x) => x[0] === id); s[3](); S.sc = id; render(); }
+
+/* ------------------------------------------------------------------ events */
+document.addEventListener("mousedown", () => { S.kbd = false; });
+document.addEventListener("click", (e) => {
+  const sc = e.target.closest("[data-sc]"); if (sc) return start(sc.dataset.sc);
+  if (e.target.closest("#answer")) { if (S.loading) finishLoading(); return render(); }
+  const cdb = e.target.closest("[data-cd]"); if (cdb) { const m = cd(cdb.dataset.cd); say(m || `Terminal moved to ${cdb.dataset.cd}.`); return render(); }
+  const a = e.target.closest("[data-act]");
+  if (!a) {
+    if (S.menu && !e.target.closest(".menu")) { S.menu = null; render(); }
+    else { const row = e.target.closest("#tree [data-key]"); if (row) activate(row.dataset.key); else if (e.target.closest("#term")) { S.want = { k: "term" }; render(); } }
+    return;
+  }
+  const act = a.dataset.act, id = a.dataset.id;
+  if (a.getAttribute("aria-disabled") === "true" && act !== "pick") { if (act === "refresh") say("Already refreshing."); return; }
+  if (act === "scrim") { if (e.target === a) { closeOverlay(); render(); } return; }
+  if (act === "noop" || act === "dot") return;
+  if (act === "wsmenu") S.menu = S.menu && S.menu.id === "ws" ? null : { id: "ws", ret: { k: "act", act: "wsmenu" } };
+  else if (act === "rowmenu") { const r = S.roots.find((x) => x.id === id); S.menu = S.menu && S.menu.id === id ? null : { id, ret: { k: "row", key: rkey(r) } }; }
+  else if (act === "refresh") refresh(id);
+  else if (["add", "remove", "hidden", "settings"].includes(act)) openOverlay(act);
+  else if (act === "palette") openOverlay("palette");
+  else if (act === "close") closeOverlay();
+  else if (act === "fbclose") { S.fbOpen = false; S.focus = null; S.want = { k: "term" }; }
+  else if (act === "fbopen") S.fbOpen = true;
+  else if (act === "dismiss") { S.dismissed.add(noticeKey(liveNotices()[+a.dataset.i])); say("Notice dismissed."); S.want = $$('[data-act="dismiss"]').length > 1 ? { k: "act", act: "dismiss", i: "0" } : { k: "row", key: S.focus }; }
+  else if (act === "bardismiss") { S.bars = S.bars.filter((b) => b !== id); S.want = { k: "term" }; }
+  else if (act === "view") S.view = id;
+  else if (act === "up") { closeMenu(true); move(id, -1); }
+  else if (act === "down") { closeMenu(true); move(id, 1); }
+  else if (act === "drop") { closeMenu(true); const r = S.roots.find((x) => x.id === id); if (r && S.focus === rkey(r)) S.want = null; drop(id); if (!S.want) S.want = { k: "row", key: S.focus }; }
+  else if (act === "toastdo") { const t = S.toast; S.toast = null; if (t.run === "undo") { if (S.undo) S.undo(); say("Undone."); } else if (t.run === "fbopen") S.fbOpen = true; }
+  else if (act === "pick") { S.cur = +a.dataset.i; pick(S.cur); if (S.overlay) S.want = "auto"; }
+  else if (act === "forget") forget(+a.dataset.i);
+  else if (act === "chip") { setField(SAMPLES()[+a.dataset.i][0]); S.want = { k: "id", id: "pf" }; }
+  else if (act === "browse") { setField(S.overlay === "add" ? "~/Project/acme-infra" : "~/hubs/beta-data-engineer"); say("Mockup: the folder picker returned a folder."); S.want = { k: "id", id: "pf" }; }
+  else if (act === "browsebad") { setField("~/Project/notes" + U(0x0007, 0x200B, 0x2066) + "old"); S.want = { k: "id", id: "pf" }; }
+  else if (act === "doadd") doAdd();
+  else if (act === "doopen") { S.addErr = checkOpen(S.addVal); if (!S.addErr) { const n = plain(base(S.addVal.trim())); closeOverlay(); toast({ title: `Opened ${n}`, body: "Mockup: a workspace tab with a plain shell would open." }); } else S.want = { k: "id", id: "pf" }; }
+  else if (act === "unhide") { const m = showAgain(id); closeOverlay(); say(m); }
+  else if (act === "setafter") S.setAfter = a.checked;
+  render();
+});
+function forget(i) {
+  const x = overlayRows()[i]; if (!x || x.fixed) return;
+  if (x.hand && !confirm(`Remove ${x.name} from the list?\n\nBetter Terminal also forgets the folders you added, hid or reordered for it.\n\n(Mockup: the app uses its own confirm dialog, Cancel focused.)`)) return;
+  S.recents = S.recents.filter((r) => r !== x); S.cur = Math.max(0, S.cur - 1); S.want = "auto"; say(`${x.name} removed from the list.`);
+}
+function activate(key, inTab) {
+  const it = flat().find((x) => x.key === key); if (!it) return;
+  S.focus = key; S.want = { k: "row", key };
+  if (it.t === "msg") return render();
+  const r = it.t === "root" ? it.r : null;
+  if (r && r.st !== "ok") { say(`${plain(lbl(r))}: missing, nothing to open.`); return render(); }
+  if (r || it.n.kids) { S.exp.has(it.path) ? S.exp.delete(it.path) : S.exp.add(it.path); }
+  else say(`Opened ${plain(it.n.name)} in ${inTab ? "a file tab" : "the side panel"}.`);
+  render();
+}
+document.addEventListener("input", (e) => {
+  const k = e.target.dataset.actInput; if (!k) return;
+  if (k === "q") { S.q = e.target.value; S.cur = 0; S.want = "auto"; render(); const n = overlayRows().length; say(n ? `${n} ${plural(n, "result", "results")}.` : "No matches."); return; }
+  const had = S.addErr; setField(e.target.value);
+  if (had || S.addErr) { S.want = { k: "id", id: "pf" }; render(); }
+});
+document.addEventListener("keydown", (e) => {
+  S.kbd = true;
+  const mod = e.metaKey || e.ctrlKey, key = e.key;
+  if (mod && !e.shiftKey && key.toLowerCase() === "p") { e.preventDefault(); if (S.detached) { say("A detached window has no palette today."); return; } if (S.overlay === "palette") closeOverlay(); else if (!S.overlay) openOverlay("palette"); return render(); }
+  if (mod && e.shiftKey && key.toLowerCase() === "e") { e.preventDefault(); if (S.overlay || S.detached) return; focusTree(); return render(); }
+  if (S.menu) {
+    const items = $$("#menu button"), i = items.indexOf(document.activeElement);
+    if (key === "Escape" || key === "Tab") { e.preventDefault(); closeMenu(true); return render(); }
+    if (key === "ArrowDown" || key === "ArrowUp") { e.preventDefault(); items[(i + (key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
+    if (key === "Home" || key === "End") { e.preventDefault(); items[key === "Home" ? 0 : items.length - 1].focus(); }
+    return;
+  }
+  if (S.overlay) {
+    if (key === "Escape") { e.preventDefault(); closeOverlay(); return render(); }
+    if (key === "Tab") { // The dialog keeps focus inside it.
+      const f = $$("#win .dlg input, #win .dlg button:not([tabindex='-1'])").filter((x) => x.offsetParent !== null);
+      const i = f.indexOf(document.activeElement), j = (i + (e.shiftKey ? -1 : 1) + f.length) % f.length;
+      e.preventDefault(); f[i < 0 ? 0 : j].focus(); return;
+    }
+    const rows = overlayRows();
+    if (["palette", "remove", "hidden", "openws"].includes(S.overlay) && e.target.matches("[role=combobox]")) {
+      const mv = (n) => { e.preventDefault(); S.cur = Math.max(0, Math.min(n, rows.length - 1)); S.want = "auto"; render(); const x = rows[S.cur]; if (x) say("Highlighted: " + optName(S.overlay, x)); };
+      if (key === "ArrowDown") return mv(S.cur + 1);
+      if (key === "ArrowUp") return mv(S.cur - 1);
+      if (key === "Home" && mod) return mv(0);
+      if (key === "End" && mod) return mv(rows.length - 1);
+      if (key === "Enter" && !mod) { e.preventDefault(); pick(S.cur); if (S.overlay) S.want = "auto"; return render(); }
+      if (S.overlay === "openws" && mod && key === "Backspace") { const x = rows[S.cur]; if (x && (x.st === "gone" || x.st === "unfinished")) { e.preventDefault(); forget(S.cur); return render(); } }
+    } else if (key === "Enter" && e.target.id === "pf") { e.preventDefault(); if (mod) return; if (S.overlay === "add") doAdd(); else $('[data-act="doopen"]').click(); return render(); }
+    return;
+  }
+  const row = e.target.closest && e.target.closest("#tree [data-key]"); if (!row) return;
+  const items = flat(), i = items.findIndex((x) => x.key === row.dataset.key), it = items[i]; if (!it) return;
+  const r = it.t === "root" ? it.r : null, dir = r ? r.st === "ok" : it.t === "node" && !!it.n.kids, open = dir && S.exp.has(it.path);
+  const go = (j) => { if (items[j]) { S.focus = items[j].key; S.want = { k: "row", key: S.focus }; } };
+  let used = true;
+  if (e.altKey && r && (key === "ArrowUp" || key === "ArrowDown")) { if (r.kind === "outside") say("This folder is not part of the workspace."); else if (r.kind === "hub") say("The hub folder stays first."); else { move(r.id, key === "ArrowUp" ? -1 : 1); S.want = { k: "row", key: it.key }; } }
+  else if (mod || e.altKey && key !== "Enter") { // ⌘⌫ on a root; every other ⌘ or ⌥ key is left to the app.
+    if (mod && key === "Backspace" && r) { if (r.kind === "outside") say("This folder is not part of the workspace."); else drop(r.id); } else used = false;
+  }
+  else if (key === "ArrowDown") go(i + 1);
+  else if (key === "ArrowUp") go(i - 1);
+  else if (key === "Home") go(0);
+  else if (key === "End") go(items.length - 1);
+  else if (key === "ArrowRight") { if (dir && !open) S.exp.add(it.path); else if (dir) go(i + 1); }
+  else if (key === "ArrowLeft") { if (dir && open) S.exp.delete(it.path); else if (!r) { let j = i - 1; const lvl = it.depth; while (j >= 0 && items[j].t !== "root" && items[j].depth >= lvl) j--; if (j >= 0) go(j); } }
+  else if (key === "Enter" || key === " ") { e.preventDefault(); e.stopPropagation(); return activate(it.key, e.altKey); }
+  else if (key === "F10" && e.shiftKey && r && r.kind !== "outside") S.menu = { id: r.id, ret: { k: "row", key: it.key } };
+  else if (key === "Escape") { S.want = { k: "term" }; say("Focus is back in the terminal."); }
+  else used = false;
+  if (used) { e.preventDefault(); e.stopPropagation(); render(); }
+});
+["f3", "byhub", "det", "fbw"].forEach((id) => $("#" + id).addEventListener("change", render));
+
+/* ------------------------------------------------------------------ static parts */
+$("#scs").innerHTML = SCENARIOS.map((s) => `<button class="sc" data-sc="${s[0]}" aria-pressed="false">${h(s[1])}</button>`).join("");
+$("#cds").innerHTML = [HUB, "~/Project/acme/api/src/routes", "~/Project/acme-web", "~/Documents/design-notes", HUB + "/repos/web", HUB + "/repos/web/src", "/tmp/scratch", "/"].map((p) => `<button data-cd="${p}">cd ${h(p.replace(HUB, "<hub>"))}</button>`).join("");
+
+(function gallery() {
+  reset({ roots: [], cwd: HUB, exp: new Set([HUB]) });
+  const hub = hubRoot(), a = R("~/Project/acme/api", "disc"), b = R("~/Project/beta/api", "disc");
+  S.roots = [hub, a, b];
+  const card = (html, cap) => `<div class="card"><div class="demo">${html}</div><div class="capn">${cap}</div></div>`;
+  const st = { static: true }, nh = { static: true, noHere: true };
+  const miss = R("~/Project/acme-web", "disc", "missing"); S.roots.push(miss);
+  $("#gal").innerHTML = [
+    card(rootRow(hub, "", st), "<b>Hub folder, current root.</b> Always first. ◇ is F2's hub icon. <code>›_</code> means the own view's terminal is in this folder; it is a shape, read out as “the terminal is here”."),
+    card(rootRow(a, "acme", nh) + rootRow(b, "beta", nh), "<b>Same name, told apart.</b> The label adds the shortest part of the parent path that differs. The path follows in mono, cut from the left; it gives way first when the panel is narrow."),
+    card(rootRow(miss, "", nh), "<b>Missing.</b> The word and the path on a second line, a dashed icon, no chevron. Not red: not cloned yet is normal."),
+    card(rootRow(R("/Volumes/archive/acme-legacy", "disc", "slow"), "", nh), "<b>Missing · not answering.</b> The folder did not answer within 2 seconds. Still a missing root (F4.1): “missing” is in the word and in the name. A clock shape and the second word tell it apart; Refresh tries again."),
+    (() => { const keep = S.cwd; S.cwd = miss.path; const x = card(rootRow(miss, "", st), "<b>Missing, and the terminal is in it.</b> The current root is found by path, whatever its state, so the mark shows here and no “Not in workspace” root is added for it. Entering it checks that one folder again (P17)."); S.cwd = keep; return x; })(),
+    card(rootRow(R("/tmp/scratch", "outside"), "", nh), "<b>Not in workspace.</b> The extra root for a shell outside every workspace folder: dashed rule above, italic name, the words. Never saved; no menu."),
+    card(rootRow(R("~/Documents/design-notes", "added"), "", nh), "<b>Added by hand.</b> A folder with a plus; a checkout is a plain folder. ⌘⌫ removes this one and hides a checkout; with keyboard focus on a root, a line under the tree says which, with the whole path."),
+    card(`<div class="fb-detail" style="border-top:0"><span class="p" dir="ltr"><bdi>~/Project/acme/api</bdi></span>Checkout the hub lists · ⌘⌫ hides it</div>`, "<b>Focus detail.</b> Under the tree while a root has keyboard focus: the whole path, what the folder is, and what ⌘⌫ would do. The tooltip says the same for a pointer."),
+    card(`<div class="fb-foot" style="border-top:0">2 folders hidden · <button class="link">Show…</button></div>`, "<b>Hidden count.</b> Under the tree, outside it, only while something is hidden. Opens Hidden Workspace Folders."),
+    card(`<div class="row msg" style="padding-left:38px">Can't list this folder: no permission.</div>`, "<b>A line in the tree.</b> For a folder that cannot be listed, went since the last refresh, or is empty. It is a tree item: the arrows reach it and it is read out."),
+  ].join("");
+  const H = hostileRoots();
+  S.roots = H;
+  const L = labels(H);
+  $("#g-hostile").innerHTML = [
+    card(rootRow(H[1], L[H[1].id], nh), `<b>A right-to-left override (U+202E).</b> Applied, this name would read “reportssloot.pdf”. It is shown as a chip in place and nothing is reordered. On screen it is a chip; in the tooltip, a toast, an announcement or an accessible name it is the same text, <code>${LA}U+202E${RA}</code>, without the border.`),
+    card(rootRow(H[2], "", nh), "<b>C0 and C1 controls</b> (a bell, U+0007, and a next-line, U+0085) show the same way, in the label and in the path."),
+    card(rootRow(H[3], "", nh), "<b>A real right-to-left name</b> is shown as written, in its own isolate (<code>&lt;bdi&gt;</code>), so it cannot reorder the path or the status word beside it. Paths are always laid out left to right."),
+    card(rootRow(H[4], "", nh), "<b>Spaces that would hide.</b> Leading spaces, trailing spaces and each space after the first in a run are escaped, so two names that differ only by spaces never look alike and a name of spaces is not blank."),
+    card(rootRow(H[5], "", nh), `<b>A name that really holds “${LA}U+202E${RA}”.</b> Its own <code>${LA}</code> is escaped (U+27E8), so the escaped form can never be forged by typing it.`),
+    card(rootRow(H[6], "", nh) + rootRow(H[7], "", nh), "<b>Zero-width joiners (P3).</b> Between Latin letters a joiner is invisible and could forge a look-alike, so it is escaped. Between letters of a script that spells with it (Persian here) or between emoji it is kept."),
+    card(rootRow(H[8], "", nh), "<b>Stacked combining marks</b> are clipped to their own row and cannot draw over the rows above or below."),
+    card(`<div class="wn-line"><span class="ic">!</span><span class="tx"><b>Better Terminal could not read <code><bdi>${vis("projects/evil" + U(0x202E) + "gnp.md/ACCESS.md")}</bdi></code> (not a regular file)</b><small>The folders it names are not shown; the rest of the workspace is.</small></span></div>`, "<b>In a notice.</b> A work folder's name comes from the hub, so notices escape it too."),
+  ].join("");
+  $("#ntable").innerHTML = `<tr><th>Notice</th><th>Where</th><th>Stays until</th></tr>` + [
+    ["Rows not read, rows too broad, a file not read, folders left out, work folders skipped (WS-1 AC2, AC7; WS-9 AC1, AC2, AC5)", "The workspace notice block, in the file browser above the roots. With the file browser closed: one toast with Show Files", "Its cause is gone at a later refresh, or ✕ (per tab; comes back after a restart if still true)"],
+    ["Hub folder gone; not a finished hub right now; could not be checked (WS-6 AC3)", "A bar above the terminal, in the tab; the file browser shows the missing hub root or a single root", "Refresh finds the hub finished, or Dismiss; a Refresh that finds it unchanged shows a dismissed bar again"],
+    ["Already open: setup not run, or no persona in the tab (WS-2 AC3, P15)", "A bar above the terminal of the tab that came forward", "Dismiss, or the tab closes"],
+    ["A kept record was dropped (WS-6 AC2)", "A bar above the terminal of whichever workspace tab is in sight", "Dismiss; kept across tab close and restart until then (P18)"],
+    ["A too-broad hub folder opened as a plain tab (WS-2 AC4)", "A bar above the terminal of that plain tab", "Dismiss, or the tab closes"],
+    ["The shell is in / or the home folder (WS-5 AC3)", "A line under the tree, outside it, announced once", "The shell moves"],
+    ["Hid or removed a folder; any result while the roots are out of sight; a hub brought forward", "The app's toast, bottom right", "15 s with a button, 4 s without"],
+  ].map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("");
+})();
+
+// A scenario can be linked to: …mockup.html#notices
+start(SCENARIOS.some((x) => x[0] === location.hash.slice(1)) ? location.hash.slice(1) : "open");
+</script>
+</body>
+</html>
