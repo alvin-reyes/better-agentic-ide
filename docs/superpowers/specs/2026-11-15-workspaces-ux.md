@@ -1,9 +1,14 @@
 # Workspaces UX: one multi-folder workspace per agent hub (F4)
 
-What the engineer sees in PRD F4, "Workspaces" (`docs/prd.md`, F4, approved by
-the owner on 2026-11-10, revision 3.3, no open questions). The PRD owns every
-rule. This spec says only what is on screen, the exact words, the keys and
-the states.
+What the engineer sees in PRD F4, "Workspaces" (`docs/prd.md` on branch
+`prd-workspaces`, F4: approved by the owner at revision 3.1 on 2026-11-10 and,
+with revisions 3.4 to 3.10, on 2026-11-15; **revision 3.10 is the approved
+text**; revision 3.11, slice S0b, is pending the owner's approval; the owner
+has answered its OQ-22 yes). The PRD owns every rule. This spec says only what
+is on screen, the exact words, the keys and the states. Between 3.3, which
+draft 1 read, and 3.10, only WS-7 changed among the criteria (WS-1 to WS-6,
+WS-9 and WS-10 are word for word the same), so the only new screen is slice
+S0's line in Settings → Sync (section 26).
 
 - Where the UX needs a technical answer it is in **section 22**, marked as
   answered by the architect's proposed design, still open, or moved.
@@ -12,12 +17,14 @@ the states.
   recommended case is designed in full so the spec is complete either way.
 - Every addition beyond the PRD is listed in **section 23.3**.
 
-Status: **draft 2, in progress, 2026-11-15.** Answers the adversarial review
-of draft 1 (BLOCKED: one blocker, ten majors, thirteen minors; section 25 maps
-each finding to its answer). **Section 26, slice S0's skipped-key line in
-Settings → Sync (design D-5), is complete and stands alone**, so S0 can be
-sharded from it while the rest is revised against PRD 3.10 and design
-revision 4. Not approved; a delta review follows. Mockup:
+Status: **draft 2, complete, 2026-11-15.** Answers the adversarial review of
+draft 1 (BLOCKED: one blocker, ten majors, thirteen minors; section 25.1 maps
+each finding to its answer), against PRD F4 revision 3.10 (approved) and
+3.11 (pending), and the proposed design's revision 4 (section 25.2 maps its
+questions D-1 to D-5 and the PRD's changes). **Section 26, slice S0's
+skipped-key line in Settings → Sync (design D-5), stands alone**, so S0 can
+be sharded from it before the rest is approved. Not approved; a delta review
+follows. Mockup:
 `2026-11-15-workspaces-mockup.html` beside this file (self-contained; names
 and paths in it are invented).
 
@@ -26,10 +33,13 @@ live refresh) or **[later]** (decided not to build now, listed so it is not
 proposed again by accident).
 
 **The architect's design.** `2026-11-15-workspaces-design.md` and
-`.ade/context/workspaces.md` on branch `arch-f4` are **revision 1, proposed,
-under their own review**. This spec cites them as "the proposed design" and
-does not depend on any part of them being approved: where it leans on one,
-section 22 says what changes if that part changes.
+`.ade/context/workspaces.md` on branch `arch-f4` are **revision 4 (d8b9164),
+proposed, under their own review**; revision 5 is being written. This spec
+cites them as "the proposed design" and does not depend on any part of them
+being approved: where it leans on one, section 22 says what changes if that
+part changes. Draft 2 was begun against revision 1; revision 2 reopened six of
+its answers (the design's 18 and D-1), and this draft takes them up (section
+25.2).
 
 **Method.** The `bmad-ux` skill was not used: it is an interview that writes
 `DESIGN.md` and `EXPERIENCE.md`, and this work had fixed files, a fixed PRD
@@ -51,7 +61,15 @@ and the house form of the two specs below.
   notice, the "Hub removed" tab. F4 S1 depends on F2 slice 1.
 - **Sub-terminals UX** (`2026-11-02-sub-terminals-ux.md`): the strip and the
   notice bar above a terminal.
-- **The proposed F4 design** (above), which did not exist for draft 1.
+- **The proposed F4 design**, revision 4 (above), which did not exist for
+  draft 1: in particular its 4.1 (the record file and every way reading it
+  ends), 5.6 (the 50 limit), 7.6 (opening streams), 9.5 (the skipped keys),
+  11 (the view, the tree, the listings), 13 (the mark, the registry,
+  commands), 14 (failure modes), 18 (its answers to section 22) and 19 (its
+  questions, D-1 to D-5 for the designer).
+- **The PRD's F4 at revisions 3.10 and 3.11** (`git diff` of the F4 section
+  against 3.3), and today's `OrchestratorTab.tsx`, `SyncSettings.tsx` and
+  `sync.ts` for slice S0 (section 26).
 - F3 has a design (`2026-11-10-per-view-viewer-design.md`, ADR 0031, 0032) but
   no UX spec; F3 S1 is on `main` as tickets, with no code, at 84389eb.
 
@@ -127,6 +145,7 @@ bar shows nothing new.
 | added folder | "a folder you added" |
 | hidden folder | "hidden folder", "Hide", "Show Again" |
 | missing checkout | **Missing** |
+| a root whose check has not answered yet (the design's `checking`) | **Checking…** |
 | a root not answering in 2 s | **Missing · not answering** (a missing root with a reason, as F4.1 and WS-9 AC3 have it; 23, P16) |
 | WS-5 AC3's extra root | **Not in workspace** |
 | current root | no word on screen; the mark `›_`, read out as "the terminal is here" |
@@ -203,8 +222,9 @@ Top to bottom, in the panel that exists today (180 to 500 px wide):
    `--text-secondary`; a plain tab's breadcrumb stays as it is today
    (`--text-muted`, no glyph).
 3. **Workspace notice** (section 12.1), only when there is something to say.
-4. **Status line**, only while the hub's folders are being read or refreshed
-   (sections 7.1, 11): a spinner and one sentence, `role="status"`.
+4. **Status line**, only while the hub's folders are being read (an open or
+   a restore that has not finished, design 7.6) or refreshed (sections 7.1,
+   11): a spinner and one sentence, `role="status"`.
 5. **The tree**: root rows and, under each open root, its tree. One scroll
    area for all of it. **Nothing but tree items is inside the tree.**
 6. **Focus detail**, only while a root row has keyboard focus (5.2).
@@ -221,28 +241,30 @@ label for room.
 
 | Part | What it is |
 |---|---|
-| Chevron | 10 px, as today's folders; turned 90° when open. **No chevron** on a root that cannot open (missing) |
-| Icon | ◇ for the hub folder (F2's hub icon); today's folder icon for a checkout; **a folder with a plus** for a folder you added; a **dashed** folder outline for Missing; a **clock** for Missing · not answering |
+| Chevron | 10 px, as today's folders; turned 90° when open. **No chevron** on a root that cannot open (missing, or still checking) |
+| Icon | ◇ for the hub folder (F2's hub icon); today's folder icon for a checkout; **a folder with a plus** for a folder you added; a **dashed** folder outline for Missing; a **clock** for Missing · not answering; the small **spinner** of the status line for Checking… (still under reduced motion) |
 | Label | the folder's name, 12 px, weight 600, `--text-primary`; one line, cut with "…" at its end, never wrapped |
 | Disambiguating part | ` — acme`, weight 400, `--text-secondary`, only when two roots share a name (5.3) |
-| Path | one-line rows: after the label, mono 10 px, `--text-secondary`, cut from the left by whole segments (`…/payments/reconciliation-engine-v2`). It gives way before the label does and may go entirely at 180 px. Two-line rows: on the second line, after the word |
+| Path | one-line rows: after the label, mono 10 px, `--text-secondary`, cut from the left by whole segments (`…/payments/reconciliation-engine-v2`). It gives way before the label does and may go entirely at 180 px. Two-line rows: on the second line, after the word. A Checking… row shows the word **Checking…** (10 px, `--text-secondary`, no border) in the path's place, so the row is one line and does not grow when its answer is "there" |
 | Status word | a bordered word at the start of the second line: **Missing**, **Missing · not answering**, **Not in workspace** |
 | `›_` | at the right of the first line, `--accent`, when this is the current root |
 | `⋯` | the root's menu (6.2), for the pointer: shown on hover, 24 × 24 px, hidden from the accessibility tree. The keyboard route is ⇧F10 |
 
 - **Tooltip** (pointer): the whole path, then one line on what the folder is
-  (*Hub folder* · *Checkout the hub lists* · *Added by you* · *Not part of
-  this workspace: the terminal is here*), then for Missing: *Missing: no
+  (*Hub folder* · *Checkout listed in projects/acme/ACCESS.md* (the design's
+  `source`, 11.1, the file relative to the hub folder, escaped as section 14
+  says) · *Added by you* · *Not part of this workspace: the terminal is here*),
+  then for Missing: *Missing: no
   folder at this path on this Mac. It shows here after a refresh once it
   exists.*; for not answering: *Missing: the folder did not answer within 2
   seconds. Refresh Workspace Folders tries again.*
 - **Focus detail** (keyboard, sighted): while a root row has keyboard focus,
   a strip under the tree shows the same things without a pointer: the whole
   path (mono, wrapped, never cut), the folder's kind, and what ⌘⌫ would do:
-  *Checkout the hub lists · ⌘⌫ hides it* · *Added by you · ⌘⌫ removes it* ·
-  *Hub folder · always in the workspace*. For a missing root, its state line
-  too. It is `aria-hidden`: a screen reader gets the same text from the
-  row's description (16.1).
+  *Checkout listed in projects/acme/ACCESS.md · ⌘⌫ hides it* · *Added by you ·
+  ⌘⌫ removes it* · *Hub folder · always in the workspace*. For a missing root,
+  its state line too. It is `aria-hidden`: a screen reader gets the same text
+  from the row's description (16.1).
 - Rejected: the path only in a tooltip (a missing root needs its path in
   sight, WS-1 AC4); two lines for every root (50 roots would be 2000 px
   tall); the detail as a third line on the focused row (every row under it
@@ -280,13 +302,26 @@ in the row's accessible name.
 | **Current root** | same | same | `›_` at the right | as its state | "…, the terminal is here" |
 | **Missing** | dashed folder | `--text-secondary`, weight 500 | **Missing** (neutral) | no | "acme-web, workspace folder, missing" |
 | **Missing · not answering** | clock | `--text-secondary` | **Missing · not answering** (`--yellow`) | no | "acme-legacy, workspace folder, missing, not answering" |
+| **Checking…** (opening or restoring only) | spinner | `--text-secondary` | **Checking…** in the path's place, one line | no | "api — acme, workspace folder, checking" |
 | **Not in workspace** (WS-5 AC3's extra root) | folder | italic, weight 500 | **Not in workspace** (neutral); a dashed rule above the row | yes | "scratch, folder, not part of the workspace" |
 
-- **There is no per-root "Checking…" state.** The proposed design answers a
-  refresh or an open with the whole list at once (its section 7: within 2 s
-  when one folder hangs, 6 s at the very worst), and a root's status there
-  is `ok`, `missing` or `not_answering`. So rows never change height while a
-  refresh runs (sections 7.1, 11).
+- **Checking… is back, and only while a workspace is opened or restored.**
+  Draft 2 first removed it because the design's revision 1 answered an open
+  with the whole list at once. From revision 2 an open **streams** (design
+  7.6): the hub's root is shown at once, each other root appears as soon as
+  its row is read, and each is `checking` until its own check answers, at
+  most 2 seconds after that check started. So a root can be on screen before
+  anyone knows whether its folder is there. **On a refresh nothing is
+  Checking…**: the roots on screen stay exactly as they are until the new
+  answer (the design's first view on a refresh keeps them), so rows never
+  change height while a refresh runs (section 7.1).
+- **A Checking… row is one line,** with the word in the path's place. When its
+  answer comes, a root that is there shows its path in the same line (no
+  movement); a missing or not-answering one grows to its two lines. That
+  happens once per root, while the list is being built, before the
+  *Workspace ready* announcement. A Checking… root cannot be opened (no
+  chevron, as Missing; the design never lists it); Enter says *api — acme:
+  still being checked.* Its menu is its kind's menu.
 - **Missing is neutral, not red.** A checkout that is not cloned yet is the
   normal state on a new Mac, not an error. Clicking or pressing Enter on it
   does nothing; the screen reader hears "acme-web: missing, nothing to
@@ -355,10 +390,10 @@ no paging and no "show more". 50 closed roots are about 1300 px.
 
 - **What is cut.** Only discovered checkouts. The hub folder and the folders
   the engineer added are always shown. The checkouts left out are the last
-  ones in the workspace's order (WS-1 AC1, the saved order applied), as many
-  as it takes to show 50 roots. Hidden folders do not count. (The proposed
-  design's `assemble`, 5.6 step 5, cuts by position after the order is
-  applied, which can cut an added folder; section 22, item 15.)
+  ones **in the hub's own order** (the order of discovery, before the
+  engineer's saved order is applied), as many as it takes to show 50 roots.
+  Hidden folders do not count. This is the proposed design's rule from
+  revision 2 (its 5.6, step 4; section 22, item 15).
 - **Where the left-out ones can be seen and hidden.** The workspace notice
   counts them (12.1) and carries **Choose Folders to Hide…**, which opens
   Remove Folder from Workspace… (9.1). That dialog lists the shown roots and
@@ -370,12 +405,15 @@ no paging and no "show more". 50 closed roots are about 1300 px.
 - **Add** at 50 roots is refused (section 8).
 - **Show Again at 50 roots** is not refused (WS-3 AC3 says a hidden folder
   can be shown again in its WS-1 place). It takes its place, and the last
-  checkout in the order is then past the limit. The result line says so:
+  checkout in the hub's own order is then past the limit. The result line
+  says so:
   *api is shown again, 12 of 50. web is now past the 50-folder limit and is
   not shown.* When the folder shown again is itself the last one: *web is no
   longer hidden, but it is past the 50-folder limit, so it is not shown.*
-- **Move Up and Move Down** change the order, and so which checkouts are
-  last; the left-out set follows at once.
+- **Move Up and Move Down** change the order on screen and **never which
+  checkouts are left out** (the cut is made on the hub's own order). A
+  left-out checkout can be seen and hidden, not moved: it has no place to
+  move from.
 
 ### 5.7 A sub-terminal's view, a plain tab, and roots out of sight
 
@@ -406,6 +444,11 @@ terminal). Each case:
 | Move | cannot happen: it is done from a root row | n/a |
 | New workspace notices | *2 workspace notices* / *The file browser lists them.*, with **Show Files** when it is closed | stays where it was |
 
+**In a detached window** there is no file browser and, by the proposed
+design, no toast (13.1): a result that would be a toast there is shown in
+the bar above that window's terminal, with **Dismiss**, and said by its live
+region.
+
 ## 6. The menus
 
 Both menus: `role="menu"`, the first enabled item takes focus, ↑↓ move and
@@ -421,16 +464,28 @@ Opened by the `⋯` button in the file browser's header. Name "Workspace".
 | Item | Offered | Does |
 |---|---|---|
 | **Refresh Workspace Folders** | always, in a workspace tab | 7.1 |
-| **Add Folder to Workspace…** | while the hub is a finished hub | 8 |
-| **Remove Folder from Workspace…** | while the hub is a finished hub | 9.1 |
-| **Show Hidden Workspace Folders** | while the hub is a finished hub; a count at the right when some are hidden | 9.2 |
+| **Add Folder to Workspace…** | while the hub is a finished hub and its folders can be changed | 8 |
+| **Remove Folder from Workspace…** | same | 9.1 |
+| **Show Hidden Workspace Folders** | same; a count at the right when some are hidden | 9.2 |
 
-- **While the hub is not a finished hub for now** (WS-2 AC6, WS-6 AC3) the
-  menu holds only Refresh, under a caption that says why: *The hub folder is
-  missing.*, *Not a finished hub right now.* or *This hub could not be
-  checked.*, then *Its workspace is kept; only Refresh is offered until it
-  is back.* The caption is the Refresh item's description. The three other
-  items are absent, not greyed, as in the palette.
+- **While only Refresh is offered** (WS-2 AC6, WS-6 AC3, and the design's
+  11.1 table) the menu holds Refresh alone, under a caption that says why.
+  The caption is the Refresh item's description. The three other items are
+  absent, not greyed, as in the palette.
+
+  | The view's state (design 11.1) | Caption |
+  |---|---|
+  | `checking`, a first open or a restore | *Checking the hub folder.* *The other items are offered once it is checked.* |
+  | `hub_missing`, why `missing` | *The hub folder is missing.* *Its workspace is kept; only Refresh is offered until it is back.* |
+  | `hub_missing`, why `not_answering` | *The hub folder is not answering.* *Its workspace is kept; only Refresh is offered until it answers.* |
+  | `not_finished` | *Not a finished hub right now.* *Its workspace is kept; only Refresh is offered until it is back.* |
+  | `check_failed` | *This hub could not be checked.* *Its workspace is kept; only Refresh is offered until it can be.* |
+  | `recordState` `read_only` (design 4.1) | *The folders you added, hid or reordered can't be changed in this version.* *Only Refresh is offered; bar 6 or 7 above the terminal says why.* |
+
+  The `checking` row lasts milliseconds on a local disk and at most 2 seconds
+  (the finished-hub check's deadline, design 7.6). Once the hub is known to be
+  finished, the four items are offered even while the other roots are still
+  being read.
 - The button is absent in a plain tab, in a sub-terminal's view once F3 S1
   is on `main`, and in F2's "Hub removed" tab.
 
@@ -448,7 +503,12 @@ Opened by the row's `⋯`, by right-click, or by ⇧F10 on a focused root. Name
 | The extra root (Not in workspace) | no menu and no `⋯` |
 
 Move Up is disabled on the root just under the hub folder, Move Down on the
-last one. A missing root has the menu of its kind.
+last one. A missing or still-checking root has the menu of its kind.
+
+**While the workspace menu offers only Refresh** (6.1's table), a root has
+no menu and no `⋯`, and ⇧F10, ⌘⌫, ⌥↑ and ⌥↓ on it change nothing: the polite
+region says the caption's first sentence (for example *The folders you
+added, hid or reordered can't be changed in this version.*).
 
 The row menu says **Hide** or **Remove**, the exact thing that will happen;
 the palette's one entry covers both and its dialog says which per row (9.1).
@@ -462,11 +522,11 @@ can name them. No workspace entry has a shortcut.
 | Label | Slice | Offered | Hidden |
 |---|---|---|---|
 | **Refresh Workspace Folders** | S1 | the tab in sight is a workspace tab | plain tab, non-terminal tab, "Hub removed" tab |
-| **Add Folder to Workspace…** | S1 | workspace tab **and** its hub is a finished hub | as above, and while the hub is gone, not finished or could not be checked |
+| **Add Folder to Workspace…** | S1 | workspace tab **and** its hub is a finished hub **and** its folders can be changed | as above, and in every state of 6.1's table (checking, gone, not answering, not finished, not checked, read-only record) |
 | **Remove Folder from Workspace…** | S1 | same | same |
 | **Show Hidden Workspace Folders** | S1 | same | same |
 | **Open Workspace…** | [S2] | wherever F2's entries are (macOS, the main Better Terminal, any tab) | Windows, Linux, an engagement instance |
-| **Focus File Browser** `⌘⇧E` | S1 | every tab; category **Panels**, beside **Toggle File Browser** | never (section 15; an owner question, 23, O1) |
+| **Focus File Browser** (`⌘⇧E` on macOS) | S1 | every tab, every platform; category **Panels**, beside **Toggle File Browser** | never (section 15; an owner question, 23, O1) |
 
 "The tab in sight", not the view: with a sub-terminal in sight the four
 entries are still there. Typing "workspace" or "folder" finds them (the
@@ -484,7 +544,9 @@ the workspace menu, the header's Refresh button.
   exactly as they are**: no row is cleared, redrawn or re-marked until the
   answer is in, so nothing moves.
 - **Asked again while one runs** (any of the three ways): nothing more
-  starts, and the polite region says *Already refreshing.*
+  starts, and the polite region says *Already refreshing.* Asked while a
+  first open or a restore is still reading (design 7.6, the same job): the
+  same, with *Already reading the hub's folders.*
 - **When it ends**, the polite region says the result once: *Workspace
   folders refreshed: 5 folders, 1 missing.* (*2 missing (1 not answering)*
   when so). With the roots in sight that is all; out of sight it is also a
@@ -539,11 +601,19 @@ Workspace**. Its accessibility is in 16.2.
 | 8 | Already a root (path rule) | `<path> is already in this workspace.` |
 | 9 | A checkout of this hub that is hidden | `<path> is a checkout of this hub that you hid.` + **Show It Again** (does 9.2's action and closes the dialog; 23, P1) |
 | 10 | Over the limit (WS-9 AC1) | `This workspace already has 50 folders, the most it can hold. Remove or hide one to add another.` |
-| 11 | The change could not be saved | `Better Terminal could not save this change, so nothing was added. Check free disk space, then try again.` |
+| 11 | The hub stopped being a finished hub while the dialog was open (`not_finished`) | `The hub is not a finished hub right now, so nothing was added. The bar above the terminal says why.` |
+| 12 | The record is read-only for this run (`record_read_only`, design 4.1) | `The folders you added, hid or reordered can't be changed in this version, so nothing was added. The bar above the terminal says why.` |
+| 13 | The change could not be saved (`not_saved`) | `Better Terminal could not save this change, so nothing was added. Check free disk space, then try again.` |
 
 `<path>` is the text as typed, escaped as section 14 says. Rows 3, 5 and 6
-are F2's wording (its 6.3), so the two forms read alike. The proposed design
-has fewer refusal codes than rows (section 22, item 16).
+are F2's wording (its 6.3), so the two forms read alike. Rows 1 to 3 are
+checked in the dialog; rows 4 to 13 are the proposed design's refusal codes,
+one each (its 13.4: `not_answering`, `missing`, `not_a_folder`, `too_broad`,
+`already_a_root`, `hidden_checkout`, `over_limit`, `not_finished`,
+`record_read_only`, `not_saved`; section 22, item 16). Rows 11 and 12 are
+reached only when the state changes while the dialog is open: in those
+states the entry that opens it is not offered (6.1). After row 11 or 12 the
+dialog stays open; **Cancel** is the only way on.
 
 **Added.** The dialog closes and **focus goes back to where it was before
 the dialog** (the tree row, the menu button or the terminal), not to the new
@@ -588,12 +658,21 @@ hide or remove a folder.
 **No confirm; a toast with a way back.** Hiding is undone from the hidden
 list, and an added folder can be added again, so a confirm would only slow
 the common case. The toast says what happened and carries one button for
-15 s (23, P8):
+15 s (23, P8). The proposed design keeps the last removal of each hub for 60
+seconds (its 18, item 6), longer than the toast lives:
 
 | After | Title | Body | Button |
 |---|---|---|---|
 | hiding a checkout | `Hid <label>` | `The hub still lists it. Show Hidden Workspace Folders brings it back.` | **Show Again** |
 | removing an added folder | `Removed <label> from the workspace` | `The folder itself is untouched.` | **Add Back** (to its old place) |
+
+**Show Again** puts the checkout back in its WS-1 place, always. **Add Back**
+puts the folder back at its old place when the folders have not been added
+to or reordered since (the design's `placed: "same"`); the polite region
+says *design-notes is back in its place, 5 of 5.* Otherwise (`placed:
+"last"`) it is added last, and a 4-second toast says so: *Added design-notes
+back as the last folder* / *The folders changed since it was removed, so its
+old place was not kept.*
 
 After ⌘⌫ in the tree, focus goes to the next root (the previous one when it
 was last). From the dialog, focus goes back to where it was before the
@@ -602,9 +681,11 @@ terminal is inside the folder just hidden or removed, the folder comes back
 at once as the extra root, **Not in workspace** (WS-5 AC3), because the
 terminal is still there (23, P6).
 
-If the change cannot be saved, nothing changes and a toast says so: *Could
-not save the change* / *The workspace is as it was. Check free disk space,
-then try again.*
+If the change cannot be saved (`not_saved`), nothing changes and a toast
+says so: *Could not save the change* / *The workspace is as it was. Check
+free disk space, then try again.* The view also carries the design's
+`not_saved` notice, so the same is a line of the workspace notice (12.1)
+until a later change is saved.
 
 ### 9.2 Show Hidden Workspace Folders
 
@@ -641,7 +722,7 @@ root focused. Focus stays on the moved root; the polite region says *api —
 beta moved up, now 2 of 5.* At a limit nothing moves and it says *api — beta
 is already first after the hub folder.* or *… is already last.* On the hub
 folder: *The hub folder stays first.* On the extra root: *This folder is not
-part of the workspace.*
+part of the workspace.* While only Refresh is offered: 6.2's last paragraph.
 
 There is **no palette entry** for reordering: the PRD names four S1 entries,
 and a palette move would need a "which folder, which way" step that is
@@ -659,13 +740,28 @@ need the keys anyway.
   switch or the run tab's commit, and ⌘B closes it as always. The file
   browser's open state is one setting for the app, so it then stays open for
   other tabs too, exactly as after ⌘B.
-- **While the hub's folders are being read**, only what is known shows: the
-  hub's root (its path is the tab's mark), open, and, once reading has taken
-  300 ms, the status line *Reading the hub's folders…* above the tree. No
-  other root is drawn until discovery answers; then they all appear and the
-  polite region says *Workspace ready: 5 folders, 1 missing.* Discovered
-  checkouts are never stored (WS-1 AC5), so there is nothing to draw
-  earlier.
+- **While the hub's folders are being read** (an open or a restore; the
+  design's open job streams, its 7.6), only what is known shows, in steps:
+  1. At once: the hub's root (its path is the tab's mark), **Checking…**,
+     closed. Only Refresh is offered (6.1).
+  2. The finished-hub check answers (at most 2 s): the hub's root becomes an
+     ordinary root and opens to its top level; or the tab takes the state of
+     12.2 (bars 2 to 4) and stops here.
+  3. Each other root appears **when its row is read**, in its WS-1 place,
+     **Checking…**, and takes its state when its own check answers (5.4).
+     Discovered checkouts are never stored (WS-1 AC5), so nothing can be
+     drawn before its row is read. A root that arrives above the row that
+     has focus does not move focus, and nothing scrolls.
+  4. Once reading has taken 300 ms, the status line *Reading the hub's
+     folders…* shows above the tree until the final view.
+  5. The final view (at most 10 s after the check, then 2 s for the jobs
+     running at the cut; design 7.6): the polite region says *Workspace
+     ready: 5 folders, 1 missing.* once. If discovery was cut at 10 s, the
+     roots it did not check are **Missing · not answering** and the notice
+     says so (12.1, `cut_short`).
+
+  On a local disk all of this takes milliseconds and the engineer sees the
+  final list; the steps matter on a slow or dead volume.
 - **F2's run tab** (WS-2 AC7) becomes a workspace tab when the run commits
   `hub.conf`: its file browser, if open, changes from one root to the
   workspace's roots in place, and the polite region says *Workspace ready: 3
@@ -711,7 +807,22 @@ the tab that came forward:
   message names both (23, P7). Which spec owns this copy, F2's or this one,
   is 23, P20; until answered it is written here and nowhere else.
 - The toast for the other routes is an addition (23, P8).
-- When the tab that came forward is in a detached window: 13.1.
+- When the tab that came forward is in a detached window: 13.1. There, a
+  toast row above becomes a bar with the same words and **Dismiss** (the
+  proposed design mounts no toast there, its 18 item 20).
+- **When every tab of the hub is in a detached window** and the route is
+  Open Hub (design P-3; 23, P13, recommended): the detached tab comes
+  forward, nothing starts, and its bar is **D**:
+
+> **D.** This hub is already open in this window, which does not show its
+> folders. To see them, open the hub's folder from the main window's New tab
+> dialog; it opens with a plain shell, and this tab keeps running.
+
+- **When every tab of the hub is in a detached window** and the route is a
+  hub folder (New tab dialog, Open project, recent projects): the
+  recommended case makes one more plain-shell workspace tab in the main
+  window, which shows the roots; nothing more is said. With the PRD's text
+  (P13's "no"), the detached tab comes forward with bar D's first sentence.
 
 ### 11.2 Not a hub (WS-2 AC4)
 
@@ -730,6 +841,48 @@ dialog refuses it under its field, starting nothing: *<path> is too broad to
 open as a hub: Better Terminal opens no workspace on /, your home folder, a
 whole volume, or a folder that holds its own data.* If the answer is "open
 it": a hub tab with F2's flag and no workspace mark, and the bar above.
+
+**A folder with a `hub.conf` that is not a finished workspace**, from the New
+tab dialog, Open project or recent projects (the design's `plain` answer
+with `hasHubConf`, its 13.3):
+
+- **The check failed** (`check_failed`): the proposed design opens it the way
+  it opens today and shows a notice, so a plain tab with bar 10 (12.2):
+  *This folder has a hub.conf, but Better Terminal could not check whether it
+  is a finished hub: <why>. It opened as a plain tab.*
+- **Not finished**: by the PRD's "as today" (WS-2 AC4), today's path, which
+  asks the methodology question and may set the folder up as a project, and
+  no F4 bar. The design recommends skipping the setup questions whenever a
+  `hub.conf` is there (its P-5, for the product manager). If that is chosen,
+  the plain tab gets bar 9: *This folder has a hub.conf but is not a finished
+  hub right now: <why>. It opened as a plain tab, and Better Terminal did not
+  set it up as a project.*
+
+**Open Hub where F2's check and F4's disagree** (the design's 13.2: a linked
+worktree, a `hub.conf` committed as a link, a repository format F4 does not
+read): F2 opens its hub tab and starts the persona; F4 gives the tab no
+mark. That tab shows one root, the hub's own, and bar 11: *The persona is
+running, but Better Terminal could not open this hub's workspace: <why>.
+The file browser shows the hub folder only.* A second Open Hub still brings
+this tab forward (13.2's step 3).
+
+### 11.3 A second open while the first is still being made (design D-3)
+
+Two opens of one hub at almost the same moment (a double click on a recent
+project, Open Hub pressed while the New tab dialog's open of the same hub is
+under way): the second gets the design's `opening` and waits, normally
+milliseconds, at most 10 s, then brings the first one's tab forward
+(11.1's toast) or, if the first failed, opens the hub itself.
+
+- **Under 1 second: nothing is shown.** That is nearly every case.
+- **Past 1 second**, the polite region says once *Opening acme-staff-engineer…*,
+  and if the surface that asked is still on screen with a primary button
+  (F2's Open Hub dialog; [S2] Open Hub Folder…), that button reads
+  **Opening…** and is `aria-disabled` until the wait ends. The New tab
+  dialog and the recent projects list have closed by then, so they show
+  nothing.
+- The wait never ends in an error of its own: it ends in the first open's
+  tab, or in this open.
 
 ## 12. Notices
 
@@ -757,18 +910,27 @@ height and scrolls inside itself.
 | Cause | First sentence | Second sentence |
 |---|---|---|
 | WS-1 AC2: `~name/…` rows | `1 row names a path Better Terminal does not read` · `3 rows name paths Better Terminal does not read` | `In projects/acme/ACCESS.md.` (several files: `In ACCESS.md (1) and projects/acme/ACCESS.md (2).`) `A Checkout cell may start with /, or with ~ alone or ~/; ~name/… is not read.` |
-| WS-9 AC5: too-broad rows | `1 row names a folder too broad to show` · `3 rows name folders too broad to show` | `A workspace folder can't be /, your home folder, a whole volume, or a folder that holds Better Terminal's own data.` |
-| WS-1 AC7, WS-9 AC2: a file not read | `Better Terminal could not read projects/beta/ACCESS.md (<reason>)` | `The folders it names are not shown; the rest of the workspace is. Folders you hid from it stay hidden.` |
-| WS-9 AC1: over 50 | `10 folders not shown` · `1 folder not shown` | `A workspace shows at most 50 folders: the hub folder, the folders you added, and the first checkouts in its order. Hide some to see the others.` **Choose Folders to Hide…** (5.6) |
-| WS-9 AC2: over 200 work folders | `12 work folders skipped` | `Better Terminal reads the ACCESS.md of at most 200 work folders.` |
+| WS-9 AC5: too-broad rows (`too_broad`) | `1 row names a folder too broad to show` · `3 rows name folders too broad to show` | `In ACCESS.md (1) and projects/acme/ACCESS.md (2).` (one file: `In projects/acme/ACCESS.md.`) `A workspace folder can't be /, your home folder, a whole volume, or a folder that holds Better Terminal's own data.` |
+| WS-1 AC7, WS-9 AC2: a file not read (`file_unreadable`) | `Better Terminal could not read projects/beta/ACCESS.md (<reason>)` | `The folders it names are not shown; the rest of the workspace is. Folders you hid from it stay hidden.` |
+| WS-9 AC1: over 50 (`not_shown`) | `10 folders not shown` · `1 folder not shown` | `A workspace shows at most 50 folders: the hub folder, the folders you added, and the first checkouts the hub lists. Hide some to see the others.` **Choose Folders to Hide…** (5.6) |
+| WS-9 AC2: over 200 work folders (`work_folders_skipped`) | `12 work folders skipped` | `Better Terminal reads the ACCESS.md of at most 200 work folders.` |
+| Over 500 checkout rows in one hub (`rows_over_limit`, design 5.4 and its P-13) | `37 checkout rows not read` · `1 checkout row not read` | `Better Terminal reads at most 500 checkout rows in one hub's ACCESS.md files; the rows after those are not shown.` |
+| Discovery stopped at 10 s (`cut_short`, design 7.6) | `Reading the hub's folders stopped after 10 seconds` | `Folders not checked by then are shown missing, not answering, and files not read are listed here. Refresh Workspace Folders tries again.` |
+| A change could not be saved (`not_saved`, design 4.1) | `Your last change to the folders was not saved` | `The workspace is as it was. Check free disk space, then try again.` |
 
 `<reason>` is one of: `no permission` · `not a regular file` · `not UTF-8
-text` · `larger than 1 MB` · `not answering` · otherwise the system's own
-message. One line per file that could not be read. The too-broad line names
-no file: the proposed design's notice carries only a count (its 11.1).
+text` · `larger than 1 MB` · `it did not answer within 2 seconds` · `it
+could not be read` (the design's `file_unreadable` reasons, its 11.1; codes,
+never the system's message, so no path can reach the screen through one).
+One line per file that could not be read; **when more than three files share
+a reason** (a cut at 10 s can leave many), one line for them: `Better Terminal
+could not read 12 of the hub's ACCESS.md files (<reason>)`, with the files
+named in its second sentence, wrapped, before the usual one. The too-broad
+line names its files, with a count each, as the `~name` line does (design
+revision 2 gave the notice its files).
 
-- **How long.** A line stays until a later refresh finds its cause gone, or
-  until its ✕. A dismissed line stays away for that tab while its text is
+- **How long.** A line stays until a later refresh finds its cause gone
+  (for `not_saved`: until a later change is saved), or until its ✕. A dismissed line stays away for that tab while its text is
   the same; if the count or the file changes it shows again. Dismissals are
   not saved: after a restart, discovery runs again and a cause that is still
   there shows again. After ✕, focus goes to the next line's ✕, or to the
@@ -798,22 +960,51 @@ focus goes to the terminal.
 | # | Cause | Text | Buttons | Goes when |
 |---|---|---|---|---|
 | 1 | WS-2 AC3: already open | 11.1's A, B or C | **Dismiss** | Dismiss; the tab closes |
-| 2 | WS-6 AC3: hub folder gone | `The hub folder <path> is missing: deleted, moved, or on a volume that is not connected. Its workspace is kept and comes back when the folder does.` | **Refresh Workspace Folders** · **Dismiss** | a refresh finds a finished hub; Dismiss; the tab closes |
-| 3 | WS-6 AC3: not finished for now | `<path> is not a finished hub right now: <why>. Its workspace is kept and comes back when it is.` | **Refresh Workspace Folders** · **Dismiss** | same |
-| 4 | The check failed (the proposed design's third outcome, its 8 and Q4) | `Better Terminal could not check whether <path> is a finished hub: <why>. Its workspace is kept; this tab shows one folder until a refresh can check it.` | **Refresh Workspace Folders** · **Dismiss** | same |
-| 5 | WS-6 AC2: a kept record dropped | `Better Terminal keeps the folders you added, hid or reordered for 200 workspaces. To make room, it dropped them for <dropped hub's path>, the one opened longest ago. If you open that hub again, its workspace starts from the hub's own list.` Several: `…it dropped them for 3 hubs, the ones opened longest ago: <path>, <path> and <path>. If you open one of them again, its workspace starts from the hub's own list.` | **Dismiss** | Dismiss, and only Dismiss (below) |
-| 6 | The record could not be read (the proposed design's 14) | `Better Terminal could not read the folders you added, hid or reordered, so every workspace starts from its hub's own list. The unreadable file was set aside, not deleted.` | **Dismiss** | Dismiss |
-| 7 | The record is from a newer version (the proposed design's 14) | `The folders you added, hid or reordered were saved by a newer Better Terminal. This version leaves them untouched: they are not applied, and changes you make now are not kept after you quit.` | **Dismiss** | Dismiss; shows again at the next start while true |
+| 2 | WS-6 AC3: hub folder gone (`hub_missing`, why `missing`) | `The hub folder <path> is missing: deleted, moved, or on a volume that is not connected. Its workspace is kept and comes back when the folder does.` | **Refresh Workspace Folders** · **Dismiss** | a refresh finds a finished hub; Dismiss; the tab closes |
+| 2b | The hub folder does not answer (`hub_missing`, why `not_answering`; F4.1 counts it as missing) | `The hub folder <path> did not answer within 2 seconds, so it is shown as missing. Check that its volume is connected. Its workspace is kept and comes back when the folder answers.` | **Refresh Workspace Folders** · **Dismiss** | same |
+| 3 | WS-6 AC3: not finished for now (`not_finished`) | `<path> is not a finished hub right now: <why>. Its workspace is kept and comes back when it is.` | **Refresh Workspace Folders** · **Dismiss** | same |
+| 4 | The check failed (`check_failed`, the design's third outcome, its 8 and P-7) | `Better Terminal could not check whether <path> is a finished hub: <why>. Its workspace is kept; this tab shows one folder until a refresh can check it.` | **Refresh Workspace Folders** · **Dismiss** | same |
+| 5 | WS-6 AC2: a kept record dropped (`record_dropped`) | `Better Terminal keeps the folders you added, hid or reordered for 200 workspaces. To make room, it dropped them for <dropped hub's path>, the one opened longest ago. If you open that hub again, its workspace starts from the hub's own list.` Several: `…it dropped them for 3 hubs, the ones opened longest ago: <path>, <path> and <path>. If you open one of them again, its workspace starts from the hub's own list.` | **Dismiss** | Dismiss, and only Dismiss (below) |
+| 6 | The record did not parse (`record_unreadable`, `recordState` `ok`; design 4.1: moved aside) | `Better Terminal could not read the folders you added, hid or reordered, so every workspace starts from its hub's own list. The unreadable file was set aside, not deleted.` | **Dismiss** | Dismiss; the first change saved |
+| 6b | The record could not be read for another reason (`record_unreadable`, `recordState` `read_only`: no permission, an I/O error) | `Better Terminal could not read the folders you added, hid or reordered, so every workspace starts from its hub's own list, and they can't be changed until it can. The file was left as it is.` | **Dismiss** | Dismiss; shows again at the next start while true |
+| 7 | The record is from a newer version (`record_newer`, `read_only`) | `The folders you added, hid or reordered were saved by a newer Better Terminal. This version leaves them untouched and does not apply them: folders you added are not shown, folders you hid are, and none can be changed here.` | **Dismiss** | Dismiss; shows again at the next start while true |
 | 8 | WS-2 AC4: too-broad hub folder | 11.2's text | **Dismiss** | Dismiss; the tab closes |
+| 9 | [only if the design's P-5 is chosen] a folder with `hub.conf`, not finished, from the New tab dialog | 11.2's text for it | **Dismiss** | Dismiss; the tab closes |
+| 10 | A folder with `hub.conf` whose check failed, from the New tab dialog (design 13.3) | 11.2's text for it | **Dismiss** | Dismiss; the tab closes |
+| 11 | Open Hub's tab, which F4 could not mark (design 13.2) | 11.2's text for it | **Dismiss** | Dismiss; the tab closes |
+| D | WS-2 AC3 in a detached window, every tab of the hub detached (P13) | 11.1's D | **Dismiss** | Dismiss; the tab closes |
 
-`<why>` for bar 3: `it has no hub.conf` · `it is not the top of its own git
-repository` · `its .git is a file, not a folder` · `its repository has no
-commit yet` · `hub.conf is not committed` · `hub.conf is not committed as a
-file`. For bar 4: `its repository uses a format Better Terminal does not
-read` · `part of its repository is not on this Mac` · `its repository could
-not be read` · `the folder did not answer within 2 seconds`. (One sentence
-per reason code of the proposed design's 11.1; bars 4, 6 and 7 exist only if
-that design keeps those outcomes.)
+Bars 6b and 7 make the record read-only for this run (design 4.1): only
+Refresh is offered (6.1), and Add's row 12 refuses if reached. Wherever
+this spec names "bars 2 to 4", bar 2b is one of them.
+
+`<why>`, one fixed phrase per reason code of the proposed design's 11.1 (none
+holds a path):
+
+| Code | `<why>` |
+|---|---|
+| `not_finished`: `not_a_folder` | `it is not a folder` |
+| `no_hub_conf` | `it has no hub.conf` |
+| `no_repository` | `it is not the top of its own git repository` |
+| `no_commit` | `its repository has no commit yet` |
+| `not_committed` | `hub.conf is not committed` |
+| `not_a_file` | `its hub.conf is not a plain file` |
+| `check_failed`: `git_file` | `its .git is a file (a linked worktree or a submodule), which Better Terminal does not read` |
+| `git_link` | `its .git is a link, which Better Terminal does not follow` |
+| `link_in_git` | `its repository holds a link, which Better Terminal does not follow` |
+| `reftable` | `its repository stores its branches as reftable, which Better Terminal does not read` |
+| `pack_index_v1` | `its repository uses an old pack format Better Terminal does not read` |
+| `too_many_packs` | `its repository has more than 200 pack files` |
+| `delta_too_deep` | `part of its repository is stored in a form Better Terminal does not read` |
+| `packed_refs_too_large` | `its packed-refs file is larger than 16 MB` |
+| `object_too_large` | `its last commit is larger than Better Terminal reads` |
+| `object_missing` | `part of its repository is not on this Mac` |
+| `damaged` | `its repository could not be read` |
+
+Each is short enough for the bar and says what the engineer can look at;
+the design's limits (200 packs, 16 MB) are named where a number helps.
+The not-answering case is no longer a `check_failed` reason: it is bar 2b
+(design revision 2).
 
 **When two causes meet.** The bars **stack**, one per cause, in the order of
 the table: first the answer to what the engineer just did, then the tab's
@@ -827,7 +1018,10 @@ with several paragraphs (one Dismiss would dismiss what was not read).
 its waiting notices. F4 does not stack under it: **while F2's run bar or a
 run notice shows in a tab, F4 shows no bar there** and shows its own when
 F2's has gone. Only bars 5 to 7 can meet a run (the run tab becomes a
-workspace tab at its commit), and they wait without loss.
+workspace tab at its commit), and they wait without loss. The proposed
+design builds this as one per-tab store and one bar component with a fixed
+order of kinds, the order of the table above, and F2's run notice as an
+"exclusive" kind (its 18, item 4).
 
 **Dismissing bars 2 to 4** does not change the state: the workspace menu's
 caption (6.1) and the file browser still show it, and a Refresh that finds
@@ -867,9 +1061,14 @@ plain text (section 14). A toast is also said by the polite region.
 | Restored by a refresh, roots out of sight | `Workspace restored` | `5 folders, 1 missing.` | none |
 | New notice lines, roots out of sight | `2 workspace notices` · `1 workspace notice` | `The file browser lists them.` · `The file browser shows it.` | **Show Files**, when the file browser is closed |
 | A hub brought forward (11.1's toast rows) | `This hub is already open` | `Showing its tab.` | none |
+| Add Back could not keep the old place | `Added <label> back as the last folder` | `The folders changed since it was removed, so its old place was not kept.` | none |
 | A change could not be saved | `Could not save the change` | `The workspace is as it was. Check free disk space, then try again.` | none |
 
 **Show Files** opens the file browser and leaves focus where it is.
+
+The proposed design raises these through one window event, `workspace-toast`,
+which `App.tsx` shows with its `showToast` (its 18, item 5). A detached
+window has no toast host: there the same words are a bar (5.7, 13.1).
 
 ## 13. A workspace tab, a plain tab and F2's hub tab
 
@@ -894,24 +1093,37 @@ its source in every column above.
 
 Draft 1 said such a tab "looks the same as its source". That was wrong. A
 detached window has no file browser, palette, toast, strip, notice bar or
-live region today (section 1, fact 5), for any tab, so none of F4's surfaces
-exist there. The proposed design (its 13.2) keeps the tab's mark, counts it
-as open for bring-forward and for WS-1 AC8, shows no roots there, and adds
-nothing to the window.
+live region today (section 1, fact 5), for any tab. The proposed design,
+revision 4, keeps the tab's mark, counts it as open for bring-forward and for
+WS-1 AC8, shows no roots there, and **mounts two of F4's hosts in the
+detached window: the bar above the terminal (`TabNoticeBar`) and a polite
+live region (`announce.ts`)**, but no toast (its 13.2, and 18 items 4, 5 and
+20). Draft 2 had recommended exactly those two plus the toast; the toast is
+dropped here, because the bar can carry the same words.
 
-What a detached workspace tab shows, and how WS-2 AC3, WS-6 AC3 and WS-6 AC4
-are met there, is a product decision: **23, P13**. The recommended case,
-designed here in full (mockup: `detached`, `detachedgone`):
+What a detached workspace tab shows (mockup: `detached`, `detachedgone`):
 
-| | Recommended: the detached window gains three hosts | If the answer is "add nothing" |
-|---|---|---|
-| Added to `DetachedApp` | F4's bar above the terminal (12.2), the app's toast, a polite live region. **No** file browser, **no** palette, **no** workspace menu | nothing |
-| The roots (WS-6 AC4 "the same roots") | not shown, as no tab's files are shown there. The tab is a tab of the same workspace: it keeps its mark, and its roots show again wherever the tab has a file browser. F3's slice S3 is the work that gives a detached window a viewer | the same |
-| WS-2 AC3, the tab brought forward is here | the window is raised and focused; 11.1's bar or toast shows in it | the window is raised and focused. 11.1's words are shown **in the window that asked** (the main window, the only one with Open Hub or a New tab dialog), as a toast with **Dismiss** so it lasts 15 s: title *This hub is already open in another window*, body *Showing that window.* and, when it applies, A's, B's or C's second sentence |
-| WS-6 AC3 and WS-2 AC6 "only Refresh" | bars 2 to 4 show here, and their **Refresh Workspace Folders** button is the one workspace action the window has | no sign in this window. The state shows in any main-window tab of the same workspace; with none, it is unseen until the tab is closed and the hub opened again. This is why "add nothing" is not recommended |
-| Bar 5 (a dropped record) | may show here | never here; it waits for a workspace tab in the main window (12.2) |
-| Add, Remove, Show Hidden, Move | not offered: there is no palette and no file browser. A Duplicate of the tab in the main window has them | the same |
-| Keys | ⌘⇧E and ⌘P do nothing here, as ⌘B does nothing here today | the same |
+| | In a detached window |
+|---|---|
+| The roots (WS-6 AC4 "the same roots") | not shown, as no tab's files are shown there. The tab is a tab of the same workspace: it keeps its mark, and its roots show again wherever the tab has a file browser (back in the main window, or a Duplicate there). F3's slice S3 is the work that gives a detached window a viewer |
+| WS-2 AC3, the tab brought forward is here | the window is raised and focused; 11.1's bar shows in it, and a row that is a toast in the main window is a bar here, with **Dismiss**. When every tab of the hub is detached and the route is Open Hub: bar **D** (11.1) |
+| WS-6 AC3 and WS-2 AC6 "only Refresh" | bars 2 to 4 show here, and their **Refresh Workspace Folders** button is the one workspace action the window has |
+| Bars 5 to 7 (the record) | may show here, as in any window that can show a bar (12.2) |
+| Results of actions, notices of 12.1 | none can start here: no palette, no file browser |
+| Add, Remove, Show Hidden, Move | not offered. A Duplicate of the tab in the main window has them |
+| Announcements | the bar's text, once, through this window's own live region |
+| Keys | ⌘⇧E and ⌘P do nothing here, as ⌘B does nothing here today |
+
+What is still a product question (**23, P13**, narrowed): which tab comes
+forward when the hub has tabs in both kinds of window, and what happens when
+it has tabs only in detached windows (the design's P-3, which asks the
+product manager and the designer). The default built is the PRD's text, the
+most recently used tab in any window. Recommended: the most recently used
+tab **in a window that shows roots**; when there is none, 11.1's last two
+paragraphs (Open Hub: bar D; a hub folder: one more plain-shell tab in the
+main window). And WS-6 AC4's "the same roots" needs one sentence for Move to
+New Window, read as "the tab keeps its mark and shows the same roots wherever
+it has a file browser".
 
 Whether a detached window's tab is saved and restored at all is the
 session's matter, not F4's; the proposed design says the session is written
@@ -1019,9 +1231,29 @@ in the tree exactly what they do today. The Add Folder dialog also stops ⌘↵
 
 Without it the tree cannot be reached without a mouse.
 
-| Keys (macOS / Linux) | Action | Note |
+| Keys | Action | Note |
 |---|---|---|
-| ⌘⇧E / Ctrl+Alt+Shift+E | **Focus File Browser**: shows it if closed and moves focus into it | new id `focusFiles`; ⌘⇧E is unbound (⌘E is `sendEnter`). Owner question (23, O1) |
+| ⌘⇧E, **macOS only** | **Focus File Browser**: shows it if closed and moves focus into it | new id `focusFiles`, matched only when `IS_MAC` (design 18, item 10), so no key is taken from a shell on Linux or Windows. Owner question (23, O1) |
+
+**The clash check** (at `origin/main` 84389eb):
+
+- `SHORTCUTS` (`shortcuts.ts:24` to `:58`) has `sendEnter` on ⌘E and no entry
+  on ⌘⇧E. `matches` requires `shiftKey` to equal the entry's `shift`
+  (`:91`), so ⌘⇧E is not ⌘E with Shift: `sendEnter` and the scratchpad's own
+  ⌘E (`Scratchpad.tsx:1105`) do not fire on it.
+- No component reads ⌘⇧E itself: the scratchpad (`:1083` to `:1111`, its
+  ⌘↵, ⌘⇧↵, ⌘E, ⌘S), the detached window's handler (`DetachedApp.tsx:57` to
+  `:60`, ⌘J and ⌘↵ only), the terminal's search (`TerminalPane.tsx:86`, ⌘F),
+  the terminal's key filter (`useTerminal.ts:433`, which passes every app
+  shortcut to the window) and the other key listeners in `src/` handle
+  plain keys or other combinations.
+- The code editor keeps "its standard keys" (`docs/guide/shortcuts.md`); it
+  binds nothing on ⌘⇧E, and the window's listener sees the key there as it
+  does every app shortcut. In VS Code, which the guide compares the editor
+  to, ⌘⇧E is the same thing: focus the file explorer.
+- macOS has no system shortcut on ⌘⇧E.
+- On Linux the ⌘⇧ form would be Ctrl+Alt+Shift+E, which no entry uses
+  either; it is not bound, by the design's choice above.
 
 - **In a workspace view** focus lands on the active folder's row under the
   current root; else on the current root; else on the first root. Coming
@@ -1032,11 +1264,16 @@ Without it the tree cannot be reached without a mouse.
   `.*`. If plain tabs gain the tree (23, P11) it lands on a row there too.
 - **While a dialog or the palette is open** it does nothing. With a menu
   open it closes the menu first.
+- **The palette entry** **Focus File Browser** (category **Panels**, beside
+  **Toggle File Browser**) is offered on every platform; it shows ⌘⇧E on
+  macOS and no key elsewhere. It is useful in any tab, and offering it
+  everywhere costs no key.
 - **It must be listed where shortcuts are listed**: in the shortcuts help
   (`src/lib/shortcutList.ts`, group "Panels & tools", after "File browser":
-  action **Focus file browser**, short **Focus files**) and in
+  action **Focus file browser**, short **Focus files**, on macOS only) and in
   `docs/guide/shortcuts.md` (the Panels table, after "File browser": **Focus
-  file browser**, ⌘⇧E, Ctrl+Alt+Shift+E).
+  file browser**, `mac="⌘⇧E"`, and *macOS only* where the other platforms'
+  key goes).
 
 ### 15.3 In the tree (focus on a row)
 
@@ -1049,7 +1286,7 @@ Without it the tree cannot be reached without a mouse.
 | ↵ or Space | on a folder or root: open or close; on a file: open it in the side panel; on a missing root: nothing (announced) |
 | ⌥↵ | on a file: open it in a file tab (as ⌘-click does) |
 | ⌥↑ / ⌥↓ | on a root: Move Up or Move Down (section 10) |
-| ⌘⌫ | on a root: Hide or Remove (9.1); on the hub folder or the extra root: nothing (announced); on anything else: nothing |
+| ⌘⌫, or Delete (forward delete, fn⌫) | on a root: Hide or Remove (9.1); on the hub folder or the extra root: nothing (announced); on anything else: nothing. Delete is the key the sub-terminal strip already uses to close a view (`SubTerminalStrip.tsx:155`), so the two lists of things answer the same key. Plain ⌫ does nothing |
 | ⇧F10 | on a root: its menu (VoiceOver's own menu command does the same) |
 | Esc | focus back to the terminal of the view in sight; the scratchpad is left as it is |
 
@@ -1075,8 +1312,8 @@ Without it the tree cannot be reached without a mouse.
   | Read a root's whole path and kind | the focus detail under the tree (5.2); a screen reader: the row's description |
   | See and hide a folder left out by the limit | Tab to **Choose Folders to Hide…**; or the palette's Remove Folder from Workspace… |
 
-- ⌥↑, ⌥↓, ⌥↵, ⌘⌫ and ⇧F10 are not app shortcuts: the tree handles them only
-  while it has focus, so the shell never loses them.
+- ⌥↑, ⌥↓, ⌥↵, ⌘⌫, Delete and ⇧F10 are not app shortcuts: the tree handles
+  them only while it has focus, so the shell never loses them.
 
 ## 16. Accessibility
 
@@ -1087,8 +1324,8 @@ Without it the tree cannot be reached without a mouse.
   and the lines under the tree are outside it.
 - Every row is a `role="treeitem"` with `aria-level` (roots are level 1),
   `aria-setsize` and `aria-posinset` among its siblings, and `aria-expanded`
-  when it can open. A missing root has **no** `aria-expanded` (it is not a
-  closed folder; it cannot open).
+  when it can open. A missing or still-checking root has **no**
+  `aria-expanded` (it is not a closed folder; it cannot open).
 - **A root's name** (WS-4 AC5): the label, what it is, its state, and the
   terminal mark, in that order:
   - *acme-staff-engineer, hub folder, workspace folder, the terminal is here*
@@ -1096,6 +1333,9 @@ Without it the tree cannot be reached without a mouse.
   - *design-notes, workspace folder, added by you*
   - *acme-web, workspace folder, missing*
   - *acme-legacy, workspace folder, missing, not answering*
+  - *api — acme, workspace folder, checking* (a Checking… root, while a
+    workspace opens; its name changes once, when its answer comes, and that
+    change is not announced: *Workspace ready* says the result)
   - *scratch, folder, not part of the workspace, the terminal is here*
 - **A root's description** (`aria-describedby`): its whole path, then the
   tooltip's line on what it is, then its state line when missing.
@@ -1103,9 +1343,9 @@ Without it the tree cannot be reached without a mouse.
   the terminal is here" on the active folder's row; its description is its
   path, and for 5.5's inner row *Also a workspace folder, listed as its own
   root.*
-- **A line in the tree** (section 17: *Empty*, *Can't list this folder: …*,
-  *This folder is no longer there. …*) is a tree item one level under its
-  folder, named by its sentence. The arrows reach it; ↵ does nothing.
+- **A line in the tree** (section 17: *Empty*, and the five listing errors)
+  is a tree item one level under its folder, named by its sentence. The
+  arrows reach it; ↵ does nothing.
 - **`aria-current="location"`** is on exactly one row: the active folder's
   row under the current root, or the root row when the terminal is in the
   root folder itself.
@@ -1207,7 +1447,12 @@ again.
   |---|---|
   | Refresh ends | *Workspace folders refreshed: 5 folders, 1 missing.* |
   | Refresh asked while one runs | *Already refreshing.* |
-  | A workspace appears in a tab (open, restore, the run's commit) | *Workspace ready: 5 folders, 1 missing.* |
+  | A workspace appears in a tab (open, restore, the run's commit), at its final view | *Workspace ready: 5 folders, 1 missing.* |
+  | Refresh asked while an open or restore is still reading | *Already reading the hub's folders.* |
+  | A second open waits past 1 s (11.3) | *Opening acme-staff-engineer…* |
+  | Enter on a Checking… root | *api — acme: still being checked.* |
+  | Add Back kept the old place | *design-notes is back in its place, 5 of 5.* (else the toast of 12.3) |
+  | A hand change asked while only Refresh is offered | the menu caption's first sentence (6.2) |
   | New notice lines | *2 workspace notices.* |
   | Added | *Added acme-infra to the workspace, 6 of 6.* |
   | Hidden, removed, or any toast | the toast's title and body |
@@ -1215,6 +1460,7 @@ again.
   | Moved | *api — beta moved up, now 2 of 5.* |
   | The terminal enters a missing root | *acme-web is no longer missing.* or *The terminal is in acme-web, which is shown as missing. Refresh Workspace Folders checks it again.* (section 17.1) |
   | The terminal is somewhere too broad | *The terminal is in /, which is too broad to show here.* |
+  | A not-answering root answers again without a refresh (the design's pool lifts its mark, its 7.4) | *acme-legacy is answering again.* |
   | Enter on a missing root | *acme-web: missing, nothing to open.* |
   | A list dialog's filter changes | *3 results.* · *No matches.* |
   | [S2] a live refresh changes the roots | *1 folder added to the workspace: web.* / *1 folder no longer in the workspace: web.* |
@@ -1235,8 +1481,9 @@ again.
 | A very long path | cut from the left on the row; whole in the tooltip (wrapped), the focus detail and the description; whole and wrapped in a refusal or a bar |
 | A root stops answering | **Missing · not answering** on that root at the next refresh; the others are not held up. A root that was open closes and keeps its place and what was open under it. Refresh tries again |
 | An empty folder, open | a line under it: *Empty* (today's "empty") |
-| A folder or root that exists but cannot be listed (no permission) | it stays an ordinary row with a chevron. Opening it shows one line under it: *Can't list this folder: no permission.* (the system's reason; *Can't list this folder.* without one). ← closes it |
-| A root whose folder went after the last refresh | still an ordinary root until a refresh. Opening it shows: *This folder is no longer there. Refresh Workspace Folders checks it again.* |
+| A folder or root that exists but cannot be listed, or went since the last refresh | it stays an ordinary row with a chevron. Opening it shows one line under it, by the code `workspace_list` fails with (design 11.4; never the system's message, which can hold a path): `permission` *Can't list this folder: no permission.* · `not_found` *This folder is no longer there. Refresh Workspace Folders checks it again.* · `not_a_folder` *This is no longer a folder. Refresh Workspace Folders checks it again.* · `not_answering` *This folder did not answer within 2 seconds. Close it and open it again to try again.* · `other` *Can't list this folder.* ← closes it |
+| The hub names more than 500 checkout rows, or discovery stops at 10 s | the roots read so far, and 12.1's line (`rows_over_limit`, `cut_short`) |
+| The record of hand changes is unreadable or from a newer version | the roots from discovery alone, and bar 6, 6b or 7 (12.2); for 6b and 7 only Refresh is offered |
 | The terminal leaves the workspace | the extra root, last, **Not in workspace**, open at the terminal's folder; gone when the terminal is back inside |
 | The terminal is in `/` or the home folder | no extra root; 12.1's line under the tree |
 | Hub folder gone, not finished for now, or not checked | 12.2 |
@@ -1256,11 +1503,14 @@ shown Missing while the engineer can `cd` into it.
   ends "the terminal is here", and **no extra "Not in workspace" root is
   added** for a path that is a workspace folder.
 - **When a root is checked again in S1:** every root at open, at restore and
-  at Refresh Workspace Folders; the folder just added, at Add; and,
-  recommended (23, P17; section 22, item 14), **one root, when the own
-  view's terminal enters it while it is shown missing**. That is one
-  existence check of one folder under the 2-second bound. It reads none of
-  the hub's files and it is not discovery (WS-1 AC5 is unchanged).
+  at Refresh Workspace Folders; the folder just added, at Add; when a mark
+  of the design's pool lifts, what it had shown not answering (its 7.4);
+  and, recommended (23, P17), **one root, when the own view's terminal
+  enters it while it is shown missing**. That last is one existence check of
+  one folder under the 2-second bound, the design's `workspace_recheck_root`
+  (its 18, item 14, built only if P17 is approved). It reads none of the
+  hub's files and it is not discovery (WS-1 AC5 is unchanged). The hub
+  folder itself is never checked on a `cd` (design 18, item 3).
   - **It is there:** the root becomes an ordinary root in its place, opens
     down to the terminal's folder (WS-5 AC1), with whatever was open under
     it before, and the polite region says *acme-web is no longer missing.*
@@ -1402,7 +1652,7 @@ time. [S2] strings are added with S2.
 33. `No hidden folders. Remove Folder from Workspace… hides a checkout the hub lists.`
 34. `A workspace folder can't be /, your home folder, a whole volume, or a folder that holds Better Terminal's own data.` (notice)
 35. `The folders it names are not shown; the rest of the workspace is. Folders you hid from it stay hidden.`
-36. `A workspace shows at most 50 folders: the hub folder, the folders you added, and the first checkouts in its order. Hide some to see the others.`
+36. `A workspace shows at most 50 folders: the hub folder, the folders you added, and the first checkouts the hub lists. Hide some to see the others.`
 37. `This folder is no longer there. Refresh Workspace Folders checks it again.`
 38. Bar 2: `…Its workspace is kept and comes back when the folder does.`
 39. Bar 3: `…Its workspace is kept and comes back when it is.`
@@ -1426,24 +1676,36 @@ time. [S2] strings are added with S2.
 54. `The terminal is in <label>, which is shown as missing. Refresh Workspace Folders checks it again.`
 55. [S2] `1 folder added to the workspace: <name>.` · `1 folder no longer in the workspace: <name>.` (and their plurals)
 
-If P14 is answered "do not open the file browser", one more: `Workspace
-opened` (23, P14). A "Workspaces" page in `docs/guide/` (23, P12) would add
+**Added with draft 2's revision against design revision 4**
+
+56. `<label>, workspace folder, checking` (the Checking… form of 21)
+57. `Its workspace is kept; only Refresh is offered until it answers.` · `Its workspace is kept; only Refresh is offered until it can be.` (6.1's captions, beside 27)
+58. Bar 2b: `…Its workspace is kept and comes back when the folder answers.`
+59. Bar 6b: `…so every workspace starts from its hub's own list, and they can't be changed until it can. …`
+60. Bar 11: `The persona is running, but Better Terminal could not open this hub's workspace: <why>. …`
+61. `Folders not checked by then are shown missing, not answering, and files not read are listed here. Refresh Workspace Folders tries again.` (`cut_short`)
+62. `This is no longer a folder. Refresh Workspace Folders checks it again.` (a listing error, beside 37)
+
+Section 26's strings hold no "workspace", by its own rule. If P14 is answered
+"do not open the file browser", one more: `Workspace opened` (23, P14). A "Workspaces" page in `docs/guide/` (23, P12) would add
 its own strings to this list when it is written.
 
 ## 20. States (checklist for the build)
 
 | Screen | Empty | Loading | Partial | Error | Success |
 |---|---|---|---|---|---|
-| Root list | hub root + the "no checkouts" hint under the tree | the hub root alone; the status line *Reading the hub's folders…* | Missing and not-answering roots beside working ones; a notice for a file not read; *10 folders not shown*; a folder that cannot be listed | hub folder gone: one Missing root + bar; not finished or not checked: one root + bar | every root there, current root marked |
+| Root list | hub root + the "no checkouts" hint under the tree | the hub root, Checking…; then each root as its row is read, Checking… until checked; the status line *Reading the hub's folders…* after 300 ms | Missing and not-answering roots beside working ones; a notice for a file not read; *10 folders not shown*; a folder that cannot be listed (five lines); discovery cut at 10 s | hub folder gone or not answering: one Missing root + bar; not finished or not checked: one root + bar; record unreadable or newer: roots from discovery + bar | every root there, current root marked |
 | Workspace notice | no block | n/a | one line per cause, each dismissable | a file not read | gone after a clean refresh |
-| Workspace menu | n/a | n/a | only Refresh, with its caption, while the hub is not finished | n/a | four items |
-| Palette | no entries on a plain tab | n/a | only Refresh while the hub is not finished | n/a | four entries (+ [S2] Open Workspace…) |
-| Add Folder | empty field: `Enter a folder.` | primary reads **Checking…** if the check passes 300 ms | n/a | the eleven refusals of section 8, one at a time | root added last; focus back where it was |
+| Workspace menu | n/a | only Refresh, caption *Checking the hub folder.* | only Refresh, with its caption, in each state of 6.1's table | n/a | four items |
+| Palette | no entries on a plain tab | only Refresh | only Refresh in each state of 6.1's table | n/a | four entries (+ [S2] Open Workspace…) |
+| Add Folder | empty field: `Enter a folder.` | primary reads **Checking…** if the check passes 300 ms | n/a | the thirteen refusals of section 8, one at a time | root added last; focus back where it was |
 | Remove Folder | only the hub's row, disabled | n/a | filter with no match: *No folder matches*; the left-out group | the change not saved: toast | root gone, toast with a way back |
 | Hidden folders | *No hidden folders. …* | n/a | *No folder matches*; folders hidden from a file not read are named as not listed | n/a | folder back in its place; list stays open; result line |
 | Refresh | n/a | spinner on the button, the status line; rows untouched; a second ask: *Already refreshing.* | some roots not answering | hub still gone or not finished: bar shown again | result announced; toast if roots are out of sight |
 | Bars above the terminal | no bar | n/a | two causes: stacked in order | the eight texts of 12.2 | gone on Refresh or Dismiss |
-| Detached window | terminal only | n/a | n/a | bars 2 to 4, if P13 is yes | 11.1's bar or toast, if P13 is yes |
+| Detached window | terminal only | n/a | n/a | bars 2 to 4 (design 13.2 mounts the bar) | 11.1's bar; a toast row is a bar here; bar D (P13) |
+| Settings → Sync (S0, section 26) | no line | n/a | a local line, an import line, or both | the report's last error above, the lines kept | no line once each skip clears |
+| Orchestrator Dispatch (S0, 26.3) | n/a | as today | n/a | *Could not create the project folder: …* in the task panel's alert strip | the agent's tab opens in the new folder |
 | [S2] Open Workspace… | *No workspaces opened yet.* | **Checking…** per row | Unavailable rows among good ones | n/a | tab opened or brought forward |
 | Settings → Tabs | *No tab sets saved yet.* | n/a | n/a | n/a | entries listed as before |
 
@@ -1486,11 +1748,14 @@ column; "spec only" means it is not drawn.
 | WS-6 AC1 | the same roots after a restart | none new | Restored with the file browser closed |
 | WS-6 AC2 | the bar naming the dropped record's hub, kept until dismissed | 12.2 | A kept record was dropped |
 | WS-6 AC3 | the restored states, and only Refresh | 12.2, 6.1, 7, 13.1 | Restored: the hub folder is gone; … not a finished hub right now; … could not be checked; … in its own window, hub folder gone |
+| WS-6 AC2, record states (design 4.1) | bars 6, 6b, 7; only Refresh while read-only | 12.2, 6.1 | Restored: hand changes from a newer version |
 | WS-6 AC4 | a tab like its source; in its own window, 13.1 | 13, 13.1 | A workspace tab in its own window |
-| WS-7 AC3 | on another Mac, Load opens a plain tab named "Agent hub" in the home folder | none new | spec only |
+| WS-7 AC3 (tab sets) | on another Mac, Load opens a plain tab named "Agent hub" in the home folder | none new | spec only |
+| WS-7 AC3 (S0: the skipped-key line, OQ-15) | one line per skipped store in Settings → Sync, on this machine only | 26.1, 26.2 | Settings → Sync: a store was skipped |
+| WS-7 AC3 (S0: Dispatch and the fleet, OQ-18, OQ-20, OQ-21) | today's alert message; today's Unknown project group | 26.3, 26.4 | spec only |
 | WS-9 AC1 | *10 folders not shown*; the list of them; the add refusal | 5.6, 12.1, 8 | 50 roots, 10 checkouts left out |
 | WS-9 AC2 | the notice for a file not read; *12 work folders skipped* | 12.1 | Discovery notices |
-| WS-9 AC3 | the status line, then Missing · not answering | 5.4, 11 | Opening: …; A root that does not answer |
+| WS-9 AC3 | Checking… roots and the status line, then Missing · not answering | 5.4, 11 | Opening: …; A root that does not answer |
 | WS-9 AC5 | the too-broad notice, refusal, line and bar | 12.1, 8, 11.2 | Discovery notices; Add Folder ("too broad"); `cd /`; A hub folder that is too broad |
 | WS-10 AC1 | the relabel | 19 | Settings (before and after) |
 | WS-10 AC2 | "workspace" only in F4's copy | 19.1 | spec only |
@@ -1499,8 +1764,9 @@ column; "spec only" means it is not drawn.
 linked as `…mockup.html#<id>`): `open`, `loading`, `none`, `allmissing`,
 `slow`, `fifty`, `notices`, `outside`, `hostile`, `hidden`, `nested`,
 `nolist`, `gone`, `unfinished`, `checkfailed`, `already`, `nopersona`,
-`dropped` (two bars stacked), `sub`, `fbclosed`, `plain`, `broadhub`,
-`removed`, `detached`, `detachedgone`. Reached by clicking, not by a
+`dropped` (two bars stacked), `readonly`, `sub`, `fbclosed`, `plain`,
+`broadhub`, `removed`, `detached`, `detachedgone`, `syncskip`. Reached by
+clicking, not by a
 scenario: the workspace menu; a root's menu; the palette with its entries
 per state; Add Folder with a sample for each refusal and for control
 characters typed and returned by Browse…; Remove Folder with the left-out
@@ -1510,63 +1776,76 @@ back; moving a root; the tree's keys; the shell entering a missing root;
 the file browser at 180, 300 and 500 px. Under the window: a gallery of
 every root row state, the hostile-text cases, and the notice table.
 
-**Not in the mockup:** the run tab's change at the commit; the 300 ms
-threshold; bars 6 and 7; the "could not save" toast and refusal; the P14
-and P13 "no" cases beyond the detached window's switch; F2's Open Hub dialog
-(F2's mockup has it); a live refresh; the confirm for Remove from List (the
-mockup uses the browser's own confirm in its place); themes other than
-Precision.
+**Not in the mockup:** the run tab's change at the commit; the 300 ms and
+1 s thresholds; bars 6, 6b, 9, 10, 11 and 2b (bar 7 is `readonly`); the
+"could not save" toast, notice and refusal; Add's rows 11 and 12; Add Back
+when its old place is gone; the P14 "no" case; F2's Open Hub dialog (F2's
+mockup has it); a live refresh; the confirm for Remove from List (the
+mockup uses the browser's own confirm in its place); the orchestrator's
+Dispatch (no change on screen); themes other than Precision.
 
 ## 22. What this spec needs from the architecture
 
-Draft 1 asked thirteen things before the architect's design existed. Each is
-now marked against the **proposed** design (revision 1, under review):
-**answered** (with its section), **open**, or **moved** to section 23
-because it was a product question. Items 14 to 21 are new needs this draft
-adds. If a cited part of the design changes in its review, the item reopens.
+Draft 1 asked thirteen things before the architect's design existed; draft 2
+added eight. Each is marked here against the **proposed design, revision 4**
+(d8b9164), its section 18, which answers this table item by item:
+**answered** (with where), **open**, or **moved** to section 23 because it is
+a product question. If a cited part of the design changes in its review
+(revision 5 is being written), the item reopens.
 
-| # | Need | Status |
+| # | Need | Status at design revision 4 |
 |---|---|---|
-| 1 | Per root: path, kind, state, and the `ACCESS.md` that names it | **Answered**, design 11.1: `path`, `kind` (`hub`, `checkout`, `added`; the extra root comes from `workspace_locate`, 11.3) and `status` (`ok`, `missing`, `not_answering`). There is no `checking` status, so draft 1's Checking state is gone (5.4). The source file is not in the view; this spec no longer shows it (the tooltip says *Checkout the hub lists*) |
-| 2 | Per refresh: counts by cause, the files, a reason per unread file | **Answered**, design 11.1 (`Notice` kinds) and 5.4. The too-broad notice has a count and no files, so 12.1's line names none. The left-out folders are item 15 |
-| 3 | The hub's state for a workspace tab, a check that does not answer, and when it is checked | **Answered** for the states and the timing, design 8, 11.1 and 13.4: `ok`, `hub_missing`, `not_finished` (six reasons), `check_failed` (four reasons); checked at open, restore and refresh. A folder that does not answer is `hub_missing`; a later step that does not is `check_failed`. Copy for each is in 12.2. Whether WS-6 AC3 applies to an open tab was a product question: **moved**, 23, P10 |
-| 4 | One bar component above the terminal, shared with F2's run notice, holding wrapped text and buttons, **stacking several**, with a per-tab store that is not saved | **Open.** The design says "a notice" (11.1) and names no component. 12.2 now also needs: several bars in a fixed order, and holding back while F2's notice shows |
-| 5 | A way for F4's actions to raise the app's toast, and **a polite live region F4 can use** | **Open.** Toasts come through `useContextGuard`'s `notify` today; the live region is private to the strip and absent from the detached window (section 1, fact 7) |
-| 6 | Undo of hide and remove: "Add Back" puts the folder back at its old place | **Open.** The design has add (at the end) and move (13.4), no add at a position. If it stays so, Add Back adds it last and the toast's body says *It was added back as the last folder.* |
-| 7 | The folder picker behind Browse… and macOS's recent places | **Moved**, 23, P22 (a privacy question, not a technical one) |
-| 8 | The tree with up to 50 roots: one scroll area, one focus model; virtualisation; the 500-watch cap has no sign on screen | **Answered in part**, design 11.4 and 11.5: one presentational component; past the cap a folder refreshes when it is opened and on Refresh, with no sign on screen. Whether rows are virtualised is not said; the keys, names, `aria-setsize`, sticky rows and scroll padding must hold either way |
-| 9 | Does a plain tab use the same tree component? | **Answered**, design 11.4: no. Plain tabs and sub-terminals keep today's rows unchanged. So they gain no keys or names, and ⌘⇧E there lands on the header (15.2). Whether they should is 23, P11 |
-| 10 | `focusFiles` in `shortcuts.ts`; `isAppShortcut` is static, so Ctrl+Alt+Shift+E stops reaching the shell on Linux in every tab | **Open.** Not in the design; it waits on the owner (23, O1). With it: `shortcutList.ts` and the guide (15.2) |
-| 11 | Bringing a tab forward in another window | **Answered**, design 13.2: `workspace_focus` focuses the window and that window makes the tab active. Where the message shows when that window is detached is 23, P13 |
-| 12 | The dropped-record bar: must it outlive a restart? | **Moved**, 23, P18. The design's `droppedNotice` (4.1) is kept "until the next workspace opened shows the notice"; the recommendation needs it kept until dismissed (item 19) |
-| 13 | Escaping is one function used by every F4 surface | **Answered**, design 12.2 (`visibleText.ts`), with two differences to settle: its set is the PRD's narrower one (23, P3), and its form `<U+202E>` is given as an example, the form being this spec's (design 18): `⟨U+202E⟩`, with a literal `⟨` escaped and the rules of section 14 for spaces and joiners |
-| 14 | **A check of one root** (does this folder exist now), asked when the terminal enters a root shown missing | **Open, new.** For 17.1; waits on 23, P17. Without it the root stays Missing until Refresh |
-| 15 | **The 50-folder cut by the PRD's rule, and the left-out folders' paths.** The design's `assemble` (5.6, step 5) caps by position after the order, which can cut an added folder; WS-9 AC1 cuts discovered checkouts. And `not_shown` is a count; 5.6 needs the paths, to list and hide them | **Open, new** |
-| 16 | **Refusal codes for Add** that tell apart: no answer in time, nothing there, not a folder, a hidden checkout of this hub, not saved. The design has `not_a_folder`, `already_a_root`, `too_broad`, `over_limit`, `not_finished` (13.4) | **Open, new.** With only `not_a_folder`, rows 4 to 6 of section 8 become one: `<path> is not an existing folder.` |
-| 17 | **Hiding a folder that is both listed by the hub and added by hand leaves no root.** By the design's `assemble` (5.6, steps 2 and 3) the added entry would bring it back at the end | **Open, new** |
-| 18 | **Is the persona's session running in this tab?** For 11.1's rows. F2 starts the session; whether anything knows it is still there is F2's design | **Open, new.** Without it, 11.1's two fallback bars |
-| 19 | **The dropped-record notice is cleared by Dismiss, not by being shown**, and reaches every window | **Open, new**; waits on 23, P18 |
-| 20 | **In the detached window: the bar, the toast and a live region**, and F4's bars for its tab | **Open, new**; waits on 23, P13. The design adds nothing there (13.2) |
-| 21 | **A reason with a failed listing** (no permission, not found), for 17's lines | **Open, new.** Without it: *Can't list this folder.* |
+| 1 | Per root: path, kind, state, and the `ACCESS.md` that names it | **Answered**, design 11.1 and 18 item 1: `path`, `kind` (`hub`, `checkout`, `added`; the extra root is `outside`), `status` (`checking`, `ok`, `missing`, `not_answering`) and `source`. The `checking` status is back because opening streams; this spec's Checking… state is 5.4. `source` names the file in the tooltip, the focus detail and the description (5.2) |
+| 2 | Per refresh: counts by cause, the files, a reason per unread file | **Answered**, design 11.1 and 18 item 2: the `Notice` kinds. The too-broad notice now has its files with a count each; the new kinds `rows_over_limit`, `cut_short`, `record_newer`, `record_unreadable` and `not_saved` have copy in 12.1 and 12.2 |
+| 3 | The hub's state, a check that does not answer, and when it is checked | **Answered**, design 11.1, 8 and 18 item 3: `checking`, `ok`, `hub_missing` (why `missing` or `not_answering`), `not_finished` (six reasons), `check_failed` (eleven reasons); checked at open, restore and refresh, never on a timer or a `cd`. Copy for every reason: 12.2's `<why>` table and bar 2b; the menu's captions: 6.1. Whether WS-6 AC3 applies to an open tab: **moved**, 23, P10 |
+| 4 | One bar above the terminal, shared with F2's run notice, stacking several, holding back while F2's notice shows, with a per-tab store that is not saved | **Answered**, design 18 item 4: `tabNoticeStore` (never saved) and `TabNoticeBar`, in the main window and the detached window, drawing a tab's notices in a fixed order that 12.2's table gives, with F2's run notice an exclusive kind |
+| 5 | Raising the app's toast, and a polite live region F4 can use | **Answered**, design 18 item 5: the `workspace-toast` window event, shown by `App.tsx`; `src/lib/announce.ts`, one polite region in `App` and in `DetachedApp` |
+| 6 | Undo: "Add Back" at the old place | **Answered**, design 18 item 6: an `undo` token, kept 60 s; `placed: "same"` or `"last"`. Both cases have copy (9.1, 12.3) |
+| 7 | The folder picker behind Browse… and macOS's recent places | **Moved**, 23, P22 (the design asks the same as its P-15) |
+| 8 | The tree with up to 50 roots: one scroll area, one focus model; virtualisation | **Answered**, design 11.4 and 18 item 8: not virtualised in S1, so `aria-setsize`, sticky rows and scroll padding work on real rows. Past the 500-folder poll cap there is no sign on screen, as before |
+| 9 | Does a plain tab use the same tree component? | **Answered**, design 11.4: no, in S1. Whether it should is 23, P11 |
+| 10 | `focusFiles` in `shortcuts.ts`; `isAppShortcut` is static | **Answered**, design 18 item 10: a macOS-only entry, so no key leaves a shell on Linux or Windows (15.2). It waits on the owner (23, O1) |
+| 11 | Bringing a tab forward in another window | **Answered**, design 13.2: `workspace_focus` raises the window, which shows the notice; in a detached window, as a bar (13.1) |
+| 12 | The dropped-record bar: must it outlive a restart? | **Moved**, 23, P18; see item 19 |
+| 13 | Escaping is one function used by every F4 surface | **Answered**, design 12.2 and 18 item 13: `visibleText.ts` implements section 14's visible form as written. The **set** of characters is the PRD's narrower one by default, the wider one if P3 is approved (23, P3) |
+| 14 | A check of one root, asked when the terminal enters a root shown missing | **Designed**, design 18 item 14: `workspace_recheck_root`, built only if 23, P17 is approved; otherwise it does not exist and 17.1's "no" branch applies |
+| 15 | The 50-folder cut by the PRD's rule, and the left-out folders' paths | **Answered**, design 5.6 step 4 and 18 item 15: discovered checkouts left out from the end of the hub's own order, before the saved order; `not_shown` carries the paths (5.6, 9.1). The count in WS-9 AC1's test stays a product question (23, P23) |
+| 16 | Refusal codes for Add | **Answered**, design 13.4: one code per refusal, so section 8's rows 4 to 13 are each their own |
+| 17 | Hiding a folder that is both listed by the hub and added by hand leaves no root | **Answered**, design 13.4 and 5.6 step 3: it hides it and takes it out of `added`; adding a hidden checkout is refused |
+| 18 | Is the persona's session running in this tab? | **Open.** The design does not know and asks F2's design (its 15, F2-2). Until F2 answers, 11.1's two fallback bars stand |
+| 19 | The dropped-record notice cleared by Dismiss, reaching every window | **Designed**, design 18 item 19: `workspace_dismiss_dropped()`, built only if 23, P18 is approved; the default built is the PRD's "the next workspace opened shows one notice" |
+| 20 | In the detached window: the bar, the toast and a live region | **Answered in part**, design 18 item 20: the bar and the live region are mounted; no toast. This spec now asks for no toast there (13.1): a toast's words are a bar in that window |
+| 21 | A reason with a failed listing | **Answered**, design 11.4: `permission`, `not_found`, `not_a_folder`, `not_answering`, `other`; copy for each in 17 |
+| 22 | **A second open while the first is being made** (design D-3) | **Answered** by the design's `opening` and `retryAfterMs` (13.2); this spec shows nothing under 1 s, then an announcement and a busy button (11.3). Nothing more needed |
+| 23 | **When the `not_saved` notice leaves the view** | **Open, new.** 12.1 assumes "when a later change is saved"; the design says when it is set (4.1), not when it goes |
+| 24 | **One `file_unreadable` line for many files with one reason** (a cut at 10 s) | **Open, new**, a small one: 12.1 groups more than three files with one reason into one line; the notices already carry each file, so it is the webview's grouping, but the design's notice order should say where the grouped line sits |
+| 25 | **Bar 11's `<why>`**: why F4's check disagreed with F2's, for a hub tab F4 could not mark | **Answered**, design 13.2 ("a notice giving the reason"): the check's own reason, 12.2's table |
 
 One consequence of the design recorded, not asked: with a checkout inside
 the hub folder, its root row and its folder row inside the hub's tree open
-and close together (5.5).
+and close together (5.5; design 18, "also for the designer").
 
 ## 23. Questions for the product manager and the owner
 
 None of these is decided here. Each gives what this spec does meanwhile and
-a recommendation.
+a recommendation. The PRD's own questions OQ-14 to OQ-21 were answered by the
+owner on 2026-11-15 and OQ-22 since; none of them is asked again here, and
+section 26 is built on their answers.
 
 ### 23.1 For the owner
 
-- **O1. A new shortcut, ⌘⇧E, "Focus File Browser", in every tab.** WS-4 AC5
-  needs the roots reachable by keyboard, and today nothing moves focus into
-  the file browser. *Recommend yes:* it is unbound, and it is the key other
-  editors use for this. On Linux, Ctrl+Alt+Shift+E then stops reaching the
-  shell. In a plain tab it reaches only the header's buttons until P11 is
-  answered. *If no:* the palette's **Focus File Browser** entry stays, with
-  no key, and reaching the tree is ⌘P, type, Enter.
+- **O1. A new shortcut, ⌘⇧E, "Focus File Browser", on macOS, in every tab.**
+  WS-4 AC5 needs the roots reachable by keyboard, and today nothing moves
+  focus into the file browser. *Recommend yes.* It clashes with nothing at
+  84389eb (15.2's check: no entry in `SHORTCUTS`, no component listener, not
+  the code editor's, not a macOS system key; ⌘E, `sendEnter`, is a different
+  combination), and it is the key VS Code uses for the same thing. By the
+  design's choice it is bound on macOS only, so no key leaves a shell on
+  Linux or Windows; the palette entry is offered everywhere. In a plain tab
+  it reaches only the header's buttons until P11 is answered. It adds a row
+  to the shortcuts help and to `docs/guide/shortcuts.md`. *If no:* the
+  palette's **Focus File Browser** entry stays, with no key, and reaching the
+  tree is ⌘P, type, Enter.
 
 ### 23.2 For the product manager
 
@@ -1597,6 +1876,9 @@ design changed them):
   between a Latin and an Arabic-script letter shows a chip. *Recommend the
   wider set with that exception.* Also asked here: section 14's rules for
   spaces (rule 3) and for a literal `⟨` (rule 4) are this spec's additions.
+  The proposed design builds the PRD's set by default and the wider one if
+  this is approved; the visible form is this spec's either way (its 18,
+  item 13).
 - **P4. Reordering has no palette entry** (section 10). WS-2 AC6 names four
   S1 entries; WS-3 AC5 says only "may move a root up or down". *Recommend
   none.*
@@ -1631,9 +1913,12 @@ design changed them):
   applies the states whenever a refresh finds the hub gone, not finished or
   not checked.* Then the roots shown a moment ago (added folders included)
   leave the screen until the hub is back, which a line in the PRD would make
-  deliberate. With it goes the architect's own Q4 (a check that fails is
-  shown as "not finished right now", with its reason): *this spec gives it
-  its own bar text* (12.2, bar 4) and menu caption.
+  deliberate. The proposed design applies them whenever a check finds them
+  (its 11.1, "on a restored tab or an open one") and asks the same. With it
+  goes the design's P-7 (a check that fails is a third outcome, shown like
+  "not finished right now" with its reason): *this spec gives it its own bar
+  text* (12.2, bar 4, with a phrase for each of its eleven reasons) and menu
+  caption.
 - **P11. Should plain tabs and sub-terminals get the keyboard tree?** WS-4
   AC4 says they are "unchanged: one root", and the proposed design leaves
   their rows exactly as today (its 11.4), with no keyboard support. Then
@@ -1649,19 +1934,23 @@ design changed them):
 
 New in draft 2, each from a review finding that is a product decision:
 
-- **P13. What does a workspace tab show in its own window, and how are
-  WS-2 AC3, WS-6 AC3 and WS-6 AC4 met there?** (Finding B1.) A detached
-  window has no file browser, palette, toast, bar or live region today, and
-  the proposed design adds none (its 13.2). So "any tab of any window" can
-  bring forward a window that can say nothing; a restored state has no sign
-  there; and "the same roots" has nowhere to show. *Recommend:* F4 S1 gives
-  the detached window three hosts and no more: the bar above the terminal,
-  the toast, and a polite live region (13.1, left column). It does not give
-  it a file browser or a palette; F3's slice S3 is that work. And WS-6 AC4's
-  test for Move to New Window is read as "the tab keeps its mark and shows
-  the same roots wherever it has a file browser". *If no:* 13.1's right
-  column, whose weak point is that WS-6 AC3 has no sign in that window.
-  Either answer needs one sentence in WS-6 AC4.
+- **P13. Which tab comes forward when a hub's tabs are in detached windows,
+  and how is WS-6 AC4 read for Move to New Window?** (Finding B1; the
+  design's P-3, asked of the product manager and the designer.) Narrowed
+  since draft 2 was begun: the proposed design, revision 4, now mounts F4's
+  bar and a live region in the detached window (its 18, items 4, 5 and 20),
+  so WS-2 AC3's message and WS-6 AC3's state have a place there (13.1); this
+  spec no longer asks for a toast there. What is left: the PRD's "the most
+  recently used of those tabs" can bring forward a window that shows no
+  folders. *Recommend:* bring forward the most recently used tab in a window
+  that shows roots; when the hub has none (every tab detached), Open Hub
+  brings the detached tab forward with bar D, and a hub folder opens one
+  more plain-shell workspace tab in the main window (11.1). And read WS-6
+  AC4's "the same roots" as "the tab keeps its mark and shows the same roots
+  wherever it has a file browser". *If no:* the PRD's text; Open Hub and a
+  hub folder both raise the detached tab, with bar D's first sentence, and
+  the folders are reached by moving the tab back. Either answer needs one
+  sentence in WS-6 AC4.
 - **P14. Does opening a workspace show the file browser?** (Finding M2.) It
   is closed by default, and its open state is one saved setting for the
   app. On a default install Open Hub would show nothing of the workspace, a
@@ -1736,14 +2025,15 @@ New in draft 2, each from a review finding that is a product decision:
   recent places. ADR 0021 forbids that for engagement paths only. *This spec
   assumes it is acceptable for a hub's folders in the default profile;* say
   so if G2 is meant to cover it, and Browse… then waits for ADR 0021's
-  in-app picker.
-- **P23. The 50-folder limit: which folders are cut, and one count.**
-  (Finding M7.) WS-9 AC1 cuts "discovered checkouts past 50". *This spec
-  reads that as:* added folders are never cut, and the checkouts cut are the
-  last in the workspace's order (5.6); the proposed design cuts by position,
-  which can cut an added folder. *Recommend the reading above; confirm it.*
-  And WS-9 AC1's test says a fixture naming 60 checkouts "shows 50 roots and
-  '10 folders not shown'"; with the hub folder counted among the 50, as the
+  in-app picker. The design asks the same (its P-15) and recommends saying
+  G2 does not cover the operating system's own lists.
+- **P23. The 50-folder limit: one count.** (Finding M7.) WS-9 AC1 cuts
+  "discovered checkouts past 50". This spec and the proposed design (from
+  its revision 2, 5.6 step 4) both read that as: added folders are never
+  cut, and the checkouts cut are the last in the hub's own order, before the
+  engineer's order. *Recommend confirming that reading.* What is left: WS-9
+  AC1's test says a fixture naming 60 checkouts "shows 50 roots and '10
+  folders not shown'"; with the hub folder counted among the 50, as the
   criterion's first sentence has it, 60 checkouts leave 11 out. One of the
   two numbers needs a correction.
 
@@ -1754,7 +2044,7 @@ breaking a criterion unless the last column says otherwise.
 
 | # | Addition | Section | Asked as | If cut |
 |---|---|---|---|---|
-| 1 | The shortcut ⌘⇧E and the palette entry **Focus File Browser** | 15.2 | O1 | the tree is reached by ⌘P only |
+| 1 | The shortcut ⌘⇧E (macOS only) and the palette entry **Focus File Browser** (every platform) | 15.2 | O1 | the tree is reached by ⌘P only |
 | 2 | The hidden count under the tree | 9.2 | here | a hidden folder is absent with no sign; the workspace menu's count remains |
 | 3 | Toasts for a refresh with the roots out of sight (*Workspace folders refreshed*, *Workspace restored*) | 5.7, 12.3 | here | the result is only announced |
 | 4 | Toasts for Add and for new notices with the roots out of sight, and **Show Files** | 5.7, 12.3 | P14 | notices can go unseen (finding M2) |
@@ -1772,21 +2062,32 @@ breaking a criterion unless the last column says otherwise.
 | 16 | **Choose Folders to Hide…** and the left-out group in the Remove dialog | 5.6, 9.1 | P23 | a left-out checkout can never be hidden (finding M7) |
 | 17 | The check of one missing root when the terminal enters it | 17.1 | P17 | it stays Missing until Refresh |
 | 18 | Bars B and C (no persona in the tab) | 11.1 | P15 | nothing says the persona did not start |
-| 19 | Bars 4, 6 and 7 (check failed; record unreadable; record from a newer version) | 12.2 | P10, and the proposed design's Q4 and 14 | they exist only if the design keeps those outcomes |
+| 19 | Copy for the design's outcomes the PRD does not name: bar 4 and its eleven reasons, bar 2b, bars 6, 6b and 7, the `rows_over_limit`, `cut_short` and `not_saved` lines | 12.1, 12.2 | P10, and the design's P-7, P-13 and 4.1 | the design's outcomes would have no words |
 | 20 | Stacking several bars; holding F4's bars back while F2's notice shows | 12.2 | here | one bar would hide another, or F2's "one notice per tab" would be broken |
 | 21 | The dropped-record bar kept until dismissed | 12.2 | P18 | it can be spent unseen (finding M6) |
 | 22 | Opening a workspace shows the file browser | 11 | P14 | finding M2 |
-| 23 | The bar, toast and live region in a detached window | 13.1 | P13 | finding B1 |
+| 23 | No longer an addition: the bar and the live region in a detached window are built by the design's revision 4 (its 13.2), and this spec no longer asks for a toast there. Kept so the numbers stay | 13.1 | P13 | n/a |
 | 24 | The wider escape set, the exception for joiners, escaped spaces and the escaped `⟨` | 14 | P3 | the PRD's narrower set, shown the same way |
 | 25 | The refusal for a too-broad hub in Open Hub's dialog | 11.2 | P19 | P19's other answer |
 | 26 | Header buttons at least 24 px, and a `--text-secondary` breadcrumb, in a workspace view only | 5.1 | P11 | they stay as small and as faint as today's |
 | 27 | A dismissed bar shown again when Refresh finds the state unchanged | 7.1 | here | *Still missing.* is only announced |
 | 28 | [S2] ⌘⌫ to remove an unavailable entry; the confirm before forgetting hand changes | 18 | here | by the button only; the record goes without a question |
+| 29 | The checkout's `ACCESS.md` named in its tooltip, focus detail and description | 5.2 | here | *Checkout the hub lists*, as draft 2 first had it |
+| 30 | Delete (forward delete) as well as ⌘⌫ on a root | 15.3 | here | ⌘⌫ only; the strip and the tree answer different keys |
+| 31 | Bar D, and the plain-shell tab in the main window when every tab of the hub is detached | 11.1, 13.1 | P13 (the design's P-3) | the PRD's text: the detached tab comes forward and nothing says where the folders are |
+| 32 | Bars 10 and 11 (a hub.conf whose check failed from the New tab dialog; Open Hub's tab F4 could not mark); bar 9 only with the design's P-5 | 11.2 | the design's 13.2, 13.3, P-5 | the design's notices would have no words |
+| 33 | One line for more than three unread files with one reason | 12.1 | here | a cut at 10 s can list dozens of lines |
+| 34 | The announcements *Already reading the hub's folders.*, *acme-legacy is answering again.*, *Opening …* and the busy **Opening…** button | 16.3, 11.3 | here | a screen reader is not told; a slow second open shows nothing |
+| 35 | The toast when Add Back cannot keep the old place | 9.1, 12.3 | here (the design's `placed`) | the folder lands last with no word |
+| 36 | Section 26's fallback line for a key the screen has no name for | 26.2 | here | a future skipped key is silent, or named by its key |
 
 **Removed since draft 1** (they were additions, and are gone): Add opening
 the file browser and moving focus to the new root; plain ⌫ in the tree; ⌘↵ in
-the tree; the per-root **Checking…** word; the line naming the `ACCESS.md` in
-a root's tooltip; an F4 bar stacked under F2's run notice.
+the tree; an F4 bar stacked under F2's run notice; and, in this revision, a
+toast host in the detached window. Two that draft 2 first removed are back,
+because the design brought back what they show: the **Checking…** state (no
+longer an addition: the design's `checking`, 5.4) and the `ACCESS.md` in a
+root's tooltip (row 29).
 
 ## 24. Not designed here
 
@@ -1802,21 +2103,24 @@ a root's tooltip; an F4 bar stacked under F2's run notice.
 
 ## 25. Review findings and their answers
 
+### 25.1 The adversarial review of draft 1
+
 The adversarial review of draft 1 (BLOCKED). "Fixed" means changed in this
 spec and in the mockup together; "question" means it is a product decision,
 put to the product manager with a recommendation, with the recommended case
-designed in full.
+designed in full. Where the design's revision 2 to 4 changed an answer
+draft 2 had first given, the row says so.
 
 | Finding | Answer | Where |
 |---|---|---|
-| **B1** detached window not designed; section 13's last paragraph false | **Question** (P13); the false sentence corrected; both answers designed; `DetachedApp.tsx` added to what was read | 1 (fact 5), 13, 13.1, 22 (11, 20), 23 P13; mockup `detached`, `detachedgone` |
+| **B1** detached window not designed; section 13's last paragraph false | **Fixed in part, rest a question.** The false sentence corrected; `DetachedApp.tsx` added to what was read; the detached window's screens designed (13.1). The design's revision 4 mounts the bar and a live region there, so WS-2 AC3's message and WS-6 AC3's state have a place; this spec dropped its ask for a toast there. Which tab comes forward, and WS-6 AC4's reading, stay **question** P13 (with the design's P-3); bar D designed | 1 (fact 5), 11.1, 13, 13.1, 22 (11, 20), 23 P13; mockup `detached`, `detachedgone` |
 | **M1** ⌘↵ is `send`; Esc is taken at the window | **Fixed**: ⌥↵ replaces ⌘↵; the tree stops the keys it handles; menus and dialogs take Esc through `useEscapeToClose`; the false claim withdrawn | 1 (fact 6), 15.1, 15.3, 6, 8 |
 | **M2** file browser closed by default | **Question** (P14); recommended case designed (opening shows it; notices out of sight come as a toast), and the other | 1 (fact 4), 5.7, 11, 12.1, 12.3, 23 P14; mockup `fbclosed` |
 | **M3** bring-forward of a tab with no persona | **Question** (P15); bars B and C; fallback if the session cannot be told | 11.1, 22 (18), 23 P15; mockup `nopersona` |
 | **M4** "Not answering" made a state apart from Missing | **Fixed** to the PRD's letter (Missing · not answering; "missing" in the name and the counts), and flagged as **question** P16 | 3, 5.4, 16.1, 23 P16; mockup `slow` |
 | **M5** the terminal inside a missing, not-answering or stale root; a root that cannot be listed | **Fixed**: current root by path whatever its state, no extra root for a workspace folder, when roots are re-checked, what is open returns, the cannot-list state. The re-check on `cd` is **question** P17. The mockup's `curRoot` corrected | 5.5, 17, 17.1, 22 (14, 21), 23 P17; mockup `nolist`, `cd ~/Project/acme-web` |
 | **M6** "never dropped silently" weakened; which bar wins | **Question** (P18), moved from section 22 with a recommendation that keeps the notice until dismissed; **fixed**: bars stack in a fixed order, and hold back for F2's notice | 12.2, 22 (12, 19), 23 P18; mockup `dropped` |
-| **M7** the 50-folder cap | **Fixed**: the cut in the PRD's terms, where left-out folders are seen and hidden, Add, Show Again and Move at the cap; the reading and the PRD's "10" are **question** P23 | 5.6, 9.1, 12.1, 22 (15), 23 P23; mockup `fifty` |
+| **M7** the 50-folder cap | **Fixed**: the cut in the PRD's terms (the last checkouts in the hub's own order, before the engineer's order, as the design cuts from its revision 2), where left-out folders are seen and hidden, Add, Show Again and Move at the cap; the PRD's "10" is **question** P23 | 5.6, 9.1, 12.1, 22 (15), 23 P23; mockup `fifty` |
 | **M8** things in the tree that are not tree items; the `cd /` notice; the Add link; the nested checkout; sticky rows | **Fixed**: only tree items in the tree; the hint, the too-broad line and the hidden count are under it, reachable and announced; lines in the tree are tree items; the nested case defined row by row; scroll padding | 5.1, 5.2, 5.5, 12.1, 16.1, 17; mockup `nested`, `none`, `outside` |
 | **M9** dialogs have no accessibility design | **Fixed**: the combobox and listbox pattern with `aria-activedescendant`, whole-row names, focus trap, `inert`, focus return per dialog, what F4 adds to `TabSwitcher`; [S2] no button inside an option | 16.2, 6, 8, 18 |
 | **M10** toasts promised for results out of sight | **Fixed**: a toast and a focus rule for each action out of sight | 5.7, 12.3 |
@@ -1825,21 +2129,39 @@ designed in full.
 | **m3** hostile text: the plain form forgeable; `aria-label` on a role-less span; the disambiguating part's isolate; spaces; U+200C and U+200D; the regex | **Fixed**: `⟨U+…⟩` with a literal `⟨` escaped; the chip has no label; each part its own `<bdi>` in rows and dialogs; spaces escaped; joiners kept where they are spelling; all of Cc and Cf in every plane | 14, 23 P3; mockup `hostile` and its gallery |
 | **m4** additions not flagged | **Fixed**: every addition listed, with what goes if it is cut | 23.3 |
 | **m5** a stray Backspace removes the folder just added | **Fixed**: focus returns to where it was, not to the new root; the key is ⌘⌫ | 8, 9.1, 15.3 |
-| **m6** row height while Checking | **Fixed**: no per-root Checking state; rows do not change during a refresh | 5.2, 5.4, 7.1 |
-| **m7** loading shows roots that cannot be known; where the line sits | **Fixed**: only the hub's root; one status line above the tree, the same in spec and mockup | 5.1, 11; mockup `loading` |
+| **m6** row height while Checking | **Fixed**: draft 2 first removed the state; the design's open now streams, so Checking… is back, as a one-line row with the word in the path's place. Only a root that turns out missing grows, once, while the list is built; nothing is Checking… during a refresh, so a refresh never moves a row | 5.2, 5.4, 7.1, 11; mockup `loading` |
+| **m7** loading shows roots that cannot be known; where the line sits | **Fixed**: the hub's root at once, then each root only when its row has been read (never one that cannot be known yet); one status line above the tree, the same in spec and mockup | 5.1, 11; mockup `loading` |
 | **m8** mockup and spec disagree (full label; plain toasts; the hostile caption; the `×`'s name; "Themes"; the `.*` button's size; `aria-setsize`, `aria-posinset`, `aria-describedby`) | **Fixed**, each one | 5.3, 12.3, 16.1, 19; mockup |
 | **m9** the whole path and the kind only in a tooltip; added and discovered look alike | **Fixed**: the focus detail; a different icon and name for an added folder | 5.2, 16.1 |
 | **m10** undefined cases | **Fixed**: the hidden count against the list (9.2); the order of Add's refusals (8); a folder both listed and added (6.2); Refresh while one runs (7.1); a dismissed bar on "Still missing." (7.1); ⌘⇧E while a dialog is open (15.2) | as given |
 | **m11** routing | **Fixed**: section 22's items 3, 7 and 12 moved to P10, P22 and P18; the too-broad hub through Open Hub asked as P19; the owner of WS-2 AC3's copy asked as P20 | 22, 23 |
-| **m12** the allowlist not enumerated; the shortcut's listing; "title case, as the palette" | **Fixed**: 55 numbered strings; the rows for `shortcutList.ts` and `docs/guide/shortcuts.md`; the claim about the palette's case corrected | 19.1, 15.2, 3 |
+| **m12** the allowlist not enumerated; the shortcut's listing; "title case, as the palette" | **Fixed**: 62 numbered strings; the rows for `shortcutList.ts` and `docs/guide/shortcuts.md` (macOS only); the claim about the palette's case corrected | 19.1, 15.2, 3 |
 | **m13** loose claims | **Fixed**: rows, not the header, lack keyboard support; the live region is private to the strip; contrast for all nine presets; plain tabs' breadcrumb unchanged and said so; the disabled item not dimmed | 1, 5.1, 6.2, 16.3 |
 | Suspected: the label at 180 px | **Fixed and checked**: the word shares the second line with the path, the path gives way first | 5.2; mockup width switch |
 | Suspected: stacked combining marks | **Fixed and checked**: each row clips to its box | 5.2, 14; mockup `hostile` |
 
 **Left alone, as the review verified them:** the relabel table's files,
-lines and strings; ⌘⇧E unbound; the palette single-step; today's rows as
-described; toast timings; token values and the Precision contrast figures;
-the F2 wording reused.
+lines and strings; ⌘⇧E unbound (checked again, 15.2); the palette
+single-step; today's rows as described; toast timings; token values and the
+Precision contrast figures; the F2 wording reused.
+
+### 25.2 What changed since draft 2 was begun, and the design's questions to the designer
+
+Draft 2 was begun against PRD 3.3 and design revision 1. Since then:
+
+| Source | Change | Answered in |
+|---|---|---|
+| PRD 3.4 to 3.10 (approved 2026-11-15) | WS-7 AC3: "strip all paths" (`projectDir`, `cwd` never sync); OQ-15's skipped-key line; OQ-18 and OQ-21 per-task Dispatch; OQ-20 (b′) the fleet's join; S0 first, every OS. No other criterion changed | section 26 |
+| PRD 3.11 (pending) and OQ-22 (answered yes) | every tab's path fields, and names derived from a path, out of `ade-session`'s export | 26.5: nothing on screen |
+| Design D-1 | items 1, 2, 3, 6, 15 and 17 of section 22 reopened; Checking… back; copy for `rows_over_limit`, `cut_short`, `record_newer`, `record_unreadable`, `not_saved`, the eleven `check_failed` reasons, `hub_missing` not answering, the listing errors | 5.2, 5.4, 11, 12.1, 12.2 (the `<why>` table, bars 2b, 6, 6b, 7), 17, 22 |
+| Design D-2 | the detached window gets the bar and no toast; say what a workspace tab shows there, with P-3 | 13.1, 11.1 (bar D), 23 P13 |
+| Design D-3 | `opening`: say whether a second open should show something | 11.3 |
+| Design D-4 | folded into D-5 by the design | 26 |
+| Design D-5 | the skipped-key line's copy | **26.2**, verbatim, with the rules it keeps |
+| Design 18 item 10 | `focusFiles` on macOS only | 15.2, 23 O1 |
+| Design 18 item 20 | no toast in the detached window | 5.7, 12.3, 13.1 |
+| Design 4.1 | the record's read-only states refuse hand changes | 6.1, 6.2, 8 (rows 11, 12), 12.2 (bars 6b, 7) |
+| Design 13.2, 13.3 | a `hub.conf` folder whose check failed opens plain with a notice; Open Hub's tab F4 could not mark | 11.2, 12.2 (bars 10, 11) |
 
 ## 26. Slice S0: the skipped-key line in Settings → Sync (design D-5), Dispatch and the fleet
 
@@ -1962,8 +2284,9 @@ lines' presence, not their wording. The test should match on the store's
 words and the side's phrase (*from this machine* / *from other machines*),
 not the whole sentence, so a later copy edit does not break it.
 
-Mockup: Settings → Sync, scenario `syncskip`, with a switch that steps
-through the PRD's sequence of reports.
+Mockup: Settings → Sync, scenario `syncskip`, with buttons that step
+through the PRD's sequence of reports, and a fifth step with both copies of
+one store unreadable and the fallback line.
 
 ### 26.3 Dispatch (OQ-18, OQ-21)
 

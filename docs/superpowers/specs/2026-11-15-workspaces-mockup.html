@@ -113,6 +113,12 @@ kbd { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary);
 .fb-foot { border-top:1px solid var(--border); padding:4px 10px; font-size:11px; color:var(--text-secondary); flex-shrink:0; line-height:1.45; overflow-wrap:anywhere; }
 .fb-detail { border-top:1px solid var(--border); padding:6px 10px; font-size:11px; color:var(--text-secondary); flex-shrink:0; line-height:1.45; overflow-wrap:anywhere; }
 .fb-detail .p { font:10.5px var(--font-mono); color:var(--text-primary); display:block; }
+.ckw { flex:1 1000 auto; min-width:0; font-size:10px; color:var(--text-secondary); padding-left:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sync-note { font-size:11px; color:var(--text-muted); line-height:1.6; margin-top:6px; }
+.sync-skip { font-size:11px; line-height:1.6; margin-top:4px; color:var(--yellow); }
+.sync-skip b { font-weight:600; }
+.set-tabs button { padding:8px 10px; font-size:12px; color:var(--text-secondary); border:0; border-bottom:2px solid transparent; background:none; cursor:pointer; }
+.set-tabs button.on { color:var(--text-primary); border-bottom-color:var(--accent); }
 .esc { font:600 9.5px var(--font-mono); color:var(--yellow); border:1px solid rgba(217,164,65,.5); border-radius:2px; padding:0 2px; margin:0 1px; white-space:nowrap; font-style:normal; }
 .empty { display:grid; place-items:center; height:100%; color:var(--text-secondary); font-size:12px; }
 
@@ -209,7 +215,7 @@ table.t th { color:var(--text-secondary); font-weight:600; font-size:11px; }
 <body>
 <header class="page">
   <h1>Workspaces (F4): one multi-folder workspace per agent hub</h1>
-  <p>Mockup for <code>2026-11-15-workspaces-ux.md</code>, draft 2. Self-contained: no network, invented names and paths. Pick a scenario on the right, then click or use the keys. Everything tagged <span class="tag">S2</span> belongs to slice 2. Scenarios whose behaviour waits on an answer from the product manager name the question (P3, P13 to P19) in their caption and draw the recommended case.</p>
+  <p>Mockup for <code>2026-11-15-workspaces-ux.md</code>, draft 2. Self-contained: no network, invented names and paths. Pick a scenario on the right, then click or use the keys. Everything tagged <span class="tag">S2</span> belongs to slice 2. Scenarios whose behaviour waits on an answer from the product manager name the question (P3, P13 to P19) in their caption and draw the recommended case. Built against PRD F4 revision 3.10 and the proposed design's revision 4; slice S0's line in Settings → Sync is the scenario “Settings → Sync: a store was skipped” (spec section 26).</p>
   <p>The tab bar shows <b>no workspace mark</b>: a workspace tab opened by Open Hub looks like F2's hub tab (◇ Agent hub), one opened from a hub folder looks like a plain tab. The file browser and the palette are where a workspace shows.</p>
 </header>
 
@@ -223,16 +229,15 @@ table.t th { color:var(--text-secondary); font-weight:600; font-size:11px; }
     <div id="scs"></div>
     <h2>The own view's shell</h2>
     <div class="rowb" id="cds"></div>
-    <div class="rowb"><button id="answer">Mockup: discovery answers now</button></div>
+    <div class="rowb"><button id="answer">Mockup: next step of the open</button></div>
     <h2>Mockup switches</h2>
     <label><input type="checkbox" id="f3"> <span>F3 S1 is on <code>main</code> (WS-5 AC2: a sub-terminal shows its single root)</span></label>
     <label><input type="checkbox" id="byhub" checked> <span>Opened by Open Hub (off: from a hub folder, plain shell)</span></label>
     <label><input type="checkbox" id="exists"> <span>A missing folder the shell enters now exists (cloned since the last refresh)</span></label>
     <label><input type="checkbox" id="hubback" checked> <span>Refresh finds the hub finished again (off: still missing)</span></label>
-    <label><input type="checkbox" id="det" checked> <span>A detached window has F4's bar, toast and live region (P13, recommended)</span></label>
     <label><span>File browser width</span> <select id="fbw" aria-label="File browser width"><option value="180">180 px (narrowest)</option><option value="300" selected>300 px</option><option value="500">500 px (widest)</option></select></label>
     <h2>Keys</h2>
-    <p class="note"><kbd>⌘P</kbd> palette (here also <kbd>Ctrl</kbd>+<kbd>P</kbd>) · <kbd>⌘⇧E</kbd> focus the file browser (here also <kbd>Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>E</kbd>) · in the tree: <kbd>↑</kbd><kbd>↓</kbd> move, <kbd>→</kbd><kbd>←</kbd> open, close, parent · <kbd>↵</kbd> open or close · <kbd>⌥↵</kbd> a file in a file tab · <kbd>⌥↑</kbd><kbd>⌥↓</kbd> move a root · <kbd>⌘⌫</kbd> hide or remove a root (here also <kbd>Ctrl</kbd>+<kbd>⌫</kbd>) · <kbd>⇧F10</kbd> root menu · <kbd>Esc</kbd> back to the terminal.</p>
+    <p class="note"><kbd>⌘P</kbd> palette (here also <kbd>Ctrl</kbd>+<kbd>P</kbd>) · <kbd>⌘⇧E</kbd> focus the file browser, macOS only (here also <kbd>Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>E</kbd>) · in the tree: <kbd>↑</kbd><kbd>↓</kbd> move, <kbd>→</kbd><kbd>←</kbd> open, close, parent · <kbd>↵</kbd> open or close · <kbd>⌥↵</kbd> a file in a file tab · <kbd>⌥↑</kbd><kbd>⌥↓</kbd> move a root · <kbd>⌘⌫</kbd> or <kbd>Delete</kbd> hide or remove a root (here also <kbd>Ctrl</kbd>+<kbd>⌫</kbd>) · <kbd>⇧F10</kbd> root menu · <kbd>Esc</kbd> back to the terminal.</p>
     <h2>Last announcement (screen reader)</h2>
     <div class="say" id="say" aria-live="polite">Nothing yet.</div>
   </aside>
@@ -327,6 +332,7 @@ function reset(over) {
     sc: "", kind: "ws", hubState: "finished", why: "", roots: [], hidden: [], left: [], notices: [], bars: [], exp: new Set(), cwd: HUB, unreadHidden: "",
     view: "own", hasSub: false, overlay: null, menu: null, toast: null, focus: null, kbd: false, fbOpen: true, loading: false, refreshing: false, detached: false, persona: true,
     q: "", cur: 0, addVal: "", addErr: null, addBad: false, dlgNote: "", setAfter: true, dismissed: new Set(), want: null, ret: null, newRoot: null, tooBroad: false,
+    readonly: false, loadStep: 0, setTab: "tabs", syncStep: 0,
     recents: [
       { name: "acme-staff-engineer", path: HUB, st: "open" },
       { name: "beta-data-engineer", path: "~/hubs/beta-data-engineer", st: "ok" },
@@ -335,16 +341,16 @@ function reset(over) {
     ],
   }, over || {});
 }
-const std = () => [hubRoot(), R("~/Project/acme/api", "disc"), R("~/Project/beta/api", "disc"), R("~/Project/acme-web", "disc", "missing"), R("~/Documents/design-notes", "added", "ok", [T("2026-11-kickoff.md"), T("decisions.md")])];
+const std = () => [hubRoot(), R("~/Project/acme/api", "disc", "ok", null, { src: "projects/acme/ACCESS.md" }), R("~/Project/beta/api", "disc", "ok", null, { src: "projects/beta/ACCESS.md" }), R("~/Project/acme-web", "disc", "missing", null, { src: "projects/acme/ACCESS.md" }), R("~/Documents/design-notes", "added", "ok", [T("2026-11-kickoff.md"), T("decisions.md")])];
 
 const SCENARIOS = [
   ["open", "A hub's workspace (Open Hub)", "WS-1 AC1, AC4 · WS-2 AC1 · WS-4 AC1, AC2. Five roots: the hub folder first, two checkouts with the same name told apart, one missing, one added by hand (a folder with a plus). Opening a workspace shows the file browser (P14, recommended).", () => reset({ roots: std(), exp: new Set([HUB]) })],
-  ["loading", "Opening: the hub's folders are being read", "WS-9 AC3. Only the hub folder is known before discovery answers, so only its root shows, with one status line above the tree. The button “Mockup: discovery answers now” on the right ends it.", () => reset({ roots: [hubRoot()], exp: new Set([HUB]), loading: true })],
+  ["loading", "Opening: the hub's folders are being read", "WS-9 AC3 · design 7.6 (opening streams). At once only the hub's root, Checking…, and only Refresh is offered. “Mockup: next step of the open” on the right: the hub is found finished and its root opens; then every root appears as its row is read, each Checking… (one line, the word in the path's place); then each takes its state and “Workspace ready” is said once. Only a root that is missing grows to two lines.", () => reset({ roots: [hubRoot("checking")], exp: new Set(), loading: true, hubState: "checking" })],
   ["none", "A hub with no checkouts", "WS-1 AC1. One root; the hint and its Add link sit under the tree, outside it, in the tab order.", () => reset({ roots: [hubRoot()], exp: new Set([HUB]) })],
   ["allmissing", "Every checkout missing", "WS-1 AC4. A new Mac: nothing cloned yet. Missing rows show their path, cannot open and open nothing.", () => reset({ roots: std().map((r) => (r.kind === "disc" ? { ...r, st: "missing" } : r)).slice(0, 4), exp: new Set([HUB]) })],
-  ["slow", "A root that does not answer", "WS-9 AC3 · F4.1. A folder that does not answer in 2 s is a missing root with a reason: the word reads Missing · not answering, and “missing” is in its name (P16).", () => { reset({ roots: std(), exp: new Set([HUB]) }); S.roots.splice(3, 0, R("/Volumes/archive/acme-legacy", "disc", "slow")); }],
-  ["fifty", "50 roots, 10 checkouts left out", "WS-9 AC1. The hub names 58 checkouts and one folder was added: the hub, 48 checkouts and the added folder show; the last 10 checkouts in the workspace's order are left out. The notice opens the list where they can be seen and hidden. An add is refused; hiding one lets the next in.", () => { reset({ roots: [hubRoot()], exp: new Set() }); for (let i = 1; i <= 58; i++) (i <= 48 ? S.roots : S.left).push(R(`~/Project/acme/service-${String(i).padStart(2, "0")}`, "disc", i % 9 === 0 ? "missing" : "ok")); S.roots.push(R("~/Documents/design-notes", "added", "ok", [T("decisions.md")])); S.notices = [{ k: "cap" }]; }],
-  ["notices", "Discovery notices", "WS-1 AC2, AC7 · WS-9 AC2, AC5. One workspace notice block above the roots; each line stays until its cause is gone or it is dismissed.", () => reset({ roots: std(), exp: new Set([HUB]), unreadHidden: "projects/beta/ACCESS.md", notices: [{ k: "unread", file: "projects/beta/ACCESS.md", why: "no permission" }, { k: "tilde", n: 1, files: "projects/acme/ACCESS.md" }, { k: "broad", n: 3 }, { k: "work", n: 12 }] })],
+  ["slow", "A root that does not answer, on a slow volume", "WS-9 AC3 · F4.1 · design 7.6. A folder that does not answer in 2 s is a missing root with a reason: the word reads Missing · not answering, and “missing” is in its name (P16). Here the volume also held one work folder's ACCESS.md, and discovery stopped at 10 seconds, so two notice lines say so.", () => { reset({ roots: std(), exp: new Set([HUB]), notices: [{ k: "cut" }, { k: "unread", file: "projects/legacy/ACCESS.md", why: "it did not answer within 2 seconds" }] }); S.roots.splice(3, 0, R("/Volumes/archive/acme-legacy", "disc", "slow", null, { src: "projects/legacy/ACCESS.md" })); }],
+  ["fifty", "50 roots, 10 checkouts left out", "WS-9 AC1 · design 5.6. The hub names 58 checkouts and one folder was added: the hub, 48 checkouts and the added folder show; the last 10 checkouts in the hub's own order are left out, whatever order the roots are moved into. The notice opens the list where they can be seen and hidden. An add is refused; hiding one lets the next in.", () => { reset({ roots: [hubRoot()], exp: new Set() }); for (let i = 1; i <= 58; i++) (i <= 48 ? S.roots : S.left).push(R(`~/Project/acme/service-${String(i).padStart(2, "0")}`, "disc", i % 9 === 0 ? "missing" : "ok", null, { src: "projects/acme/ACCESS.md" })); S.roots.push(R("~/Documents/design-notes", "added", "ok", [T("decisions.md")])); S.notices = [{ k: "cap" }]; }],
+  ["notices", "Discovery notices", "WS-1 AC2, AC7 · WS-9 AC2, AC5. One workspace notice block above the roots; each line stays until its cause is gone or it is dismissed.", () => reset({ roots: std(), exp: new Set([HUB]), unreadHidden: "projects/beta/ACCESS.md", notices: [{ k: "unread", file: "projects/beta/ACCESS.md", why: "no permission" }, { k: "tilde", n: 1, files: [["projects/acme/ACCESS.md", 1]] }, { k: "broad", n: 3, files: [["ACCESS.md", 1], ["projects/acme/ACCESS.md", 2]] }, { k: "work", n: 12 }, { k: "rows", n: 37 }] })],
   ["outside", "The shell leaves the workspace (cd /tmp)", "WS-5 AC3. One extra root after the others, marked Not in workspace; it goes when the shell is back inside. cd / shows a line under the tree and no root.", () => { reset({ roots: std(), exp: new Set([HUB]) }); cd("/tmp/scratch"); }],
   ["hostile", "Hostile names and a very long path", "Sharding note m11. Bidi and control characters show as chips and are never applied; a real right-to-left name does not reorder its neighbours; spaces that would hide show; a long path is cut from the left; stacked marks are clipped to their row.", () => reset({ roots: hostileRoots(), exp: new Set([HUB]), notices: [{ k: "unread", file: "projects/evil" + U(0x202E) + "gnp.md/ACCESS.md", why: "not a regular file" }] })],
   ["hidden", "Two checkouts hidden", "WS-3 AC2, AC3. The line under the tree counts them; Show Hidden Workspace Folders lists them and brings each back to its place.", () => { reset({ roots: std(), exp: new Set([HUB]) }); const [a] = S.roots.splice(2, 1); const [b] = S.roots.splice(2, 1); S.hidden = [{ ...a, ord: 2 }, { ...b, ord: 3 }]; }],
@@ -352,17 +358,19 @@ const SCENARIOS = [
   ["nolist", "A folder that cannot be listed, and one deleted since the last refresh", "A root that exists but cannot be listed stays an ordinary root; opening it shows one line under it. The same for a root whose folder went after the last refresh. Both lines are tree items, reached with the arrows.", () => { reset({ roots: std(), exp: new Set() }); S.roots[1].listErr = "Can't list this folder: no permission."; S.roots[2].listErr = "This folder is no longer there. Refresh Workspace Folders checks it again."; S.exp = new Set([S.roots[1].path, S.roots[2].path]); }],
   ["gone", "Restored: the hub folder is gone", "WS-6 AC3 · WS-2 AC6. One missing root, a bar above the terminal, and only Refresh in the menu and the palette. Refresh brings the workspace back (switch “Refresh finds the hub finished again” off to see Still missing).", () => reset({ hubState: "gone", roots: [hubRoot("missing")], bars: ["gone"], persona: false })],
   ["unfinished", "Restored: not a finished hub right now", "WS-6 AC3 · WS-2 AC6. Shown as a plain tab (one root, following the shell) with a bar that gives the reason; only Refresh is offered.", () => reset({ hubState: "unfinished", why: "hub.conf is not committed", roots: [], bars: ["unfinished"], exp: new Set([HUB]), persona: false })],
-  ["checkfailed", "Restored: the hub could not be checked", "The architect's proposed third outcome (design 8, 11.1, its Q4): the repository is in a format the check does not read, or does not answer. Shown as the row above, with its own words.", () => reset({ hubState: "failed", why: "its repository uses a format Better Terminal does not read", roots: [], bars: ["failed"], exp: new Set([HUB]), persona: false })],
+  ["checkfailed", "Restored: the hub could not be checked", "The design's third outcome (its 8, 11.1, P-7): here the hub's .git is a file (a linked worktree). Each of the eleven reasons has its own phrase (spec 12.2). Shown as the row above, with its own words.", () => reset({ hubState: "failed", why: "its .git is a file (a linked worktree or a submodule), which Better Terminal does not read", roots: [], bars: ["failed"], exp: new Set([HUB]), persona: false })],
   ["already", "Open Hub, setup asked, on a hub that is already open", "WS-2 AC3. The hub's tab came forward, nothing ran, and a bar says so. Without the setup option it is a 4-second toast (reach it through Open Workspace… S2 in the palette).", () => reset({ roots: std(), exp: new Set([HUB]), bars: ["already"] })],
   ["nopersona", "Open Hub on a hub whose open tab has no persona", "P15. The only open tab of this hub was opened from the hub folder (or restored, or is a Duplicate): it comes forward, nothing starts, and a bar says how to get the persona.", () => { reset({ roots: std(), exp: new Set([HUB]), bars: ["nopersona"], persona: false }); }],
+  ["readonly", "Restored: hand changes from a newer version", "Design 4.1 (record_newer). The record was written by a newer build, so this one reads nothing from it and writes nothing: the roots come from discovery alone (the folder you added is not shown, a hidden checkout is), bar 7 says so, and only Refresh is offered. Roots have no ⋯; ⌘⌫ and ⌥↑ say why.", () => reset({ roots: std().filter((r) => r.kind !== "added"), exp: new Set([HUB]), bars: ["newer"], readonly: true })],
   ["dropped", "A kept record was dropped (200 limit), with another bar", "WS-6 AC2. The bar names the hub whose hand changes were dropped and stays until dismissed, in whichever workspace tab is in sight (P18). Two causes meet here: the bars stack in a fixed order.", () => reset({ roots: std(), exp: new Set([HUB]), bars: ["already", "dropped"] })],
   ["sub", "A focus sub-terminal in sight", "WS-5 AC1 and AC2, D6. Toggle “F3 S1 is on main”: before it, the tab's one file browser keeps showing the workspace; with it, the sub-terminal shows only its own root and results come as toasts.", () => reset({ roots: std(), exp: new Set([HUB]), hasSub: true, view: "sub" })],
-  ["fbclosed", "Restored with the file browser closed", "P14. Restore does not open the file browser. Notices that would go unseen come as one toast with Show Files; results of palette actions come as toasts.", () => { reset({ roots: std(), exp: new Set([HUB]), fbOpen: false, persona: false, notices: [{ k: "unread", file: "projects/beta/ACCESS.md", why: "no permission" }, { k: "tilde", n: 1, files: "projects/acme/ACCESS.md" }] }); setToast({ title: "2 workspace notices", body: "The file browser lists them.", action: "Show Files", run: "fbopen" }); }],
+  ["fbclosed", "Restored with the file browser closed", "P14. Restore does not open the file browser. Notices that would go unseen come as one toast with Show Files; results of palette actions come as toasts.", () => { reset({ roots: std(), exp: new Set([HUB]), fbOpen: false, persona: false, notices: [{ k: "unread", file: "projects/beta/ACCESS.md", why: "no permission" }, { k: "tilde", n: 1, files: [["projects/acme/ACCESS.md", 1]] }] }); setToast({ title: "2 workspace notices", body: "The file browser lists them.", action: "Show Files", run: "fbopen" }); }],
   ["plain", "A plain tab", "WS-4 AC4 · WS-2 AC6. Unchanged: one root, today's rows and breadcrumb, no workspace menu, no workspace entries in the palette.", () => reset({ kind: "plain", roots: [], cwd: "~/Project/acme/api", exp: new Set(["~/Project/acme/api"]) })],
   ["broadhub", "A hub folder that is too broad", "WS-2 AC4 · WS-9 AC5. The home folder holds a hub.conf: from the New tab dialog it opens as a plain tab, with a bar. Open Hub on it is P19.", () => reset({ kind: "plain", roots: [], cwd: "~", bars: ["broadhub"], exp: new Set() })],
   ["removed", "F2's “Hub removed” tab", "WS-2 AC7. After Remove Hub Folder the tab is neither a hub tab nor a workspace tab: a plain shell in the home folder.", () => reset({ kind: "removed", roots: [], cwd: "~", exp: new Set() })],
-  ["detached", "A workspace tab in its own window, brought forward", "P13 (the review's B1). A detached window has no file browser and no palette today, for any tab. Recommended: it gains only F4's bar, the toast and a live region, so WS-2 AC3's message has a place. Switch the recommendation off to see today's window.", () => reset({ roots: std(), detached: true, bars: ["already"] })],
-  ["detachedgone", "A workspace tab in its own window, hub folder gone", "P13. With the bar, WS-6 AC3's notice and “only Refresh” have a place in a detached window. Without it the window shows the terminal alone.", () => reset({ hubState: "gone", roots: [hubRoot("missing")], detached: true, bars: ["gone"], persona: false })],
+  ["detached", "A workspace tab in its own window, brought forward", "P13 (the review's B1; the design's P-3). A detached window has no file browser and no palette. The proposed design mounts F4's bar and a live region there, and no toast: a message for this window is a bar. Here every tab of the hub is detached and Open Hub was chosen: the tab comes forward, nothing starts, and bar D says where the folders show.", () => reset({ roots: std(), detached: true, bars: ["detonly"] })],
+  ["detachedgone", "A workspace tab in its own window, hub folder gone", "WS-6 AC3 in a detached window: the bar has a place there (design 13.2), and its Refresh Workspace Folders button is the one workspace action the window has. A result that would be a toast is said by the window's live region.", () => reset({ hubState: "gone", roots: [hubRoot("missing")], detached: true, bars: ["gone"], persona: false })],
+  ["syncskip", "Settings → Sync: a store was skipped (slice S0)", "WS-7 AC3, OQ-15 · spec section 26 · design D-5. This machine's orchestrator copy could not be read, and the synced copy of agent runs could not be read at start-up. One line each, under the last result, on this machine only. The steps in the dialog follow the PRD's test: a periodic sync, the local copy readable again, the next start-up.", () => { reset({ roots: std(), exp: new Set([HUB]) }); S.overlay = "settings"; S.setTab = "sync"; S.ret = { k: "term" }; S.want = "auto"; }],
 ];
 function hostileRoots() {
   return [hubRoot(),
@@ -390,8 +398,17 @@ const curRoot = () => real().filter((r) => inside(S.cwd, r.path)).sort((a, b) =>
 const say = (t) => { $("#say").textContent = t; };
 const rkey = (r) => kid(r.id + "|" + r.path);
 const lbl = (r) => { const l = labels(S.roots)[r.id]; return r.name + (l ? " — " + l : ""); };
-const kindLine = (r) => (r.kind === "hub" ? "Hub folder" : r.kind === "disc" ? "Checkout the hub lists" : r.kind === "added" ? "Added by you" : "Not part of this workspace: the terminal is here");
-const stateLine = (r) => (r.st === "missing" ? "Missing: no folder at this path on this Mac. It shows here after a refresh once it exists." : r.st === "slow" ? "Missing: the folder did not answer within 2 seconds. Refresh Workspace Folders tries again." : "");
+const kindLine = (r) => (r.kind === "hub" ? "Hub folder" : r.kind === "disc" ? (r.src ? "Checkout listed in " + plain(r.src) : "Checkout the hub lists") : r.kind === "added" ? "Added by you" : "Not part of this workspace: the terminal is here");
+const stateLine = (r) => (r.st === "missing" ? "Missing: no folder at this path on this Mac. It shows here after a refresh once it exists." : r.st === "slow" ? "Missing: the folder did not answer within 2 seconds. Refresh Workspace Folders tries again." : r.st === "checking" ? "Checking: its folder has not answered yet." : "");
+/** While only Refresh is offered (spec 6.1): the menu's caption, first sentence and second. */
+function pausedWhy() {
+  if (S.hubState === "checking") return ["Checking the hub folder.", "The other items are offered once it is checked."];
+  if (S.hubState === "gone") return ["The hub folder is missing.", "Its workspace is kept; only Refresh is offered until it is back."];
+  if (S.hubState === "failed") return ["This hub could not be checked.", "Its workspace is kept; only Refresh is offered until it can be."];
+  if (S.hubState === "unfinished") return ["Not a finished hub right now.", "Its workspace is kept; only Refresh is offered until it is back."];
+  if (S.readonly) return ["The folders you added, hid or reordered can't be changed in this version.", "Only Refresh is offered; bar 6 or 7 above the terminal says why."];
+  return null;
+}
 function cd(path) {
   S.cwd = path;
   S.roots = real();
@@ -399,7 +416,7 @@ function cd(path) {
   if (S.kind !== "ws" || S.hubState !== "finished") return "";
   const cr = curRoot();
   if (cr) {
-    if (cr.st !== "ok") {
+    if (cr.st === "missing" || cr.st === "slow") {
       if (!$("#exists").checked) return `The terminal is in ${plain(lbl(cr))}, which is shown as missing. Refresh Workspace Folders checks it again.`;
       cr.st = "ok";
       for (let p = path; ; p = parentOf(p)) { S.exp.add(p); if (p === cr.path) break; }
@@ -446,19 +463,20 @@ function rootRow(r, lab, opts = {}) {
   const out = r.kind === "outside";
   const sfx = lab ? `<span class="sfx"> — <bdi>${vis(lab)}</bdi></span>` : "";
   const kindWord = r.kind === "hub" ? "hub folder, workspace folder" : out ? "folder, not part of the workspace" : r.kind === "added" ? "workspace folder, added by you" : "workspace folder";
-  const stWord = r.st === "missing" ? ", missing" : r.st === "slow" ? ", missing, not answering" : "";
+  const stWord = r.st === "missing" ? ", missing" : r.st === "slow" ? ", missing, not answering" : r.st === "checking" ? ", checking" : "";
   const name = `${plain(r.name)}${lab ? " — " + plain(lab) : ""}, ${kindWord}${stWord}${here ? ", the terminal is here" : ""}`;
   const desc = [plain(r.path) + ".", kindLine(r) + ".", stateLine(r)].filter(Boolean).join(" ");
   const tip = [plain(r.path), kindLine(r), stateLine(r)].filter(Boolean).join("\n");
   const lead = off ? `<span class="chev" aria-hidden="true"></span>` : `<span class="chev ${open ? "open" : ""}" aria-hidden="true">▶</span>`;
-  const ico = r.kind === "hub" && !off ? `<span class="ico" aria-hidden="true">◇</span>` : off ? `<span class="ico dash" aria-hidden="true">${r.st === "slow" ? "◷" : "⬚"}</span>` : `<span class="ico" aria-hidden="true">${r.kind === "added" ? "⊞" : "▣"}</span>`;
-  const two = off || out;
+  const ck = r.st === "checking";
+  const ico = ck ? `<span class="ico" aria-hidden="true"><span class="spin"></span></span>` : r.kind === "hub" && !off ? `<span class="ico" aria-hidden="true">◇</span>` : off ? `<span class="ico dash" aria-hidden="true">${r.st === "slow" ? "◷" : "⬚"}</span>` : `<span class="ico" aria-hidden="true">${r.kind === "added" ? "⊞" : "▣"}</span>`;
+  const two = (off && !ck) || out;
   const word = r.st === "missing" ? `<span class="word">Missing</span>` : r.st === "slow" ? `<span class="word warn">Missing · not answering</span>` : out ? `<span class="word">Not in workspace</span>` : "";
   const pth = (n) => `<span class="pth" dir="ltr"><bdi>${vis(shortPath(r.path, n))}</bdi></span>`;
-  const more = out || opts.static ? "" : `<button class="ib more" tabindex="-1" aria-hidden="true" data-act="rowmenu" data-id="${r.id}" ${S.menu && S.menu.id === r.id ? 'aria-expanded="true"' : ""}>⋯</button>`;
+  const more = out || opts.static || pausedWhy() ? "" : `<button class="ib more" tabindex="-1" aria-hidden="true" data-act="rowmenu" data-id="${r.id}" ${S.menu && S.menu.id === r.id ? 'aria-expanded="true"' : ""}>⋯</button>`;
   const d = "d" + ++did, key = rkey(r);
   return `<div class="row root ${off ? "off" : ""} ${out ? "outside" : ""} ${S.newRoot === r.id ? "new" : ""}" role="treeitem" aria-level="1" aria-setsize="${opts.size || 1}" aria-posinset="${opts.pos || 1}" ${off ? "" : `aria-expanded="${open}"`} ${atRoot ? 'aria-current="location"' : ""} aria-label="${h(name)}" aria-describedby="${d}" title="${h(tip)}" tabindex="${opts.static ? -1 : S.focus === key || opts.first ? 0 : -1}" data-key="${h(key)}" data-root="${r.id}">
-    <span class="l1">${lead}${ico}<span class="nm"><bdi>${vis(r.name)}</bdi>${sfx}</span>${two ? "" : pth(30)}${here ? `<span class="here-mark" aria-hidden="true">›_</span>` : ""}${more}</span>
+    <span class="l1">${lead}${ico}<span class="nm"><bdi>${vis(r.name)}</bdi>${sfx}</span>${two ? "" : ck ? `<span class="ckw">Checking…</span>` : pth(30)}${here ? `<span class="here-mark" aria-hidden="true">›_</span>` : ""}${more}</span>
     ${two ? `<span class="l2">${word}${pth(40)}</span>` : ""}<span class="sr" id="${d}">${h(desc)}</span></div>`;
 }
 function nodeRow(it, first) {
@@ -473,22 +491,27 @@ const msgRow = (it, first) => `<div class="row msg" role="treeitem" aria-level="
 
 /* ------------------------------------------------------------------ notices and bars */
 function noticeLine(n) {
-  if (n.k === "tilde") return [`${n.n} ${plural(n.n, "row names a path", "rows name paths")} Better Terminal does not read`, `In <code><bdi>${vis(n.files)}</bdi></code>. A Checkout cell may start with <code>/</code>, or with <code>~</code> alone or <code>~/</code>; <code>~name/…</code> is not read.`];
-  if (n.k === "broad") return [`${n.n} ${plural(n.n, "row names a folder", "rows name folders")} too broad to show`, `A workspace folder can't be <code>/</code>, your home folder, a whole volume, or a folder that holds Better Terminal's own data.`];
+  const inF = (fs) => "In " + (fs.length === 1 ? `<code><bdi>${vis(fs[0][0])}</bdi></code>.` : fs.map(([f, c]) => `<code><bdi>${vis(f)}</bdi></code> (${c})`).join(", ").replace(/, ([^,]*)$/, " and $1") + ".");
+  if (n.k === "tilde") return [`${n.n} ${plural(n.n, "row names a path", "rows name paths")} Better Terminal does not read`, `${inF(n.files)} A Checkout cell may start with <code>/</code>, or with <code>~</code> alone or <code>~/</code>; <code>~name/…</code> is not read.`];
+  if (n.k === "broad") return [`${n.n} ${plural(n.n, "row names a folder", "rows name folders")} too broad to show`, `${inF(n.files)} A workspace folder can't be <code>/</code>, your home folder, a whole volume, or a folder that holds Better Terminal's own data.`];
+  if (n.k === "rows") return [`${n.n} checkout ${plural(n.n, "row", "rows")} not read`, `Better Terminal reads at most 500 checkout rows in one hub's ACCESS.md files; the rows after those are not shown.`];
+  if (n.k === "cut") return [`Reading the hub's folders stopped after 10 seconds`, `Folders not checked by then are shown missing, not answering, and files not read are listed here. Refresh Workspace Folders tries again.`];
   if (n.k === "unread") return [`Better Terminal could not read <code><bdi>${vis(n.file)}</bdi></code> (${h(n.why)})`, `The folders it names are not shown; the rest of the workspace is. Folders you hid from it stay hidden.`];
-  if (n.k === "cap") return [`${S.left.length} ${plural(S.left.length, "folder", "folders")} not shown`, `A workspace shows at most 50 folders: the hub folder, the folders you added, and the first checkouts in its order. Hide some to see the others. <button class="link" data-act="remove">Choose Folders to Hide…</button>`];
+  if (n.k === "cap") return [`${S.left.length} ${plural(S.left.length, "folder", "folders")} not shown`, `A workspace shows at most 50 folders: the hub folder, the folders you added, and the first checkouts the hub lists. Hide some to see the others. <button class="link" data-act="remove">Choose Folders to Hide…</button>`];
   if (n.k === "work") return [`${n.n} work folders skipped`, `Better Terminal reads the ACCESS.md of at most 200 work folders.`];
 }
 const noticeKey = (n) => JSON.stringify(n) + (n.k === "cap" ? S.left.length : "");
 const liveNotices = () => S.notices.filter((n) => !(n.k === "cap" && !S.left.length) && !S.dismissed.has(noticeKey(n)));
 const hubCode = () => `<code><bdi>${vis(HUB)}</bdi></code>`;
-const BAR_ORDER = ["already", "nopersona", "gone", "unfinished", "failed", "dropped", "recordlost", "broadhub"];
+const BAR_ORDER = ["already", "nopersona", "detonly", "gone", "unfinished", "failed", "dropped", "recordlost", "newer", "broadhub"];
 const BARS = {
   already: () => [`This hub is already open, so bin/setup and bin/doctor were not run. To run them, close the hub's tabs, then choose Open Hub again.`, false],
   nopersona: () => [`This hub is already open in this tab, and no persona session is running here. Open Hub starts the persona only when the hub is not open: close the hub's tabs, then choose Open Hub again.`, false],
   gone: () => [`The hub folder ${hubCode()} is missing: deleted, moved, or on a volume that is not connected. Its workspace is kept and comes back when the folder does.`, true],
   unfinished: () => [`${hubCode()} is not a finished hub right now: ${h(S.why)}. Its workspace is kept and comes back when it is.`, true],
   failed: () => [`Better Terminal could not check whether ${hubCode()} is a finished hub: ${h(S.why)}. Its workspace is kept; this tab shows one folder until a refresh can check it.`, true],
+  detonly: () => [`This hub is already open in this window, which does not show its folders. To see them, open the hub's folder from the main window's New tab dialog; it opens with a plain shell, and this tab keeps running.`, false],
+  newer: () => [`The folders you added, hid or reordered were saved by a newer Better Terminal. This version leaves them untouched and does not apply them: folders you added are not shown, folders you hid are, and none can be changed here.`, false],
   dropped: () => [`Better Terminal keeps the folders you added, hid or reordered for 200 workspaces. To make room, it dropped them for <code><bdi>~/hubs/old-client-engineer</bdi></code>, the one opened longest ago. If you open that hub again, its workspace starts from the hub's own list.`, false],
   recordlost: () => [`Better Terminal could not read the folders you added, hid or reordered, so every workspace starts from its hub's own list. The unreadable file was set aside, not deleted.`, false],
   broadhub: () => [`This folder has a hub.conf, but it opened as a plain tab: Better Terminal opens no workspace on <code>/</code>, your home folder, a whole volume, or a folder that holds its own data.`, false],
@@ -516,9 +539,9 @@ function render() {
   const modal = !!S.overlay;
 
   if (S.detached) {
-    const hosts = $("#det").checked;
+    // The detached window: F4's bar and a live region (the page's "Last announcement" stands for it); no toast host (design 13.2, 18 item 20).
     $("#win").innerHTML = `<div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>${h(tabName)}</div>
-      <div class="body"><div class="view">${hosts ? barsHTML() : ""}<div class="term" id="term" tabindex="0" aria-label="Terminal">${term}</div></div></div>${hosts ? toastHTML() : ""}`;
+      <div class="body"><div class="view">${barsHTML()}<div class="term" id="term" tabindex="0" aria-label="Terminal">${term}</div></div></div>`;
   } else {
     let tree = "";
     const first = !items.some((it) => it.key === S.focus);
@@ -529,7 +552,8 @@ function render() {
     const notices = nl.length ? `<div class="wn" role="group" aria-label="Workspace notices">${nl.map((n, i) => { const [a, b] = noticeLine(n); return `<div class="wn-line"><span class="ic" aria-hidden="true">!</span><span class="tx"><b>${a}</b><small>${b}</small></span><button class="ib" data-act="dismiss" data-i="${i}" aria-label="Dismiss this notice" title="Dismiss">✕</button></div>`; }).join("")}</div>` : "";
     const hasMenu = S.kind === "ws" && !sub3;
     const busy = S.loading || S.refreshing;
-    const status = ws && busy ? `<div class="fb-st" role="status"><span class="spin" aria-hidden="true"></span>${S.loading ? "Reading the hub's folders…" : "Refreshing the workspace's folders…"}</div>` : "";
+    const showStatus = S.refreshing || (S.loading && S.loadStep > 0);
+    const status = ws && showStatus ? `<div class="fb-st" role="status"><span class="spin" aria-hidden="true"></span>${S.loading ? "Reading the hub's folders…" : "Refreshing the workspace's folders…"}</div>` : "";
     const fi = S.kbd && items.find((it) => it.key === S.focus && it.t === "root");
     const detail = ws && fi ? `<div class="fb-detail" aria-hidden="true"><span class="p" dir="ltr"><bdi>${vis(fi.r.path)}</bdi></span>${h(kindLine(fi.r))}${fi.r.kind === "disc" ? " · ⌘⌫ hides it" : fi.r.kind === "added" ? " · ⌘⌫ removes it" : fi.r.kind === "hub" ? " · always in the workspace" : ""}${fi.r.st !== "ok" ? "<br>" + h(stateLine(fi.r)) : ""}</div>` : "";
     const noCheckouts = ws && S.hubState === "finished" && !busy && real().length === 1 && !S.hidden.length && !S.left.length;
@@ -582,10 +606,9 @@ function menuHTML() {
   if (!S.menu) return "";
   const dis = (label, why) => `<button role="menuitem" aria-disabled="true">${label}<small>${why}</small></button>`;
   if (S.menu.id === "ws") {
-    const paused = S.hubState !== "finished";
-    const cap = S.hubState === "gone" ? "The hub folder is missing." : S.hubState === "failed" ? "This hub could not be checked." : "Not a finished hub right now.";
+    const pw = pausedWhy(), paused = !!pw;
     return `<div class="menu" role="menu" aria-label="Workspace" id="menu">
-      ${paused ? `<div class="cap" id="mcap">${cap} Its workspace is kept; only Refresh is offered until it is back.</div>` : ""}
+      ${paused ? `<div class="cap" id="mcap">${h(pw[0])} ${h(pw[1])}</div>` : ""}
       <button role="menuitem" data-act="refresh" data-id="menu" ${paused ? 'aria-describedby="mcap"' : ""}>Refresh Workspace Folders</button>
       ${paused ? "" : `<button role="menuitem" data-act="add">Add Folder to Workspace…</button>
       <button role="menuitem" data-act="remove">Remove Folder from Workspace…</button>
@@ -613,7 +636,7 @@ function closeMenu(back) { const m = S.menu; S.menu = null; if (back && m) S.wan
 
 /* ------------------------------------------------------------------ overlays */
 function paletteItems() {
-  const wsTab = S.kind === "ws", ok = S.hubState === "finished";
+  const wsTab = S.kind === "ws", ok = !pausedWhy();
   const all = [
     ["Tabs", "New Tab", "⌘T"], ["Panels", "Toggle File Browser", "⌘B", "fbtoggle"], ["Panels", "Focus File Browser", "⌘⇧E", "focusfb"], ["Panels", "Open Settings", "⌘,", "settings"],
     ...(wsTab ? [["Workspace", "Refresh Workspace Folders", "", "refresh"]] : []),
@@ -669,7 +692,10 @@ function overlayHTML() {
   }
   if (o === "settings") {
     const a = S.setAfter, c = (b4, af) => `<span class="${a ? "changed" : ""}">${a ? af : b4}</span>`;
-    inner = `${head("Settings")}<div class="set-tabs"><span>Themes</span><span>Terminal</span><span class="on">${c("Workspace", "Tabs")}</span><span>AI API</span><span>Sync</span></div>
+    const tb = (id, label) => `<button data-act="settab" data-id="${id}" class="${S.setTab === id ? "on" : ""}" aria-pressed="${S.setTab === id}">${label}</button>`;
+    inner = `${head("Settings")}<div class="set-tabs"><span>Themes</span><span>Terminal</span>${tb("tabs", c("Workspace", "Tabs"))}<span>AI API</span>${tb("sync", "Sync")}</div>`;
+    if (S.setTab === "sync") inner += syncTabHTML();
+    else inner += `
     <div class="dlg-b"><label style="display:flex;gap:6px;font-size:11px;color:var(--text-secondary);margin-bottom:12px"><input type="checkbox" data-autofocus data-act="setafter" ${a ? "checked" : ""}> Mockup only: show the new labels (changed strings are outlined)</label>
       <span class="set-l" style="margin-top:0">Open Tabs</span><div class="set-r"><small>1</small><span class="g">Agent hub</span><small>Rename</small></div><div class="set-r"><small>2</small><span class="g">notes</span><small>Rename</small></div>
       <span class="set-l">${c("Save Current Workspace", "Save Current Tabs")}</span><div style="display:flex;gap:8px"><input type="text" placeholder="${a ? "Tab set name..." : "Workspace name..."}"><button class="btn primary" style="height:auto" data-act="noop" data-id="save">Save</button></div>
@@ -678,6 +704,37 @@ function overlayHTML() {
     </div>`;
   }
   return `<div class="scrim" data-act="scrim"><div class="dlg" role="dialog" aria-modal="true" ${o === "palette" ? 'aria-label="Command palette"' : 'aria-labelledby="dt"'}>${inner}</div></div>`;
+}
+/* ------------------------------------------------------------------ Settings → Sync (slice S0, spec section 26) */
+const STORE = { orch: ["Orchestrator sessions", "orchestrator sessions"], runs: ["Agent runs", "agent runs"] };
+/** D-5's copy: one line per skipped store and side. Never a key's name, never "workspace". */
+function skipLine(k) {
+  const st = STORE[k.store];
+  if (k.side === "local") return st ? `<b>${st[0]} were not synced from this machine:</b> the copy here could not be read. Other machines keep the last copy they received. Each sync tries again; this line goes once a sync can read it.` : `<b>Some app data was not synced from this machine:</b> the copy here could not be read. Each sync tries again; this line goes once a sync can read it.`;
+  return st ? `<b>${st[0]} from other machines were not applied at start-up:</b> the synced copy could not be read. This machine's own ${st[1]} are unchanged. This line goes after a start-up that can read the synced copy.` : `<b>Some app data from other machines was not applied at start-up:</b> the synced copy could not be read. This line goes after a start-up that can read the synced copy.`;
+}
+/** The PRD's frontend test, as steps: [label, skipped set, last-result line]. */
+const SYNC_STEPS = [
+  ["Start-up: this machine's orchestrator copy unreadable; the synced agent runs copy unreadable", [{ store: "orch", side: "local" }, { store: "runs", side: "import" }], "Last synced 12s ago · devices: mac-a1b2, mac-c3d4"],
+  ["3 min later, a periodic sync: exports only; agent runs exported fine", [{ store: "orch", side: "local" }, { store: "runs", side: "import" }], "Last synced 4s ago · devices: mac-a1b2, mac-c3d4"],
+  ["The orchestrator copy is readable again; the next periodic sync exports it", [{ store: "runs", side: "import" }], "Last synced 2s ago · devices: mac-a1b2, mac-c3d4"],
+  ["Next start-up: its import reads the synced agent runs copy", [], "Last synced 9s ago · devices: mac-a1b2, mac-c3d4 · pulled 2 change(s)"],
+  ["Mockup only: both copies of one store unreadable, and a key the screen has no name for", [{ store: "orch", side: "local" }, { store: "orch", side: "import" }, { store: "other", side: "local" }], "Last synced 1 min ago · devices: mac-a1b2, mac-c3d4"],
+];
+function syncTabHTML() {
+  const [, set, last] = SYNC_STEPS[S.syncStep];
+  const order = (k) => (k.store === "orch" ? 0 : k.store === "runs" ? 1 : 2) * 2 + (k.side === "local" ? 0 : 1);
+  const lines = [...set].sort((x, y) => order(x) - order(y)).map((k) => `<div class="sync-skip">${skipLine(k)}</div>`).join("");
+  return `<div class="dlg-b">
+    <div class="chips" style="margin:0 0 12px"><span class="note" style="flex-basis:100%">Mockup only: the PRD's sequence of sync reports (WS-7 AC3, “When the line goes”)</span>${SYNC_STEPS.map(([l], i) => `<button data-act="syncstep" data-id="${i}" aria-pressed="${S.syncStep === i}" ${i === 0 ? "data-autofocus" : ""} style="${S.syncStep === i ? "border-color:var(--accent);color:var(--text-primary)" : ""}">${i + 1}. ${h(l)}</button>`).join("")}</div>
+    <span class="set-l" style="margin-top:0">Sync between machines</span>
+    <div class="sync-note">Use a <b>private</b> git repository you own (for example a new empty <code>ade-sync</code> repo). ADE commits and pushes with your existing git credentials. Settings, notes, prompt history, <span class="${S.setAfter ? "changed" : ""}">${S.setAfter ? "tab sets" : "workspaces"}</span> and orchestrator history are shared (newest change wins); each machine's terminal session is kept under its own device name.</div>
+    <div style="display:grid;gap:8px;margin-top:10px;font-size:12px"><div><span class="set-l" style="margin:0 0 4px">Git remote</span><input type="text" value="git@github.com:you/ade-sync.git" aria-label="Git remote"></div>
+    <div style="display:flex;gap:8px"><button class="btn" data-act="noop" data-id="savesync">Save and sync</button><button class="btn" data-act="noop" data-id="syncnow">Sync now</button></div></div>
+    <div class="sync-note" id="syncres">${h(last)}${lines}</div>
+    <div class="sync-note">Changes from other machines are applied when ADE starts. Local changes are pushed every 3 minutes and when the window is hidden or closed.</div>
+    <p class="note" style="margin-top:12px">The yellow lines are slice S0's (spec 26.2), on this machine only; the rest of this tab is today's, with WS-10's one relabel outlined. Each line reads right at every later step while it shows: a local line goes at the first export that can read the copy; an import line stays through periodic syncs, even one that exports that store, and goes only after a start-up that reads the synced copy.</p>
+  </div>`;
 }
 function toastHTML() {
   if (!S.toast) return "";
@@ -702,7 +759,8 @@ function refresh(from) {
   if (from !== "menu") S.menu = null; else closeMenu(true);
   if (S.overlay) closeOverlay();
   if (S.kind !== "ws") { say("Files refreshed."); return; }
-  if (S.loading || S.refreshing) { say("Already refreshing."); return; }
+  if (S.loading) { say("Already reading the hub's folders."); return; }
+  if (S.refreshing) { say("Already refreshing."); return; }
   S.refreshing = true;
   setTimeout(() => {
     S.refreshing = false;
@@ -715,7 +773,7 @@ function refresh(from) {
       }
       S.hubState = "finished"; S.bars = S.bars.filter((b) => b !== kind); S.roots = std(); S.exp = new Set([HUB]); cd(HUB);
       say("Workspace restored: " + sumLine());
-      if (S.detached || outOfSight()) setToast({ title: "Workspace restored", body: sumLine() });
+      if (!S.detached && outOfSight()) setToast({ title: "Workspace restored", body: sumLine() });
       return render();
     }
     if (S.loading !== false) S.loading = false;
@@ -724,9 +782,15 @@ function refresh(from) {
     render();
   }, 500);
 }
-function finishLoading() { S.loading = false; S.roots = std(); say("Workspace ready: " + sumLine()); }
+/** The open streams (design 7.6): the hub's root, checking; the hub found finished; every root as its row is read, checking; the final view. */
+function finishLoading() {
+  if (S.loadStep === 0) { S.loadStep = 1; S.hubState = "finished"; S.roots = [hubRoot()]; S.exp = new Set([HUB]); say("Mockup: the hub is a finished hub; its rows are being read."); return; }
+  if (S.loadStep === 1) { S.loadStep = 2; S.roots = std().map((r) => (r.kind === "hub" ? r : { ...r, st: "checking" })); return; }
+  S.loading = false; S.loadStep = 0; S.roots = std(); say("Workspace ready: " + sumLine());
+}
 function promote() { if (S.left.length && real().length < 50) { const r = S.left.shift(); const at = S.roots.findIndex((x) => x.kind === "added" || x.kind === "outside"); S.roots.splice(at < 0 ? S.roots.length : at, 0, r); } }
 function drop(id) {
+  if (pausedWhy()) { say(pausedWhy()[0]); return; }
   const li = S.left.findIndex((r) => r.id === id);
   if (li >= 0) { const [r] = S.left.splice(li, 1); S.hidden.push(r); S.undo = () => showAgain(r.id); toast({ title: `Hid ${plain(r.name)}`, body: "The hub still lists it. Show Hidden Workspace Folders brings it back.", action: "Show Again", run: "undo" }); return; }
   const i = S.roots.findIndex((r) => r.id === id), r = S.roots[i];
@@ -750,8 +814,9 @@ function showAgain(id) {
   S.roots.splice(at, 0, r);
   let msg;
   if (S.roots.length > 50) {
-    // Past the limit, the last checkout in the workspace's order is left out; added folders never are.
-    const li = S.roots.map((x) => x.kind).lastIndexOf("disc"), [cut] = S.roots.splice(li, 1);
+    // Past the limit, the last checkout in the hub's own order (discovery order, not the order on screen) is left out; added folders never are.
+    const disc = S.roots.filter((x) => x.kind === "disc"), lastD = disc.reduce((a, b) => (+b.id.slice(1) > +a.id.slice(1) ? b : a));
+    const [cut] = S.roots.splice(S.roots.indexOf(lastD), 1);
     S.left.unshift(cut);
     if (!S.notices.some((x) => x.k === "cap")) S.notices.push({ k: "cap" });
     msg = cut === r ? `${plain(r.name)} is no longer hidden, but it is past the 50-folder limit, so it is not shown.` : `${plain(lbl(r))} is shown again, ${S.roots.indexOf(r) + 1} of ${S.roots.length}. ${plain(cut.name)} is now past the 50-folder limit and is not shown.`;
@@ -761,6 +826,7 @@ function showAgain(id) {
   return msg;
 }
 function move(id, d) {
+  if (pausedWhy()) { say(pausedWhy()[0]); return; }
   const list = S.roots, i = list.findIndex((r) => r.id === id), j = i + d, last = real().length - 1;
   if (i < 1) return;
   if (j < 1) { say(`${plain(lbl(list[i]))} is already first after the hub folder.`); return; }
@@ -857,7 +923,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   const act = a.dataset.act, id = a.dataset.id;
-  if (a.getAttribute("aria-disabled") === "true" && act !== "pick") { if (act === "refresh") say("Already refreshing."); return; }
+  if (a.getAttribute("aria-disabled") === "true" && act !== "pick") { if (act === "refresh") say(S.loading ? "Already reading the hub's folders." : "Already refreshing."); return; }
   if (act === "scrim") { if (e.target === a) { closeOverlay(); render(); } return; }
   if (act === "noop" || act === "dot") return;
   if (act === "wsmenu") S.menu = S.menu && S.menu.id === "ws" ? null : { id: "ws", ret: { k: "act", act: "wsmenu" } };
@@ -884,6 +950,8 @@ document.addEventListener("click", (e) => {
   else if (act === "doopen") { S.addErr = checkOpen(S.addVal); if (!S.addErr) { const n = plain(base(S.addVal.trim())); closeOverlay(); toast({ title: `Opened ${n}`, body: "Mockup: a workspace tab with a plain shell would open." }); } else S.want = { k: "id", id: "pf" }; }
   else if (act === "unhide") { const m = showAgain(id); closeOverlay(); say(m); }
   else if (act === "setafter") S.setAfter = a.checked;
+  else if (act === "settab") { S.setTab = id; S.want = { k: "act", act: "settab", id }; }
+  else if (act === "syncstep") { S.syncStep = +id; S.want = { k: "act", act: "syncstep", id }; }
   render();
 });
 function forget(i) {
@@ -896,6 +964,7 @@ function activate(key, inTab) {
   S.focus = key; S.want = { k: "row", key };
   if (it.t === "msg") return render();
   const r = it.t === "root" ? it.r : null;
+  if (r && r.st === "checking") { say(`${plain(lbl(r))}: still being checked.`); return render(); }
   if (r && r.st !== "ok") { say(`${plain(lbl(r))}: missing, nothing to open.`); return render(); }
   if (r || it.n.kids) { S.exp.has(it.path) ? S.exp.delete(it.path) : S.exp.add(it.path); }
   else say(`Opened ${plain(it.n.name)} in ${inTab ? "a file tab" : "the side panel"}.`);
@@ -953,13 +1022,14 @@ document.addEventListener("keydown", (e) => {
   else if (key === "End") go(items.length - 1);
   else if (key === "ArrowRight") { if (dir && !open) S.exp.add(it.path); else if (dir) go(i + 1); }
   else if (key === "ArrowLeft") { if (dir && open) S.exp.delete(it.path); else if (!r) { let j = i - 1; const lvl = it.depth; while (j >= 0 && items[j].t !== "root" && items[j].depth >= lvl) j--; if (j >= 0) go(j); } }
+  else if (key === "Delete" && !e.shiftKey) { if (r) { if (r.kind === "outside") say("This folder is not part of the workspace."); else drop(r.id); } else used = false; }
   else if (key === "Enter" || key === " ") { e.preventDefault(); e.stopPropagation(); return activate(it.key, e.altKey); }
-  else if (key === "F10" && e.shiftKey && r && r.kind !== "outside") S.menu = { id: r.id, ret: { k: "row", key: it.key } };
+  else if (key === "F10" && e.shiftKey && r && r.kind !== "outside") { if (pausedWhy()) say(pausedWhy()[0]); else S.menu = { id: r.id, ret: { k: "row", key: it.key } }; }
   else if (key === "Escape") { S.want = { k: "term" }; say("Focus is back in the terminal."); }
   else used = false;
   if (used) { e.preventDefault(); e.stopPropagation(); render(); }
 });
-["f3", "byhub", "det", "fbw"].forEach((id) => $("#" + id).addEventListener("change", render));
+["f3", "byhub", "fbw"].forEach((id) => $("#" + id).addEventListener("change", render));
 
 /* ------------------------------------------------------------------ static parts */
 $("#scs").innerHTML = SCENARIOS.map((s) => `<button class="sc" data-sc="${s[0]}" aria-pressed="false">${h(s[1])}</button>`).join("");
@@ -976,6 +1046,7 @@ $("#cds").innerHTML = [HUB, "~/Project/acme/api/src/routes", "~/Project/acme-web
     card(rootRow(hub, "", st), "<b>Hub folder, current root.</b> Always first. ◇ is F2's hub icon. <code>›_</code> means the own view's terminal is in this folder; it is a shape, read out as “the terminal is here”."),
     card(rootRow(a, "acme", nh) + rootRow(b, "beta", nh), "<b>Same name, told apart.</b> The label adds the shortest part of the parent path that differs. The path follows in mono, cut from the left; it gives way first when the panel is narrow."),
     card(rootRow(miss, "", nh), "<b>Missing.</b> The word and the path on a second line, a dashed icon, no chevron. Not red: not cloned yet is normal."),
+    card(rootRow(R("~/Project/acme-api", "disc", "checking", null, { src: "projects/acme/ACCESS.md" }), "", nh), "<b>Checking….</b> Only while a workspace is opened or restored (the open streams, design 7.6): the row is known, its folder has not answered yet (at most 2 seconds). One line, the word in the path's place, a spinner for the icon, no chevron. Never shown during a refresh."),
     card(rootRow(R("/Volumes/archive/acme-legacy", "disc", "slow"), "", nh), "<b>Missing · not answering.</b> The folder did not answer within 2 seconds. Still a missing root (F4.1): “missing” is in the word and in the name. A clock shape and the second word tell it apart; Refresh tries again."),
     (() => { const keep = S.cwd; S.cwd = miss.path; const x = card(rootRow(miss, "", st), "<b>Missing, and the terminal is in it.</b> The current root is found by path, whatever its state, so the mark shows here and no “Not in workspace” root is added for it. Entering it checks that one folder again (P17)."); S.cwd = keep; return x; })(),
     card(rootRow(R("/tmp/scratch", "outside"), "", nh), "<b>Not in workspace.</b> The extra root for a shell outside every workspace folder: dashed rule above, italic name, the words. Never saved; no menu."),
@@ -998,13 +1069,15 @@ $("#cds").innerHTML = [HUB, "~/Project/acme/api/src/routes", "~/Project/acme-web
     card(`<div class="wn-line"><span class="ic">!</span><span class="tx"><b>Better Terminal could not read <code><bdi>${vis("projects/evil" + U(0x202E) + "gnp.md/ACCESS.md")}</bdi></code> (not a regular file)</b><small>The folders it names are not shown; the rest of the workspace is.</small></span></div>`, "<b>In a notice.</b> A work folder's name comes from the hub, so notices escape it too."),
   ].join("");
   $("#ntable").innerHTML = `<tr><th>Notice</th><th>Where</th><th>Stays until</th></tr>` + [
-    ["Rows not read, rows too broad, a file not read, folders left out, work folders skipped (WS-1 AC2, AC7; WS-9 AC1, AC2, AC5)", "The workspace notice block, in the file browser above the roots. With the file browser closed: one toast with Show Files", "Its cause is gone at a later refresh, or ✕ (per tab; comes back after a restart if still true)"],
-    ["Hub folder gone; not a finished hub right now; could not be checked (WS-6 AC3)", "A bar above the terminal, in the tab; the file browser shows the missing hub root or a single root", "Refresh finds the hub finished, or Dismiss; a Refresh that finds it unchanged shows a dismissed bar again"],
-    ["Already open: setup not run, or no persona in the tab (WS-2 AC3, P15)", "A bar above the terminal of the tab that came forward", "Dismiss, or the tab closes"],
+    ["Rows not read, rows too broad, a file not read, folders left out, work folders skipped, over 500 rows, discovery cut at 10 s, a change not saved (WS-1 AC2, AC7; WS-9 AC1, AC2, AC5; design 11.1)", "The workspace notice block, in the file browser above the roots. With the file browser closed: one toast with Show Files", "Its cause is gone at a later refresh (not saved: a later change is saved), or ✕ (per tab; comes back after a restart if still true)"],
+    ["Hub folder gone or not answering; not a finished hub right now; could not be checked (WS-6 AC3)", "A bar above the terminal, in the tab (in a detached window too); the file browser shows the missing hub root or a single root", "Refresh finds the hub finished, or Dismiss; a Refresh that finds it unchanged shows a dismissed bar again"],
+    ["Already open: setup not run, or no persona in the tab, or every tab of the hub detached (WS-2 AC3, P15, P13)", "A bar above the terminal of the tab that came forward", "Dismiss, or the tab closes"],
+    ["The record of hand changes unreadable, or from a newer version (design 4.1)", "A bar above the terminal; for a newer version or an unreadable file, only Refresh is offered", "Dismiss; shows again at the next start while true"],
+    ["A store skipped by sync (slice S0; WS-7 AC3, OQ-15)", "Settings → Sync, under the last result, on this machine only", "A local skip: the next export that can read the copy. An import skip: the next start-up whose import reads the synced copy"],
     ["A kept record was dropped (WS-6 AC2)", "A bar above the terminal of whichever workspace tab is in sight", "Dismiss; kept across tab close and restart until then (P18)"],
     ["A too-broad hub folder opened as a plain tab (WS-2 AC4)", "A bar above the terminal of that plain tab", "Dismiss, or the tab closes"],
     ["The shell is in / or the home folder (WS-5 AC3)", "A line under the tree, outside it, announced once", "The shell moves"],
-    ["Hid or removed a folder; any result while the roots are out of sight; a hub brought forward", "The app's toast, bottom right", "15 s with a button, 4 s without"],
+    ["Hid or removed a folder; any result while the roots are out of sight; a hub brought forward", "The app's toast, bottom right (in a detached window, which has no toast: the bar)", "15 s with a button, 4 s without"],
   ].map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("");
 })();
 
