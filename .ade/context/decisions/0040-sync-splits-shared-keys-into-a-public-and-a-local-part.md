@@ -1,0 +1,23 @@
+# 0040: Sync splits a key into a public part and a local part, and the import joins them back
+
+- Status: Proposed (2026-11-15), with the F4 design revision 1; not reviewed or approved. The number is provisional (see the README's numbering notes).
+- Context:
+  - The owner approved F4 OQ-5: workspace and checkout paths are stripped from ADE sync's export in the keys F4 WS-7 AC3 lists, while this machine keeps them. F2 OB-10 AC2 and OB-14 AC5 (revisions 5 and 5.1) need the same for hub tabs. The PRD asks for one design for both.
+  - Today `import_state` replaces a shared key's whole local value when the repo copy is newer and puts back only secret fields (`sync.rs:285`, `:99`). A plain strip at export would lose this machine's paths as soon as another machine exports the key (the M1 finding of F4 revision 3.2).
+  - The orchestrator and agent-tracker rows strip a path "inside any workspace folder known to this profile", and discovered checkouts are never stored (F4 D4), so the export needs knowledge it does not have on disk (sharding note m9).
+  - Spec: `docs/superpowers/specs/2026-11-15-workspaces-design.md`, section 9. Contract: `.ade/context/sync-local-fields.md`.
+- Decision:
+  - One module, `sync_local.rs`, with `split(key, value, knowledge) -> (public, local)` and `join(key, public, local)`. The export writes `public`. The import computes `local` from this machine's value and writes `join(imported public, local)`.
+  - It is re-apply, not a three-way merge: the newer copy still wins whole, then this machine's local fields go back onto the entries that are still there. An entry deleted elsewhere stays deleted.
+  - Invariant, tested per key: `split(join(p, l)).public == p`.
+  - A value that is not the expected shape is not exported in that run.
+  - Entries are matched by id: a tab set's `id` and tab index; an orchestrator session's `id`; an agent-tracker entry's new `id`, or `paneId` and `startTime` for older entries.
+  - `ade-session`'s rows are decided by the mark in the saved tab itself and need no other knowledge.
+  - For `projectDir` and `cwd`, the export **runs discovery for each recorded hub**, bounded, and adds the open workspaces' last discoveries. If that knowledge is incomplete, the run takes out every `projectDir` and every `cwd` (fail closed).
+- Consequences:
+  - F2's hub-tab strip and F4's workspace strip are rows of one table, with one two-machine test.
+  - Sync now reads the hubs' `ACCESS.md` files on every run. For a few hubs that is a few dozen small reads; a hub on a dead mount adds up to 2 seconds and then fails closed.
+  - A recorded hub that is gone for good keeps the machine failing closed until its record goes.
+  - Two gaps remain inside the PRD's wording: a folder of a hub whose record was dropped, and a checkout whose row was removed, are no longer known, and entries inside them are exported at the next write of their key.
+  - **An alternative is put to the owner (design Q1):** take `projectDir` and `cwd` out of every exported entry, whatever the folder. It needs no discovery, has no fail-closed state and closes both gaps, but it changes what every engineer syncs today. If the owner chooses it, only the predicate changes; `split`, `join`, the invariant and the tests stay.
+  - Rejected: marking entries when they are written (needs the same knowledge at write time and misses older entries); a three-way merge (needs a base copy per key that sync does not keep for state).

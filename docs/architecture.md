@@ -15,6 +15,7 @@ designs. The designs themselves stay where this repo keeps them: feature designs
 | Feature | Design | Contracts | ADRs |
 |---|---|---|---|
 | F1 Personas and engagements (`docs/prd.md` F1) | `docs/superpowers/specs/2026-11-08-personas-and-engagements-design.md` (revision 4 approved by the owner 2026-11-08; approved at revision 5g on 2026-11-08, after the delta review of revisions 5 to 5g passed; approved at revision 5j on 2026-11-08: the slice-1 gaps (5h), its review's answers (5i) and the delta check's minors (5j), confirmed by the owner) | `engagement-profiles.md`, `engagement-requests.md`, `engagement-registry.md` | 0015 to 0024 (0024 Accepted 2026-11-08) |
+| F4 Workspaces, slice S1 (`docs/prd.md` F4) | `docs/superpowers/specs/2026-11-15-workspaces-design.md` (revision 1, proposed 2026-11-15; not reviewed, not approved; proposes one addition to the verification command for two stories, below, not in force) | `workspaces.md`, `sync-local-fields.md` (shared with F2) | `0037-the-workspace-record-is-one-rust-owned-local-file`, `0038-a-workspace-is-the-folders-of-one-hub`, `0039-a-finished-hub-is-read-from-the-repository-files-without-git`, `0040-sync-splits-shared-keys-into-a-public-and-a-local-part` (all Proposed; numbers provisional) |
 | Sub-terminals and `ade open` | `docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md` | `terminal-open.md` | `0014-terminals-open-terminals-through-the-hook-endpoint` |
 | Desktop end-to-end tests | `docs/superpowers/specs/2026-11-09-desktop-e2e-design.md` (revision 1, proposed 2026-11-09; not approved; adds no verification line) | `e2e-control-channel.md` (written by its first story) | `0030-desktop-e2e-webdriver-on-linux-and-a-compiled-out-test-channel` (Proposed) |
 | Earlier features | `docs/superpowers/specs/`, `_bmad-output/plan-*.md` | `.ade/context/` | `.ade/context/decisions/` |
@@ -43,6 +44,24 @@ and mobile test passes; and the `ade-hook` helper, which no other line compiles,
 builds. These are the lines in
 `_bmad-output/initiative-sub-terminals/epic-sub-terminals/tickets.toml` (lines 4 to
 6).
+
+### F4 stories w1 and w2: proposed addition, NOT in force (needs the owner's approval)
+
+**Status:** proposed by the F4 design (`docs/superpowers/specs/2026-11-15-workspaces-design.md`,
+sections 17.4 and 20) on 2026-11-15. The owner has not approved it. Until the owner
+does, the command in force above is the whole gate for every F4 story, and this
+paragraph changes nothing.
+
+Four F4 tests need macOS's file system (the case-insensitive and NFC parts of the
+path rule and of WS-1 AC3, WS-9 AC3's 1-second test, WS-9 AC5's `~/Library`; PRD F4.11,
+sharding note m5). They are compiled only on macOS, so on a Linux machine the lines
+above pass without running them. The proposal, for F4 stories **w1** (the path rule)
+and **w2** (discovery) only: Done also needs one counted run of the `CI` workflow on
+the story's SHA in which the job `Backend on macOS (cargo test)` passed, produced and
+cited as item 4 of the F1 gate below describes (dispatched once, never re-run,
+`attempt` 1), with QA pasting from that job's log the `test … ok` line of each test
+the design's section 17.4 lists for that story. No workflow, job or line of `ci.yml`
+changes. No other F4 story is affected.
 
 ### F1 stories (gate D28): approved, in force (2026-11-08)
 

@@ -1,0 +1,23 @@
+# 0037: The workspace record is one Rust-owned local file
+
+- Status: Proposed (2026-11-15), with the F4 design revision 1; not reviewed or approved. The number is provisional (see the README's numbering notes).
+- Context:
+  - F4 (PRD revision 3.3) keeps a record per hub: the hub folder, the added folders, the hidden folders, the order of the roots, the last-opened time and a format version (F4.1). It must be local, per profile, and in nothing ADE sync exports, relays, puts in a tab set or logs (D4, WS-7 AC1, AC2).
+  - ADE's state today is `localStorage`, mirrored key by key to `<app data>/state/kv/` (`persistence.ts`, `state.rs`). Sync's export reads named keys from `kv/` only (`sync.rs:260`). Snapshots copy `kv/` only.
+  - Every window holds its own copy of each store and writes whole values. A workspace tab can be moved to its own window, so two windows would write the record.
+  - The record is used in Rust: by discovery and the root list, by the sync strip (ADR 0040) and by the automatic-setup check, which must see workspaces open in other windows.
+  - Spec: `docs/superpowers/specs/2026-11-15-workspaces-design.md`, section 4.
+- Decision:
+  - The record is one file, `<app data>/state/workspaces.json`, resolved from `state::state_dir` (through F1's `ProfilePaths` once it exists).
+  - Only Rust reads and writes it, under one mutex in Tauri managed state, with `state::atomic_write`. The webview holds a derived view in memory and changes the record only through commands.
+  - It is not a `localStorage` key, is not in `PERSISTED_KEYS`, and is not under `kv/`.
+  - Format version 1: `{ v, workspaces: [{ hub, added, hidden, order, lastOpened }], droppedNotice }`. Paths are stored as text and compared by path key at use; keys are not stored.
+  - A file that does not parse is moved aside and F4 starts empty with one notice. A file with a higher `v` is not written in that run.
+  - The 10 most recently opened records are S2's recent list. There is no second store.
+- Consequences:
+  - Sync cannot export the record by a mistake in a key list: the export never opens a file outside `kv/`. A test with path markers proves it.
+  - Windows cannot overwrite each other's changes; the mutex orders them and an event tells every window.
+  - The record is not in local snapshots, so restoring a snapshot does not bring back an older record. The PRD allows either (WS-7 AC2).
+  - The webview cannot read the record synchronously at start. A restored workspace tab shows its roots only after its first `workspace_open` answers.
+  - A second kind of durable state now exists beside `kv/`. A later feature that needs Rust-owned local state should use the same folder and the same reading rules instead of inventing a third.
+  - Rejected: a `localStorage` key as F3 uses for viewer state (multi-window whole-value writes; read 800 ms late by Rust; one list edit from syncing); a field of `ade-session` (exported, rewritten whole every few seconds); one file per hub (retention needs them all).
