@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10; revision 9n adds the F5 cross-reference and allowed inflow 9, the default profile's prompt templates read-only in engagements (F5 OQ-18, OQ-3), approved by the owner 2026-11-10; revision 9o adds the identifier check to inflow 9, decided by the owner 2026-11-10) |
-| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.9 (2026-11-15, **text pending owner approval**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and record the owner's answers to OQ-14 to OQ-21 (2026-11-15); no open questions (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; OQ-14 to OQ-21 answered 2026-11-15); S0 and S1 of MVP, not sharded. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.10 (2026-11-15, **text pending owner approval**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and record the owner's answers to OQ-14 to OQ-21 (2026-11-15); no open questions (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; OQ-14 to OQ-21 answered 2026-11-15); S0 and S1 of MVP, not sharded. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
 
@@ -2383,7 +2383,7 @@ clarification for slice 0.
   recommendation, OQ-11 not now. Revision 3.2 (2026-11-10)
   answers the check of the approval edits (BLOCKED on M1 and minors; F4.12's fourth
   table) and asked one question, OQ-13 (WS-1 AC8's two cases), which the owner
-  answered yes to both on 2026-11-10 (revision 3.3). **Revisions 3.4 to 3.9
+  answered yes to both on 2026-11-10 (revision 3.3). **Revisions 3.4 to 3.10
   (2026-11-15) are pending the owner's approval of their text:** they apply the
   owner's decision of 2026-11-15 on design review blocker B3 ("strip all paths": an
   orchestrator session's `projectDir` and an agent-tracker entry's `cwd` are never
@@ -2391,9 +2391,11 @@ clarification for slice 0.
   to 3.7 answer the delta reviews of 3.4 to 3.6 (each BLOCKED; F4.12's fifth to
   seventh tables) and asked eight questions, OQ-14 to OQ-21, which the owner
   answered on 2026-11-15 (F4.10). Revision 3.8 records those answers and the delta
-  review of 3.7 (F4.12's eighth table), and revision 3.9 answers the delta review of
-  3.8 (the ninth). F4 has no open questions. Until the owner
-  approves the text of 3.4 to 3.9, revision 3.3 is the approved text. Not sharded;
+  review of 3.7 (F4.12's eighth table), revision 3.9 answers the delta review of 3.8
+  (the ninth), and revision 3.10 answers that of 3.9 (the tenth) with the owner's
+  follow-up answer, and gives the owner's approval list (History, 3.10). F4 has no
+  open questions. Until the owner
+  approves the text of 3.4 to 3.10, revision 3.3 is the approved text. Not sharded;
   S0 (F4.8) comes first. Revision 1's
   adversarial review BLOCKED it (B1 to B4, majors, minors); revision 2 answered every
   finding and folded in the owner's decisions of 2026-11-10; the delta review of
@@ -2652,6 +2654,62 @@ clarification for slice 0.
     OQ-20 (b′) an unflagged workspace tab's runs record their folder on this machine
     only. F4.9's F2 note and F4.11 follow. Revision 3.8's "records no hub folder" is
     superseded.
+  - 2026-11-15, revision 3.10 (**text pending the owner's approval, with 3.4 to
+    3.9**): answers the delta review of 3.9 (every 3.8 finding closed; one major,
+    one minor; F4.12's tenth table). **The owner's follow-up decision,
+    2026-11-15:** runs recorded before this build by the agent picker or the board
+    have no `cwd`, and under OQ-20 (b′) they are no longer joined to a live pane, so
+    after the upgrade they show under "Unknown project" with no cost. Asked whether
+    to keep today's pane join for those entries, the owner accepted the one-time
+    loss of their attribution instead, since keeping it would bring the wrong-pane
+    bug back for them. WS-7 AC3 states it in the consequences and the criterion,
+    OQ-20 records it, and the same-machine test gains a fourth case.
+    `.ade/context/f4-merges-second.md` holds one section per mirror (F4.8, F4.11).
+
+    **What the owner approves (revisions 3.4 to 3.10, requirement level; the text
+    in WS-7 AC3, G2, F4.8 and F4.10 governs):**
+    1. **The sync strip (the owner's decision).** An orchestrator session's
+       `projectDir` and an agent-tracker entry's `cwd` are never synced, for
+       anyone, on every OS. Each machine keeps its own and, from this build on,
+       never takes another machine's; values imported before this build stay and
+       count as this machine's own.
+    2. **Cleanup and history (OQ-14, OQ-16).** At each machine's first sync on this
+       build, `projectDir` in the orchestrator key's current file and `cwd` in the
+       tracker key's current file are removed; F4 cleans no other key or field. The
+       sync repository's history is not rewritten, and the design's O-2 stays a
+       separate question.
+    3. **Stated limits (OQ-17).** A machine on an older build writes its folders
+       back and loses its own on import, so the guarantee holds once every machine
+       is updated, and the release notes say so (a devops item).
+    4. **Unreadable values.** For those two keys only, a value that cannot be read
+       as the key's list of entries is neither exported nor imported; a list with
+       elements that are not objects counts as readable.
+    5. **Skipped-key notice (OQ-15).** Settings → Sync names the skipped store in
+       words, on that machine only. A local skip clears on the key's next export;
+       an import skip clears only when a later import reads the copy.
+    6. **Dispatch (OQ-18, OQ-21).** Per-task Dispatch makes the project folder
+       first, with one folder per session in any click order, and nothing starts
+       if making it fails. For both Dispatch buttons, a recorded folder that does
+       not exist counts as none and gets a new one; the owner accepted that a
+       folder missing only for a while is replaced and its earlier work cut off.
+    7. **Run folders (OQ-20 (b′)).** The agent picker and the board record each
+       run's folder (the pane's live folder, else the folder it was opened in). A
+       run in a tab with F2's hub-tab flag records no `cwd`. A run in an unflagged
+       workspace tab now records the hub folder or a checkout on this machine, and
+       the strip keeps it out of sync (D9).
+    8. **Fleet (OQ-20 (b′), a fix to a bug already on `main`).** The fleet joins
+       only runs this instance started in this launch to live panes. Earlier runs
+       that recorded a folder keep their project and cost. Runs recorded before
+       this build by the agent picker or the board have no `cwd` and show under
+       "Unknown project" with no cost, a one-time loss the owner accepted. Runs
+       imported on this build show under "Unknown project"; runs imported before
+       this build still show under the other machine's folder.
+    9. **Delivery (OQ-19).** All of this ships first as S0, on every OS, with no
+       dependency on F2. The hub-tab rule goes with whichever of S0 and F2 slice 1
+       merges second. S1 keeps the workspace-dependent rows.
+    10. **Scope disclosure.** Other `ade-session` paths still sync: plain tabs'
+        `savedCwd`, `editorFilePath`, `contractsRoot`, `previewPath` and typed
+        names. Whether to strip them too is the design's question O-3, open.
 
 ### F4.1 Terms
 
@@ -3258,7 +3316,7 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    tab holds none of the record's markers and no root name.
 3. **The sync strip (OQ-5, approved by the owner 2026-11-10; its orchestrator and
    agent-tracker rows widened by the owner's decision of 2026-11-15; revisions 3.4
-   to 3.9, pending owner approval; OQ-14 to OQ-21 answered by the owner
+   to 3.10, pending owner approval; OQ-14 to OQ-21 answered by the owner
    2026-11-15).** Today and under F2,
    these keys, which ADE sync exports when Settings → Sync is on, can hold a
    workspace folder's path (and so, by default, a client's name). ADE sync's export
@@ -3324,7 +3382,10 @@ folder I am working in, and each focus session to keep its own checkout (D6).
      that pane's tab, folder and cost instead.
    - This machine's own sessions and runs keep their folders, also after an import,
      and a run from an earlier launch keeps its project and cost through the `cwd`
-     it recorded (OQ-20).
+     it recorded (OQ-20). Runs recorded before this build by the agent picker or the
+     board have no `cwd`, so after the upgrade they show under "Unknown project" with
+     no cost (a one-time loss of their attribution, accepted by the owner
+     2026-11-15).
    - On the same machine, a reinstall, a new profile or cleared app state that gets
      its sessions and runs back only through sync gets them back with no
      `projectDir` and no `cwd`: nothing outside the lost local state held them.
@@ -3394,7 +3455,10 @@ folder I am working in, and each focus session to keep its own checkout (D6).
      another machine, or imported before this build, stated limit (c)) shows with
      no tab, under its own `cwd`. Its cost comes from its own folder and time, as the
      cost rule does today, never through a live pane. So a run from an earlier
-     launch keeps its project and cost. A run imported on this build has no `cwd`,
+     launch keeps its project and cost. Runs recorded before this build by the agent
+     picker or the board have no `cwd`, so after the upgrade they show under
+     "Unknown project" with no cost (a one-time loss of their attribution, accepted
+     by the owner 2026-11-15). A run imported on this build has no `cwd`,
      and shows under "Unknown project" with no cost. A run imported before this
      build shows under the other machine's folder.
    - A run this instance started keeps its tab, live folder and cost as today.
@@ -3415,7 +3479,10 @@ folder I am working in, and each focus session to keep its own checkout (D6).
      new pane gets id P in folder F2, and an agent runs there. The fleet shows launch
      1's run under F1 with no tab and its own cost, the picker run under F3 with its
      cost, and this launch's run under F2 with that pane's tab and its own cost; none
-     takes another's cost.
+     takes another's cost. A fourth entry, recorded before this build with no `cwd`
+     (as the agent picker and the board record runs on `main`) and pane id P, shows
+     under "Unknown project" with no tab and no cost, and takes nothing from this
+     launch's pane P.
    - **Across machines:** A runs an agent in pane id P in folder F. A imports B's run
      in pane id P, with a start time later than A's launch. A's fleet shows A's run
      under F with A's tab and its cost, and B's run under "Unknown project" with no
@@ -3636,6 +3703,11 @@ review):
 | WS-7 AC2's relay part | phone-watch story 8 (sharded, `_bmad-output/initiative-phone-remote/epic-phone-watch/tickets.toml`) | story 8's ticket, at F4 S1's sharding |
 | WS-7 AC3's hub-tab rule (a run started in any pane of a tab with F2's hub-tab flag records no `cwd`) and its **Hub tab** test (revision 3.9) | F2 slice 1's story that adds the hub-tab flag (S0 depends on nothing, so either may merge first) | That F2 story's ticket, at S0's sharding, if the ticket exists then; only if it does not, `.ade/context/f4-merges-second.md`, for F2's sharding to copy into it. If S0 merges first, F2's story carries the rule and test; if F2 slice 1 merges first, S0 carries them (F3 D14's rule) |
 
+`.ade/context/f4-merges-second.md`, the fallback when the other story's ticket does
+not exist yet, holds one section per mirror: one for WS-5 AC2 (F3 S1) and one for
+the hub-tab rule (F2 slice 1). Each section is copied into its story's ticket at
+that story's sharding.
+
 **WS-5 AC1 and AC2 never share a gate.** With a sub-terminal in sight, AC1 shows the
 workspace (one browser per tab) and AC2 shows the sub-terminal's single root, so the
 two cannot both pass on one build. F4 S1's gate holds AC1 only while F3 S1 is not on
@@ -3678,7 +3750,7 @@ persona's file browser, which is the owner's whole ask.
   2026-11-10, and F2 revision 5 writes them into F2 (on PR #98's branch), with the
   tab-set wording of OQ-2; F2 revision 5.1 adds WS-7 AC3's import rule (this
   machine keeps its stripped fields when sync imports another machine's copy) to
-  OB-10 AC2 and OB-14 AC5. Revisions 3.4 to 3.9 (the owner's decision of
+  OB-10 AC2 and OB-14 AC5. Revisions 3.4 to 3.10 (the owner's decision of
   2026-11-15 and the owner's answers to OQ-14 to OQ-21 of the same day, pending the
   owner's approval of their text) widen WS-7 AC3's
   orchestrator and agent-tracker rows: every `projectDir` and every `cwd` is left out
@@ -3775,7 +3847,7 @@ persona's file browser, which is the owner's whole ask.
   the keys WS-7 AC3's table strips. F5 should cite "F4 OQ-5, approved by the owner
   2026-11-10 (WS-7 AC3)", not F3 VV-12 or F4 WS-7 AC1 and AC2; text F5 itself keeps
   out of sync (its draft and prompt-history rules) stays F5's own rule (F5 D7).
-  Revisions 3.4 to 3.9 (pending the owner's approval of their text): since the
+  Revisions 3.4 to 3.10 (pending the owner's approval of their text): since the
   owner's decision of 2026-11-15, an orchestrator session's `projectDir` and an
   agent-tracker entry's `cwd` are never synced, for any folder or anyone. F5 may cite
   that as "the owner's decision of 2026-11-15 (F4 WS-7 AC3)", for those two fields
@@ -3954,7 +4026,13 @@ title.
   agent picker and the board's agent launch record the run's folder (`cwd`) when
   they start it, as orchestrator dispatch already does. Earlier launches' runs then
   keep their project and cost through their own `cwd`, and the wrong-pane bug is
-  gone. The strip already keeps that `cwd` out of sync. (a) and (c) were not
+  gone. Runs recorded before this build by the agent picker or the board have no
+  `cwd`, so after the upgrade they show under "Unknown project" with no cost (a
+  one-time loss of their attribution, accepted by the owner 2026-11-15).
+  **Follow-up answered 2026-11-15 (owner):** asked after the delta review of 3.9
+  whether to keep today's pane join for those older entries, the owner **accepted
+  the one-time loss** instead. Keeping the old join would bring the wrong-pane bug
+  back for them. The strip already keeps that `cwd` out of sync. (a) and (c) were not
   chosen. As asked: this fixes a bug already on `main`, which goes beyond your decision. Pane ids are
   made afresh at every launch, restored panes included, and the fleet joins every
   agent-tracker entry, finished ones too, to the live pane with the same id, taking
@@ -4007,8 +4085,10 @@ title.
   delta review of 3.4 (F4.12's fifth table), revision 3.6 that of 3.5 (the sixth)
   and revision 3.7 that of 3.6 (the seventh); revision 3.8 answers that of 3.7 (the
   eighth) and applies the owner's answers to OQ-14 to OQ-21; revision 3.9 answers
-  the delta review of 3.8 (the ninth). A delta check of 3.9 comes before the owner
-  approves the text of 3.4 to 3.9.
+  the delta review of 3.8 (the ninth), and revision 3.10 that of 3.9 (the tenth),
+  with the owner's follow-up answer on older run history. The reviewer asks only
+  for a check of 3.10's new sentence before the owner approves the text of 3.4 to
+  3.10, using the summary in the History's 3.10 entry.
 - **Designer:** root rows (label, disambiguated label, path, missing, not-answering
   and not-in-workspace marks, the current-root mark), the file browser's workspace
   menu, the palette entries, Show Hidden Workspace Folders, the Tabs/Tab Sets relabel,
@@ -4024,7 +4104,7 @@ title.
   stripped fields when it imports another machine's later copy, by merge or
   re-apply), designed once with F2 OB-10 AC2's and OB-14 AC5's strip for hub tabs (F2
   revision 5); for the orchestrator's `projectDir` and the agent tracker's `cwd`
-  (revisions 3.4 to 3.9, all in S0), on every OS where sync runs: never taking
+  (revisions 3.4 to 3.10, all in S0), on every OS where sync runs: never taking
   another machine's value; not exporting or importing a value that cannot be read
   as the key's list of entries, with a sync report that records each skip by
   direction (local or import) and each key exported or imported, so each line
@@ -4043,13 +4123,14 @@ title.
   not wait on F2 slice 1, then S1 with the rest of WS-7 AC3. At S0's sharding,
   write the hub-tab rule's mirror (F4.8's "Merges second") into the ticket of F2
   slice 1's story that adds the hub-tab flag, if it exists; only if it does not,
-  into `.ade/context/f4-merges-second.md`. Check the merge order when S0 is
-  reviewed, and again before merging. At S1's sharding:
+  into `.ade/context/f4-merges-second.md`. That file, when used, holds one section
+  per mirror: WS-5 AC2's for F3 S1 and the hub-tab rule's for F2 slice 1. Check the
+  merge order when S0 is reviewed, and again before merging. At S1's sharding:
   - write WS-7 AC2's relay mirror into phone-watch story 8's ticket;
   - write WS-5 AC2's mirror (the criterion, F4.9's reading of F3's viewer state, and
     the replacement of WS-5 AC1's tests) into **F3 S1's ticket if it exists**; only
-    if it does not, create `.ade/context/f4-merges-second.md` with the same, for F3's
-    sharding to copy into F3 S1's ticket;
+    if it does not, add a WS-5 AC2 section to `.ade/context/f4-merges-second.md`
+    (creating the file if needed), for F3's sharding to copy into F3 S1's ticket;
   - put WS-5 AC1 in S1's gate only if F3 S1 is not on `main` (F4.8), and copy the
     merge-order check into the S1 ticket: checked when S1 is reviewed, and again
     before merging, if F3 S1 merged in between (F3 D14); if it did, S1 swaps AC1 for
@@ -4246,4 +4327,12 @@ title.
 | minor 2: details written by the product manager sit under owner-credited headings | The persistence rule (under OQ-15) and the hub-tab rule and fallback (under OQ-20 (b′)) are labelled "written by the product manager in revisions 3.8 and 3.9". The persistence rule is in the History's owner-facing list. |
 | minor 3: D9 and the agent-tracker row are stale | D9 notes that under (b′) a run in an unflagged workspace tab records its folder locally, stripped from sync. The row's "Today" cell says that on `main` only orchestrator dispatch records a folder, under `~/.ade/orchestrator/`. |
 | minor 4: no fallback for the recorded folder | The pane's live folder as ADE last saw it, else the folder the pane was opened in, as orchestrator dispatch does; the recording test covers both. |
+
+**Delta review of revision 3.9 (ea13244): every 3.8 finding closed; one major (decided by the owner) and one minor; answered in revision 3.10.**
+
+| Finding | Answer in revision 3.10 |
+|---|---|
+| **Major** upgrading drops existing picker and board history | The owner decided on 2026-11-15 to accept the one-time loss rather than keep the old pane join for those entries. WS-7 AC3's consequences and criterion and OQ-20's record each state it in the same sentence; the same-machine test gains a fourth case (an entry from before this build with no `cwd` shows under "Unknown project"). |
+| minor: `.ade/context/f4-merges-second.md` serves two mirrors | It holds one section per mirror, WS-5 AC2's for F3 S1 and the hub-tab rule's for F2 slice 1 (F4.8, F4.11). |
+| the owner summary | The History's 3.10 entry gives the ten-line list the owner approves, with items 1, 2, 4, 6, 7 and 8 corrected as the review asked. |
 <!-- F4 ends -->
