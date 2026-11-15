@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10; revision 9n adds the F5 cross-reference and allowed inflow 9, the default profile's prompt templates read-only in engagements (F5 OQ-18, OQ-3), approved by the owner 2026-11-10; revision 9o adds the identifier check to inflow 9, decided by the owner 2026-11-10) |
-| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.8 (2026-11-15, **text pending owner approval**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and record the owner's answers to OQ-14 to OQ-21 (2026-11-15); no open questions (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; OQ-14 to OQ-21 answered 2026-11-15); S0 and S1 of MVP, not sharded. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.9 (2026-11-15, **text pending owner approval**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and record the owner's answers to OQ-14 to OQ-21 (2026-11-15); no open questions (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; OQ-14 to OQ-21 answered 2026-11-15); S0 and S1 of MVP, not sharded. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
 
@@ -2383,7 +2383,7 @@ clarification for slice 0.
   recommendation, OQ-11 not now. Revision 3.2 (2026-11-10)
   answers the check of the approval edits (BLOCKED on M1 and minors; F4.12's fourth
   table) and asked one question, OQ-13 (WS-1 AC8's two cases), which the owner
-  answered yes to both on 2026-11-10 (revision 3.3). **Revisions 3.4 to 3.8
+  answered yes to both on 2026-11-10 (revision 3.3). **Revisions 3.4 to 3.9
   (2026-11-15) are pending the owner's approval of their text:** they apply the
   owner's decision of 2026-11-15 on design review blocker B3 ("strip all paths": an
   orchestrator session's `projectDir` and an agent-tracker entry's `cwd` are never
@@ -2391,8 +2391,9 @@ clarification for slice 0.
   to 3.7 answer the delta reviews of 3.4 to 3.6 (each BLOCKED; F4.12's fifth to
   seventh tables) and asked eight questions, OQ-14 to OQ-21, which the owner
   answered on 2026-11-15 (F4.10). Revision 3.8 records those answers and the delta
-  review of 3.7 (F4.12's eighth table). F4 has no open questions. Until the owner
-  approves the text of 3.4 to 3.8, revision 3.3 is the approved text. Not sharded;
+  review of 3.7 (F4.12's eighth table), and revision 3.9 answers the delta review of
+  3.8 (the ninth). F4 has no open questions. Until the owner
+  approves the text of 3.4 to 3.9, revision 3.3 is the approved text. Not sharded;
   S0 (F4.8) comes first. Revision 1's
   adversarial review BLOCKED it (B1 to B4, majors, minors); revision 2 answered every
   finding and folded in the owner's decisions of 2026-11-10; the delta review of
@@ -2629,6 +2630,28 @@ clarification for slice 0.
 
     New, from applying (b′): F2 OB-14 AC3 wins in a hub tab, so a run there records
     no hub folder (WS-7 AC3, F4.9's note for F2). F4 has no open questions.
+  - 2026-11-15, revision 3.9 (**text pending the owner's approval, with 3.4 to
+    3.8**): answers the delta review of 3.8 (the answers recorded faithfully; two
+    majors and four minors, all in text the product manager wrote; F4.12's ninth
+    table). Requirement changes the owner approves with this text:
+    - **In a hub tab, nothing is recorded:** a run started in any pane of a tab with
+      F2's hub-tab flag records no `cwd`, sub-terminals and work areas included. It
+      is tested in a pane at the hub's top level and in one in a work area. The rule
+      and its test go with whichever of S0 and F2 slice 1 merges into `main` second,
+      a new row in F4.8's "Merges second".
+    - **When a skipped-key line goes:** a local skip clears on the key's next
+      successful export; an import skip clears only when a later import reads the
+      copy, normally the next launch. A periodic export does not clear an import
+      skip. Rust and frontend tests cover both.
+    - **The recorded folder's fallback:** the pane's live folder, else the folder it
+      was opened in.
+
+    Both rules written by the product manager are now labelled so under their
+    owner-credited headings. D9 and the agent-tracker row's "Today" cell are
+    corrected: on `main` the tracker holds no hub folder in practice, and under
+    OQ-20 (b′) an unflagged workspace tab's runs record their folder on this machine
+    only. F4.9's F2 note and F4.11 follow. Revision 3.8's "records no hub folder" is
+    superseded.
 
 ### F4.1 Terms
 
@@ -2841,7 +2864,12 @@ already records its checkouts, but nothing in ADE reads that record. Meanwhile
   because F2 sets it there. A workspace tab opened from a hub folder (WS-2 AC2: the
   New tab dialog, Open project, recent projects) gets the **workspace mark only**: it
   is a plain-shell tab, and its scrollback, phone label, agent tracker entry and
-  recent-projects entry stay as they are today for a tab opened on that folder.
+  recent-projects entry stay as they are today for a tab opened on that folder. One
+  change comes from WS-7 AC3, not from this decision (revision 3.9): under OQ-20
+  (b′), an agent run started there from the agent picker or the board records its
+  pane's folder (the hub folder or a checkout) in the agent tracker on this
+  machine. WS-7 AC3's strip keeps it out of sync. Only a tab with F2's hub-tab flag
+  records no `cwd` (F2 OB-14 AC3).
   Flagging it would be an F2 change (it would widen F2.5's hub tab and drop the
   scrollback of a tab F2 never opened), and F4 does not make it. Duplicate, Reopen
   Closed Tab, Move to New Window and restore keep whichever marks the tab had (WS-6
@@ -3230,7 +3258,7 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    tab holds none of the record's markers and no root name.
 3. **The sync strip (OQ-5, approved by the owner 2026-11-10; its orchestrator and
    agent-tracker rows widened by the owner's decision of 2026-11-15; revisions 3.4
-   to 3.8, pending owner approval; OQ-14 to OQ-21 answered by the owner
+   to 3.9, pending owner approval; OQ-14 to OQ-21 answered by the owner
    2026-11-15).** Today and under F2,
    these keys, which ADE sync exports when Settings → Sync is on, can hold a
    workspace folder's path (and so, by default, a client's name). ADE sync's export
@@ -3254,7 +3282,7 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    | `ade-session`: sub-terminal names (`SavedView.name`) and tab names | a name taken from a checkout or hub folder (`ade open` names, a renamed tab, a tab named after its folder) | hub tabs are named "Agent hub" (OB-14 AC1); sub-terminal names are not masked | sub-terminal names of workspace tabs stripped; a workspace tab's own name stripped when it is the hub folder's name (its last folder name), as OQ-5's rule; both restored locally |
    | `better-terminal-workspaces` (tab sets, **shared**: every machine) | a hub tab's folder | F2 OB-14 AC5 saves it | a workspace tab is saved without its folder; Load opens it as a plain tab named "Agent hub" in the home folder |
    | `better-terminal-orchestrator` (**shared**) | a session's `projectDir` (`orchestratorStore.ts:38`) | a folder ADE made on the machine that wrote it, under that machine's `~/.ade/orchestrator/`, named after the session and the time (on `main` the only way it is set), so the path holds that machine's home folder (often the user's name) and the session's name | every session's `projectDir`, whatever the folder, is left out of the export; this machine keeps its own |
-   | `better-terminal-agent-tracker` (**shared**) | a session's `cwd` (`agentTrackerStore.ts:25`) | F2 OB-14 AC3 keeps the hub folder out only for tabs with the hub-tab flag (Open Hub, the run tab); unflagged workspace tabs (a hub folder opened from the New tab dialog, Open project or recent projects, D9) put the hub folder into this shared key, and into recent projects (`ade-recent-projects`, local), as today; a sub-terminal's checkout is not covered | every entry's `cwd`, whatever the folder and whichever tab or pane started the run, is left out of the export; this machine keeps its own |
+   | `better-terminal-agent-tracker` (**shared**) | a session's `cwd` (`agentTrackerStore.ts:25`) | On `main`, only orchestrator dispatch records a folder, and that folder is its session's project folder under `~/.ade/orchestrator/`; the agent picker and the board record none. So in practice no hub folder or checkout enters this key today (corrected in revision 3.9). Under F4 (OQ-20 (b′)) the agent picker and the board record the pane's folder too, so a run in an unflagged workspace tab (a hub folder opened from the New tab dialog, Open project or recent projects, D9) records the hub folder or a checkout on this machine. A tab with F2's hub-tab flag (Open Hub, the run tab) records no `cwd` at all (WS-7 AC3, F2 OB-14 AC3). An unflagged hub folder also goes into recent projects (`ade-recent-projects`, local), as today | every entry's `cwd`, whatever the folder and whichever tab or pane started the run, is left out of the export; this machine keeps its own |
    | `better-terminal-prompt-history`, `better-terminal-saved-notes` (**shared**) | text the engineer typed | as typed | not stripped: the engineer's own text (stated, not changed) |
 | `ade-scratchpad-draft` (device key, exported to `devices/<device>/`) | the scratchpad box's draft, typed or inserted | as typed today; **F5 (PR #115) PT-11 AC4** keeps the draft out of sync's export while it holds inserted template text, and keeps template sends out of `better-terminal-prompt-history` | not stripped by F4: the engineer's own text; F5's rule applies as F5 says |
 
@@ -3336,19 +3364,28 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    records it in place of the old path.
 
    **Every agent run records its folder, and the fleet joins only this launch's runs
-   to live panes** (the owner, 2026-11-15, OQ-20 (b′)). This fixes a bug already on
-   `main`, which goes beyond the owner's decision on sync. Pane ids are made afresh
+   to live panes** (the owner, 2026-11-15, OQ-20 (b′); the hub-tab rule and the
+   fallback below were written by the product manager in revisions 3.8 and 3.9).
+   This fixes a bug already on `main`, which goes beyond the owner's decision on
+   sync. Pane ids are made afresh
    at every launch, restored panes included, and the fleet joins every agent-tracker
    entry, finished ones too, to the live pane with the same id, taking that pane's
    tab, folder and cost.
    - **Every way ADE starts an agent run records the run's folder** in its tracker
-     entry (`cwd`) when it starts: the folder of the pane the agent starts in, as ADE
-     knows it at that moment. Orchestrator dispatch already does this. From this
-     build, the agent picker and the board's agent launch do too. The strip (the
-     row above) keeps every `cwd` out of sync, so recording it sends nothing to
-     another machine. **F2's rule wins in a hub tab:** a run started in a tab with
-     F2's hub-tab flag records no hub folder, as F2 OB-14 AC3 says, once F2 slice 1
-     is built.
+     entry (`cwd`) when it starts: the pane's live folder as ADE last saw it, or, if
+     ADE has not seen one yet, the folder the pane was opened in. Orchestrator
+     dispatch already does this, with the same fallback (its pane opens in the
+     session's project folder). From this build, the agent picker and the board's
+     agent launch do too. The strip (the row above)
+     keeps every `cwd` out of sync, so recording it sends nothing to another
+     machine.
+   - **In a hub tab, nothing is recorded** (written by the product manager in
+     revisions 3.8 and 3.9, so that F2 OB-14 AC3 wins). A run started in any pane of
+     a tab with F2's hub-tab flag, sub-terminals included, records no `cwd`. Its
+     panes sit in the hub folder or in its work areas (`projects/…`, `ops/…`), whose
+     paths hold the hub's name, and F2 OB-14 AC3 forbids both the hub's path and its
+     base name in the tracker. This rule and its test go with whichever of S0 and
+     F2 slice 1 merges into `main` second (F4.8's "Merges second").
    - **The fleet joins an entry to a live pane**, taking that pane's tab and live
      folder, only if this running instance started that entry since it launched.
      That is known from the start itself, not from the entry's start time, since
@@ -3364,9 +3401,14 @@ folder I am working in, and each focus session to keep its own checkout (D6).
 
    Tests:
    - **Recording:** an agent started from the agent picker and one started from the
-     board each record the pane's folder at start as `cwd`, as orchestrator dispatch
-     does. Once F2 slice 1 is built (in S1's tests), one started from the agent
-     picker in a flagged hub tab records no hub folder.
+     board each record the pane's live folder at start as `cwd`, as orchestrator
+     dispatch does. With no live folder seen yet, each records the folder the pane
+     was opened in.
+   - **Hub tab** (with whichever of S0 and F2 slice 1 merges second): in a tab with
+     F2's hub-tab flag, an agent started from the agent picker in a pane at the
+     hub's top level, and one started in a pane in a work area (`<hub>/projects/x`),
+     each record no `cwd`. The agent-tracker store holds neither the hub's path nor
+     its base name.
    - **Same machine, sync off:** in launch 1, an orchestrator-dispatched agent runs
      in pane id P in folder F1, recording F1, and finishes; an agent started from the
      agent picker in folder F3 records F3 and finishes. ADE restarts; a restored or
@@ -3450,19 +3492,28 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    machine that skipped it, and only there, Settings → Sync shows a line that names
    the skipped store in words (for example "Orchestrator sessions" or "Agent runs",
    not the key's name) and says it was not synced. The designer writes the copy.
-   **The line stays until that key next syncs successfully** on this machine, through
-   later syncs that do not touch the key. Imports run only at launch, and each
-   periodic sync replaces the result Settings → Sync shows (`sync.ts` keeps only
-   the latest report), so a skipped import would otherwise vanish within minutes.
-   After a restart, the first sync checks the key again. Tests, written as F4.11's
-   m6 note asks, since ADE has no GUI end-to-end harness:
+   **When the line goes** (written by the product manager in revisions 3.8 and
+   3.9). Each direction is kept separately. Imports run only at launch, and each
+   periodic sync, which exports only, replaces the result Settings → Sync shows
+   (`sync.ts` keeps only the latest report).
+   - A **local skip** (this machine's value could not be read) clears when that key
+     is next exported successfully.
+   - An **import skip** (the repository's copy could not be read) clears only when a
+     later import reads that key's copy, normally at the next launch. A periodic
+     sync that exports the same key successfully does not clear it.
+
+   Tests, written as F4.11's m6 note asks, since ADE has no GUI end-to-end harness:
    - **Rust:** an unreadable local value of each key, then `run_sync`: the report
      records that key skipped (local). An unreadable imported copy of each key, then
      a sync that imports: the report records that key skipped (imported). Once the
-     value is readable again, the next sync's report records that key as synced.
-   - **Frontend:** given a report holding a skip of each key, Sync settings shows the
-     line naming that store. Given a later report that does not touch the key, the
-     line stays. Given a report recording the key as synced, the line goes. Given
+     local value is readable again, the next export's report records that key as
+     exported. Once the copy is readable again, the next import's report records it
+     as imported.
+   - **Frontend:** given a report holding a local skip and an import skip, Sync
+     settings shows a line naming each store. Given a later report that does not
+     touch the key, both lines stay. Given an export-only report recording the key
+     as exported, the local-skip line goes and **the import-skip line stays**. Given
+     a report recording the key as imported, the import-skip line goes. Given
      reports with no skip, no line is shown.
 
    F4's own record and recent list are in no synced key (AC1). Test: a session with a
@@ -3572,7 +3623,7 @@ references stay stable.
 
 | Slice | Delivers | Criteria | Depends on |
 |---|---|---|---|
-| **S0. Folders out of sync** (MVP, every OS where ADE sync runs; ships ahead of S1, the owner, 2026-11-15, OQ-19) | WS-7 AC3's orchestrator and agent-tracker rows for everyone, without hubs or workspaces: the strip of every `projectDir` and `cwd`, this machine's own values kept on import, and the shared import mechanism that F2 and S1 reuse; with them, the Dispatch and fleet fixes that the strip makes visible | WS-7 AC3: the two rows; the import rule for those two keys (keep this machine's own, and never take another machine's); the unreadable rule for those two keys; the cleanup of the repository's current files (OQ-14); the skipped-key notice in Settings → Sync (OQ-15); per-task Dispatch makes the folder first (OQ-18 (i)); a recorded folder that does not exist counts as none (OQ-21); every agent run records its folder, and the fleet joins only this launch's runs to live panes (OQ-20 (b′)). Test cases S0 carries: the orchestrator and tracker parts of the one-machine test (a session and a run in a checkout path and in a folder that is in no workspace); **No hub** in a profile with no workspace record; the orchestrator and tracker parts of the **Two-machine case**; **Each machine keeps its own**; **A copy that holds another machine's folders**; **Unreadable**; **Paths from before**; the skipped-key Rust and frontend tests; the per-task Dispatch tests (the folder, the failure and the three click orders); the two missing-folder tests; the fleet's four tests (recording, same machine, across machines, imported before this build) | None (not F2 slice 1, not F3 S1). S1 takes the rest of WS-7 AC3: the `ade-session`, names and tab-set rows, the import rule for tab sets, the one-machine test's workspace-tab, sub-terminal and tab-set parts, the two-machine test's tab-set part, and the **No hub** variants that need the workspace record (record unreadable, record from a newer build) |
+| **S0. Folders out of sync** (MVP, every OS where ADE sync runs; ships ahead of S1, the owner, 2026-11-15, OQ-19) | WS-7 AC3's orchestrator and agent-tracker rows for everyone, without hubs or workspaces: the strip of every `projectDir` and `cwd`, this machine's own values kept on import, and the shared import mechanism that F2 and S1 reuse; with them, the Dispatch and fleet fixes that the strip makes visible | WS-7 AC3: the two rows; the import rule for those two keys (keep this machine's own, and never take another machine's); the unreadable rule for those two keys; the cleanup of the repository's current files (OQ-14); the skipped-key notice in Settings → Sync (OQ-15); per-task Dispatch makes the folder first (OQ-18 (i)); a recorded folder that does not exist counts as none (OQ-21); every agent run records its folder, and the fleet joins only this launch's runs to live panes (OQ-20 (b′)); the hub-tab rule only if S0 merges into `main` after F2 slice 1 (F4.8's "Merges second"). Test cases S0 carries: the orchestrator and tracker parts of the one-machine test (a session and a run in a checkout path and in a folder that is in no workspace); **No hub** in a profile with no workspace record; the orchestrator and tracker parts of the **Two-machine case**; **Each machine keeps its own**; **A copy that holds another machine's folders**; **Unreadable**; **Paths from before**; the skipped-key Rust and frontend tests; the per-task Dispatch tests (the folder, the failure and the three click orders); the two missing-folder tests; the fleet's four tests (recording, same machine, across machines, imported before this build); the **Hub tab** test only if S0 merges second | None (not F2 slice 1, not F3 S1). S1 takes the rest of WS-7 AC3: the `ade-session`, names and tab-set rows, the import rule for tab sets, the one-machine test's workspace-tab, sub-terminal and tab-set parts, the two-machine test's tab-set part, and the **No hub** variants that need the workspace record (record unreadable, record from a newer build) |
 | **S1. A hub's workspace** (MVP, macOS; after S0) | Discovery by ADE's rules, missing checkouts, multi-root file browser in the own view, opening by Open Hub (persona) and by a hub folder (plain shell), bring forward, add/hide/order, restore, record keeping, F4's local-only stores, the sync strip, no automatic setup in checkouts, the run tab as a workspace tab, limits and hostile paths, tab sets renamed | WS-1 AC1 to AC4, AC5 (open, restore, palette refresh), AC6 to AC8; WS-2 AC1 to AC4, AC6 (S1 entries), AC7, AC8; WS-3; WS-4; WS-5 AC1 **only if F3 S1 is not on `main` when F4 S1 is reviewed, and again before merging, if F3 S1 merged in between (F3 D14)** (otherwise WS-5 AC2 instead, as F4 S1 then merges second), AC3; WS-6; WS-7 AC1, AC2 (not its [Second] relay part unless S1 merges second), AC3 (the sync strip: only what S0 does not carry), AC4; WS-9; WS-10. **[Second]:** WS-5 AC2 with F3 S1; WS-7 AC2's relay part with phone-watch story 8 | F2 slice 1 (Open Hub, the hub-tab flag). Works with or without F3 S1 |
 | **S2. Recents and live refresh** (Next) | Open Workspace… with the recent list and Open Hub Folder…; refresh on `ACCESS.md` change | WS-2 AC5, AC6 (S2 entry); WS-1 AC5 (live part); WS-5 AC4 | S1 |
 
@@ -3583,6 +3634,7 @@ review):
 |---|---|---|
 | WS-5 AC2 (own view multi-root, sub-terminals single root, over F3's viewer state) | F3 S1 (designed in PR #116, so likely sharded before F4 is approved) | **F3 S1's ticket**, at F4 S1's sharding, if that ticket exists then; only if it does not, `.ade/context/f4-merges-second.md`, written at F4 S1's sharding and read by F3's sharding, which writes the mirror into F3 S1's ticket. Either way F3 carries the cross-reference line of F4.9 (OQ-12, approved; written on PR #112's branch) |
 | WS-7 AC2's relay part | phone-watch story 8 (sharded, `_bmad-output/initiative-phone-remote/epic-phone-watch/tickets.toml`) | story 8's ticket, at F4 S1's sharding |
+| WS-7 AC3's hub-tab rule (a run started in any pane of a tab with F2's hub-tab flag records no `cwd`) and its **Hub tab** test (revision 3.9) | F2 slice 1's story that adds the hub-tab flag (S0 depends on nothing, so either may merge first) | That F2 story's ticket, at S0's sharding, if the ticket exists then; only if it does not, `.ade/context/f4-merges-second.md`, for F2's sharding to copy into it. If S0 merges first, F2's story carries the rule and test; if F2 slice 1 merges first, S0 carries them (F3 D14's rule) |
 
 **WS-5 AC1 and AC2 never share a gate.** With a sub-terminal in sight, AC1 shows the
 workspace (one browser per tab) and AC2 shows the sub-terminal's single root, so the
@@ -3626,7 +3678,7 @@ persona's file browser, which is the owner's whole ask.
   2026-11-10, and F2 revision 5 writes them into F2 (on PR #98's branch), with the
   tab-set wording of OQ-2; F2 revision 5.1 adds WS-7 AC3's import rule (this
   machine keeps its stripped fields when sync imports another machine's copy) to
-  OB-10 AC2 and OB-14 AC5. Revisions 3.4 to 3.8 (the owner's decision of
+  OB-10 AC2 and OB-14 AC5. Revisions 3.4 to 3.9 (the owner's decision of
   2026-11-15 and the owner's answers to OQ-14 to OQ-21 of the same day, pending the
   owner's approval of their text) widen WS-7 AC3's
   orchestrator and agent-tracker rows: every `projectDir` and every `cwd` is left out
@@ -3641,8 +3693,10 @@ persona's file browser, which is the owner's whole ask.
   the extra rules are F4's, for keys F2 has no row for); and OB-14 AC3, which keeps
   the hub folder out of the agent tracker on this Mac too, is stricter than the strip
   and stands. It also wins over OQ-20's rule that every agent run records its
-  folder: a run started in a tab with F2's hub-tab flag records no hub folder (WS-7
-  AC3 says so). F2's design revision adopts the one strip and import rule the
+  folder: a run started in a tab with F2's hub-tab flag records no `cwd` (WS-7
+  AC3 says so). That rule and its test go with whichever of S0 and F2 slice 1
+  merges into `main` second, mirrored into the other's ticket (F4.8's "Merges
+  second"). F2's design revision adopts the one strip and import rule the
   architect designs for F2 and F4 (F4.11). F2's design and UX still say hub paths sync and need a
   revision before F2 is sharded (F2.11). Note for F2: F2's own finished-hub check (OB-2
   AC2) has the same exposure as WS-2 AC8 (a hub's git config naming programs); F4
@@ -3721,7 +3775,7 @@ persona's file browser, which is the owner's whole ask.
   the keys WS-7 AC3's table strips. F5 should cite "F4 OQ-5, approved by the owner
   2026-11-10 (WS-7 AC3)", not F3 VV-12 or F4 WS-7 AC1 and AC2; text F5 itself keeps
   out of sync (its draft and prompt-history rules) stays F5's own rule (F5 D7).
-  Revisions 3.4 to 3.8 (pending the owner's approval of their text): since the
+  Revisions 3.4 to 3.9 (pending the owner's approval of their text): since the
   owner's decision of 2026-11-15, an orchestrator session's `projectDir` and an
   agent-tracker entry's `cwd` are never synced, for any folder or anyone. F5 may cite
   that as "the owner's decision of 2026-11-15 (F4 WS-7 AC3)", for those two fields
@@ -3952,8 +4006,9 @@ title.
   check of that text before S1 is sharded is recommended. Revision 3.5 answers the
   delta review of 3.4 (F4.12's fifth table), revision 3.6 that of 3.5 (the sixth)
   and revision 3.7 that of 3.6 (the seventh); revision 3.8 answers that of 3.7 (the
-  eighth) and applies the owner's answers to OQ-14 to OQ-21. A delta check of 3.8
-  comes before the owner approves the text of 3.4 to 3.8.
+  eighth) and applies the owner's answers to OQ-14 to OQ-21; revision 3.9 answers
+  the delta review of 3.8 (the ninth). A delta check of 3.9 comes before the owner
+  approves the text of 3.4 to 3.9.
 - **Designer:** root rows (label, disambiguated label, path, missing, not-answering
   and not-in-workspace marks, the current-root mark), the file browser's workspace
   menu, the palette entries, Show Hidden Workspace Folders, the Tabs/Tab Sets relabel,
@@ -3969,21 +4024,27 @@ title.
   stripped fields when it imports another machine's later copy, by merge or
   re-apply), designed once with F2 OB-10 AC2's and OB-14 AC5's strip for hub tabs (F2
   revision 5); for the orchestrator's `projectDir` and the agent tracker's `cwd`
-  (revisions 3.4 to 3.8, all in S0), on every OS where sync runs: never taking
+  (revisions 3.4 to 3.9, all in S0), on every OS where sync runs: never taking
   another machine's value; not exporting or importing a value that cannot be read
-  as the key's list of entries, with a sync report that records each skip and
-  each key synced, so the notice can stay until the key next syncs (OQ-15); the
+  as the key's list of entries, with a sync report that records each skip by
+  direction (local or import) and each key exported or imported, so each line
+  clears only as WS-7 AC3 says (OQ-15); the
   cleanup of the repository's current files (OQ-14); per-task Dispatch's folder,
   with its failure case and one folder per session (OQ-18); a recorded folder that
   does not exist (OQ-21); and every agent run recording its folder, with the fleet
-  joining only this launch's runs to live panes (OQ-20 (b′)). Then WS-1 AC8's check
+  joining only this launch's runs to live panes, with no `cwd` recorded in a
+  flagged hub tab (OQ-20 (b′)). Then WS-1 AC8's check
   in automatic project setup, discovery's parser and its frozen fixture (WS-1 AC2), the finished-hub check (WS-2 AC8), the per-root bound and non-blocking reads
   (WS-9 AC2, AC3), the watches (WS-9 AC6, S2), how the multi-root tree fits
   `fileBrowserStore.ts` before F3 and F3's viewer state after it (WS-5). An ADR for the
   record's store and one for the "workspace" meaning (OQ-1, approved).
 - **Scrum-master:** after approval, shard S0 first (F4.8: its criteria, test
   cases and gate as that row lists them, every OS; the owner, OQ-19), which does
-  not wait on F2 slice 1, then S1 with the rest of WS-7 AC3. At S1's sharding:
+  not wait on F2 slice 1, then S1 with the rest of WS-7 AC3. At S0's sharding,
+  write the hub-tab rule's mirror (F4.8's "Merges second") into the ticket of F2
+  slice 1's story that adds the hub-tab flag, if it exists; only if it does not,
+  into `.ade/context/f4-merges-second.md`. Check the merge order when S0 is
+  reviewed, and again before merging. At S1's sharding:
   - write WS-7 AC2's relay mirror into phone-watch story 8's ticket;
   - write WS-5 AC2's mirror (the criterion, F4.9's reading of F3's viewer state, and
     the replacement of WS-5 AC1's tests) into **F3 S1's ticket if it exists**; only
@@ -4013,9 +4074,10 @@ title.
     and (b) Rust tests for the marker fixture (no marker written, the hub and
     checkouts byte-for-byte unchanged) driving discovery, refresh and the
     finished-hub check directly. WS-7 AC3's skipped-key notice (S0) is written the
-    same way (revision 3.8): a Rust test that sync's report records the skip, and a
-    frontend test that Sync settings shows a report holding a skip and keeps the
-    line until a report records that key synced.
+    same way (revisions 3.8 and 3.9): a Rust test that sync's report records each
+    skip by direction, and a frontend test that Sync settings shows a report holding
+    skips, and clears a local skip on the key's next export and an import skip only
+    on its next import.
   - **m8, local snapshots.** `state_snapshot` copies the `state/kv/` files, recordings
     excluded (revision 3.1); WS-7
     AC2 allows snapshots to hold the workspace record and the recent list, since
@@ -4173,4 +4235,15 @@ title.
 | minor 3: the OQ-15 test reads as end-to-end | Split into a Rust test (the report records the skip, local or imported, and later the key synced) and a frontend test (the line shows, stays, and goes). F4.11's m6 note says so. |
 | owner's answers | OQ-14 to OQ-21 are recorded as the owner's, dated 2026-11-15. Conditionals are removed; (ii) of OQ-18 and (a) and (c) of OQ-20 are marked not chosen. S0 is final. F4.10, Status, index row, History and F4.11 are updated. |
 | found while applying (b′) | F2 OB-14 AC3 keeps a hub tab's folder out of the tracker. WS-7 AC3 and F4.9's F2 note now say F2's rule wins, so a run in a flagged hub tab records no hub folder, with a test once F2 slice 1 is built. |
+
+**Delta review of revision 3.8 (e59eeb0): the owner's answers recorded faithfully; BLOCKED on two majors in the hub-tab rule; answered in revision 3.9.**
+
+| Finding | Answer in revision 3.9 |
+|---|---|
+| **Major 1** the hub-tab rule can ship untested (S0 may merge after F2 slice 1, but the test was in S1) | F4.8's "Merges second" has a new row: the hub-tab rule and its test go with whichever of S0 and F2 slice 1 merges into `main` second, mirrored into the other's ticket at S0's sharding (F3 D14's rule). S0's row and F4.11's scrum-master item say so. |
+| **Major 2** "records no hub folder" is too narrow | "A run started in any pane of a tab with F2's hub-tab flag records no `cwd`", sub-terminals and work areas included. The test asserts no `cwd` for a pane at the hub's top level and for one in `<hub>/projects/x`, and that the store holds neither the hub's path nor its base name. |
+| minor 1: the import skip clears on the next export | Each direction is kept separately: a local skip clears on the next export, an import skip only on a later import. The tests include an import skip followed by an export-only sync, after which the line stays. |
+| minor 2: details written by the product manager sit under owner-credited headings | The persistence rule (under OQ-15) and the hub-tab rule and fallback (under OQ-20 (b′)) are labelled "written by the product manager in revisions 3.8 and 3.9". The persistence rule is in the History's owner-facing list. |
+| minor 3: D9 and the agent-tracker row are stale | D9 notes that under (b′) a run in an unflagged workspace tab records its folder locally, stripped from sync. The row's "Today" cell says that on `main` only orchestrator dispatch records a folder, under `~/.ade/orchestrator/`. |
+| minor 4: no fallback for the recorded folder | The pane's live folder as ADE last saw it, else the folder the pane was opened in, as orchestrator dispatch does; the recording test covers both. |
 <!-- F4 ends -->
