@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10; revision 9n adds the F5 cross-reference and allowed inflow 9, the default profile's prompt templates read-only in engagements (F5 OQ-18, OQ-3), approved by the owner 2026-11-10; revision 9o adds the identifier check to inflow 9, decided by the owner 2026-11-10) |
-| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.6 (2026-11-15, **pending owner approval**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and ask **OQ-14 to OQ-21 (open)**; OQ-1 to OQ-13 answered (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; one slice of MVP, not sharded). F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.7 (2026-11-15, **pending owner approval**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and ask **OQ-14 to OQ-21 (open)**; OQ-1 to OQ-13 answered (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; one slice of MVP, not sharded). F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
 
@@ -2383,13 +2383,13 @@ clarification for slice 0.
   recommendation, OQ-11 not now. Revision 3.2 (2026-11-10)
   answers the check of the approval edits (BLOCKED on M1 and minors; F4.12's fourth
   table) and asked one question, OQ-13 (WS-1 AC8's two cases), which the owner
-  answered yes to both on 2026-11-10 (revision 3.3). **Revisions 3.4 to 3.6
+  answered yes to both on 2026-11-10 (revision 3.3). **Revisions 3.4 to 3.7
   (2026-11-15) are pending the owner's approval of their text:** they apply the
   owner's decision of 2026-11-15 on design review blocker B3 ("strip all paths": an
   orchestrator session's `projectDir` and an agent-tracker entry's `cwd` are never
   synced, for anyone) to G2, WS-7 AC3 and F4.9's notes for F2 and F5. Revisions 3.5
-  and 3.6 answer the delta reviews of 3.4 and 3.5 (both BLOCKED; F4.12's fifth and
-  sixth tables) and ask eight open questions, OQ-14 to OQ-21 (F4.10). Until the
+  to 3.7 answer the delta reviews of 3.4 to 3.6 (each BLOCKED; F4.12's fifth to
+  seventh tables) and ask eight open questions, OQ-14 to OQ-21 (F4.10). Until the
   owner approves the text and answers them, revision 3.3 is the approved text. Not
   sharded. Revision 1's
   adversarial review BLOCKED it (B1 to B4, majors, minors); revision 2 answered every
@@ -2575,6 +2575,28 @@ clarification for slice 0.
     states its benefit (m4); OQ-16 gains its "no" branch (m5); "What still syncs"
     adds `previewPath` (m6); a list with a non-object element counts as readable
     (m7). F4's open questions are OQ-14 to OQ-21.
+  - 2026-11-15, revision 3.7 (**pending the owner's approval, with 3.4 to 3.6**):
+    answers the delta review of 3.6 (N1 to N4 and m1 to m7 closed; BLOCKED on two
+    majors, with seven minors; F4.12's seventh table). WS-7 AC3 gains OQ-15's "if
+    yes" criterion and test, and S0 lists that test. OQ-20 is restated: the fleet's
+    join bug on `main` has two triggers, one on a single machine with sync off and
+    one across machines. It offers an origin marker, joining only runs this
+    instance started in this launch, or leaving it, and recommends the second. Its
+    criterion is rewritten for that answer, with same-machine, across-machines and
+    imported-before tests, and it says plainly that this goes beyond the owner's
+    decision. Minors:
+    - F4.9 names all three Rust CI jobs and requires Rust tests for new Rust that
+      OQ-18 or OQ-21 needs;
+    - the fleet bullet notes the live-pane case;
+    - OQ-18 (i) covers every click order, including Dispatch all then a per-task
+      Dispatch;
+    - per-task Dispatch on a session whose recorded folder does not exist is tested;
+    - OQ-21 names its cost;
+    - S0 and OQ-19 say S0's list follows OQ-19's answer;
+    - OQ-16's "no" would be a new PRD revision.
+
+    F4.11's m9 note is corrected: no row needs the workspace folders at export.
+    The owner is credited with nothing beyond the decision.
 
 ### F4.1 Terms
 
@@ -3175,7 +3197,7 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    tab holds none of the record's markers and no root name.
 3. **The sync strip (OQ-5, approved by the owner 2026-11-10; its orchestrator and
    agent-tracker rows widened by the owner's decision of 2026-11-15; revisions 3.4
-   to 3.6, pending owner approval; OQ-14 to OQ-21 open).** Today and under F2,
+   to 3.7, pending owner approval; OQ-14 to OQ-21 open).** Today and under F2,
    these keys, which ADE sync exports when Settings → Sync is on, can hold a
    workspace folder's path (and so, by default, a client's name). ADE sync's export
    strips them as the last column says, while this machine keeps and restores them,
@@ -3234,8 +3256,9 @@ folder I am working in, and each focus session to keep its own checkout (D6).
      folder recorded, and its agents start in the home folder. Whether such a folder
      counts as no folder recorded is OQ-21 (criterion below).
    - An agent run received from another machine has no folder on this one, so the
-     fleet groups it under "Unknown project"; if OQ-20 is yes, it is also never
-     joined to a pane on this machine (below).
+     fleet groups it under "Unknown project", unless its pane id is live here: on
+     `main` the fleet then shows that pane's tab, folder and cost instead. OQ-20
+     asks whether to fix that (criterion below).
    - This machine's own sessions and runs keep their folders, also after an import.
    - On the same machine, a reinstall, a new profile or cleared app state that gets
      its sessions and runs back only through sync gets them back with no
@@ -3250,14 +3273,17 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    session's spec, its prompt has the spec instruction, and the session now records
    that folder. **If making the folder fails**, per-task Dispatch starts no agent
    and shows the same message as Dispatch all ("Could not create the project
-   folder: …"), and the session records no folder. **One folder per session:** a
-   second per-task Dispatch, or Dispatch all, clicked while the folder is being made
-   waits for it and uses that same folder. Tests: making the folder is made to fail;
-   per-task Dispatch makes no agent spawn request, shows that message, and the
-   session records no folder. And: with folder creation held open, a per-task
-   Dispatch then a second per-task Dispatch, and again a per-task Dispatch then
-   Dispatch all; in each case one folder is made, every agent's spawn request names
-   it, and the session records it. [If OQ-18 is (ii)] that agent starts in the home
+   folder: …"), and the session records no folder. **One folder per session**, in
+   any order of clicks: while either button is making the session's folder, a
+   second click of either button waits for it and uses that same folder
+   (on `main` the session records no folder until Dispatch all has made it, so a
+   per-task Dispatch clicked meanwhile would make a second one). Tests: making the
+   folder is made to fail; per-task Dispatch makes no agent spawn request, shows
+   that message, and the session records no folder. And: with folder creation held
+   open, each of these orders: a per-task Dispatch then a second per-task Dispatch;
+   a per-task Dispatch then Dispatch all; Dispatch all then a per-task Dispatch. In
+   each case one folder is made, every agent's spawn request names it, and the
+   session records it. [If OQ-18 is (ii)] that agent starts in the home
    folder, stated, not changed.
 
    **[If OQ-21 is yes] A recorded folder that does not exist counts as none**
@@ -3267,26 +3293,43 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    records it in place of the old path. Test: a session whose `projectDir` names a
    folder that does not exist here, as one imported before this build does; Dispatch
    all; the agents' spawn requests name a new project folder holding the spec, and
-   the session records it. [If OQ-21 is no] Dispatch all's agents start in the home
-   folder, as on `main`, stated, not changed.
+   the session records it. And, if OQ-18 is (i): the same session, per-task Dispatch
+   of one task; its agent's spawn request names a new project folder holding the
+   spec, and the session records it in place of the old path. [If OQ-21 is no]
+   Dispatch all's agents start in the home folder, as on `main`, stated, not
+   changed.
 
-   **[If OQ-20 is yes] Runs from another machine are not joined to this machine's
-   panes** (product manager, revision 3.5; this fixes a bug already on `main`, so it
-   is asked as OQ-20). Pane ids restart at every launch and are the same on every
-   machine, and the fleet today takes a live pane's folder, tab and cost before an
-   entry's own. So an agent-tracker entry that came from another machine is never
-   matched to a pane on this one: the fleet shows it with no tab and no folder,
-   under "Unknown project", with no cost from this machine's sessions; and this
-   machine's own run in a pane with the same id keeps its tab, folder and cost. How
-   an entry is known to have come from another machine is the architect's. Test: A
-   runs an agent in pane id P in folder F; A imports B's run, also in pane id P; A's
-   fleet shows A's run under F with A's tab and its cost, and B's run under "Unknown
-   project" with no tab and no cost. B's run is imported on this build; an entry A
-   imported before this build counts as A's own (stated limit (c)), so the
-   criterion does not cover it and the test asserts nothing about it. [If OQ-20 is
-   no] the collision stays as on `main`, stated: an imported run whose pane id is
-   live here shows that pane's tab, folder and cost, and can take the cost of this
-   machine's own run.
+   **[If OQ-20 is (b)] The fleet joins only this launch's runs to live panes**
+   (product manager, revisions 3.5 to 3.7). This fixes a bug already on `main`,
+   which goes beyond the owner's decision: pane ids are made afresh at every
+   launch, restored panes included, and the fleet joins every agent-tracker entry
+   to the live pane with the same id. From this build, the fleet joins an entry to
+   a live pane, taking that pane's tab and live folder, only if this running
+   instance started that entry since it launched. It is known from the start
+   itself, not from the entry's start time. Every other entry, whether from an
+   earlier launch on this machine, imported from another machine or imported before
+   this build (stated limit (c)), shows with no tab and only its own `cwd`: none,
+   for one imported on this build, so under "Unknown project". Its cost comes only
+   from its own folder and time, as the cost rule does today, never through a live
+   pane. A run this instance started keeps its tab, live folder and cost as today.
+   Tests:
+   - **Same machine, sync off:** in launch 1, an agent runs in pane id P in folder
+     F1 and finishes; ADE restarts, a restored or new pane gets id P in folder F2,
+     and an agent runs there. The fleet shows launch 1's run under F1 with no tab,
+     and this launch's run under F2 with that pane's tab and its own cost; neither
+     takes the other's cost.
+   - **Across machines:** A runs an agent in pane id P in folder F. A imports B's run
+     in pane id P, with a start time later than A's launch. A's fleet shows A's run
+     under F with A's tab and its cost, and B's run under "Unknown project" with no
+     tab and no cost.
+   - **Imported before this build:** an entry holding another machine's `cwd` G and
+     pane id P, present before this build started. It shows under G with no tab,
+     and takes nothing from this launch's pane P.
+
+   [If OQ-20 is (a)] only the across-machines test holds, for entries imported from
+   this build on; the other two collisions stay, stated. [If OQ-20 is (c)] all
+   three collisions stay as on `main`, stated: an entry whose pane id is live here
+   shows that pane's tab, folder and cost, and can take the cost of the run in it.
 
    **The import keeps this machine's paths.**
    Today ADE sync's import
@@ -3352,6 +3395,17 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    stays as it is. Sync's report of the run records the key as skipped; whether the
    engineer is shown that, and where, is OQ-15.
 
+   **[If OQ-15 is yes] The engineer sees a skipped key** (product manager, revision
+   3.7). On the machine that skipped it, and only there, the result of that sync in
+   Settings → Sync names the skipped store in words (for example "Orchestrator
+   sessions" or "Agent runs", not the key's name) and says it was not synced. The
+   designer writes the copy. Test: this machine's value of
+   `better-terminal-orchestrator` is made unreadable, then a sync runs; the Sync
+   settings result shows the line naming that store, and the same for
+   `better-terminal-agent-tracker`. On another machine syncing to the same
+   repository, no such line appears. [If OQ-15 is no] the skip is recorded in sync's
+   report only, and the engineer is not told.
+
    F4's own record and recent list are in no synced key (AC1). Test: a session with a
    workspace tab named after its hub folder, a focus sub-terminal named after a
    checkout, a tab set holding the workspace tab, an orchestrator session and an agent
@@ -3383,9 +3437,10 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    After one sync by A, those current files hold none of the markers and A's local
    values are unchanged; B's next sync leaves B's local values unchanged; and, if
    OQ-16 is yes, the repository's git history still shows the markers, which pins
-   that limit. The fleet test (if OQ-20 is yes), the per-task Dispatch tests (if
-   OQ-18 is (i)) and the missing-folder test (if OQ-21 is yes) are above. F2's review-step notice (OB-3 AC3) tells the engineer the paths stay on
-   this Mac.
+   that limit. The skipped-key test (if OQ-15 is yes), the fleet tests (if OQ-20 is
+   (b)), the per-task Dispatch tests (if OQ-18 is (i)) and the missing-folder tests
+   (if OQ-21 is yes) are above. F2's review-step notice (OB-3 AC3) tells the
+   engineer the paths stay on this Mac.
 4. ADE stores no persona, client or repo name read from `hub.conf` or `ACCESS.md`; the
    record holds only paths, the hidden flags, the order, the last-opened time and the
    format version. The paths themselves carry client names by default (a hub folder
@@ -3459,7 +3514,7 @@ references stay stable.
 
 | Slice | Delivers | Criteria | Depends on |
 |---|---|---|---|
-| **S0. Folders out of sync** (MVP, every OS where ADE sync runs; **only if OQ-19 is answered "ahead of S1"**, otherwise all of it is in S1) | WS-7 AC3's orchestrator and agent-tracker rows for everyone, without hubs or workspaces: the strip of every `projectDir` and `cwd`, this machine's own values kept on import, and the shared import mechanism that F2 and S1 reuse | WS-7 AC3: the two rows; the import rule for those two keys (keep this machine's own, and never take another machine's); the unreadable rule for those two keys; OQ-14's cleanup if yes; OQ-15's report if yes; OQ-18 (i)'s per-task Dispatch rule and OQ-21's rule if yes; OQ-20's fleet rule if yes. **Recommended:** all four of the never-take rule, the unreadable rule, OQ-14's cleanup and OQ-15's report go in S0, not split across S0 and S1. Test cases S0 carries: the orchestrator and tracker parts of the one-machine test (a session and a run in a checkout path and in a folder that is in no workspace); **No hub** in a profile with no workspace record; the orchestrator and tracker parts of the **Two-machine case**; **Each machine keeps its own**; **A copy that holds another machine's folders**; **Unreadable**; **Paths from before** (if OQ-14 is yes); the fleet test (if OQ-20 is yes); the per-task Dispatch tests (if OQ-18 is (i)) and the missing-folder test (if OQ-21 is yes) | None (not F2 slice 1, not F3 S1). S1 keeps the rest of WS-7 AC3: the `ade-session`, names and tab-set rows, the import rule for tab sets, the one-machine test's workspace-tab, sub-terminal and tab-set parts, the two-machine test's tab-set part, and the **No hub** variants that need the workspace record (record unreadable, record from a newer build) |
+| **S0. Folders out of sync** (MVP, every OS where ADE sync runs; **only if OQ-19 is answered "ahead of S1"**, otherwise all of it is in S1) | WS-7 AC3's orchestrator and agent-tracker rows for everyone, without hubs or workspaces: the strip of every `projectDir` and `cwd`, this machine's own values kept on import, and the shared import mechanism that F2 and S1 reuse | WS-7 AC3: the two rows; the import rule for those two keys (keep this machine's own, and never take another machine's); the unreadable rule for those two keys; OQ-14's cleanup if yes; OQ-15's report if yes; OQ-18 (i)'s per-task Dispatch rule and OQ-21's rule if yes; OQ-20's fleet rule if (b), or (a). This list follows OQ-19's answer: what OQ-19 leaves out of S0 goes to S1, and S1 takes whatever S0 does not. **Recommended:** all four of the never-take rule, the unreadable rule, OQ-14's cleanup and OQ-15's report go in S0, not split across S0 and S1. Test cases S0 carries: the orchestrator and tracker parts of the one-machine test (a session and a run in a checkout path and in a folder that is in no workspace); **No hub** in a profile with no workspace record; the orchestrator and tracker parts of the **Two-machine case**; **Each machine keeps its own**; **A copy that holds another machine's folders**; **Unreadable**; **Paths from before** (if OQ-14 is yes); the skipped-key test (if OQ-15 is yes); the three fleet tests (if OQ-20 is (b); the across-machines one only, if (a)); the per-task Dispatch tests, failure and the three click orders (if OQ-18 is (i)); the missing-folder tests (if OQ-21 is yes, with per-task Dispatch if OQ-18 is also (i)) | None (not F2 slice 1, not F3 S1). S1 keeps the rest of WS-7 AC3: the `ade-session`, names and tab-set rows, the import rule for tab sets, the one-machine test's workspace-tab, sub-terminal and tab-set parts, the two-machine test's tab-set part, and the **No hub** variants that need the workspace record (record unreadable, record from a newer build) |
 | **S1. A hub's workspace** (MVP, macOS; WS-7 AC3's orchestrator and agent-tracker rows and their criteria on every OS, F4.5) | Discovery by ADE's rules, missing checkouts, multi-root file browser in the own view, opening by Open Hub (persona) and by a hub folder (plain shell), bring forward, add/hide/order, restore, record keeping, F4's local-only stores, the sync strip, no automatic setup in checkouts, the run tab as a workspace tab, limits and hostile paths, tab sets renamed | WS-1 AC1 to AC4, AC5 (open, restore, palette refresh), AC6 to AC8; WS-2 AC1 to AC4, AC6 (S1 entries), AC7, AC8; WS-3; WS-4; WS-5 AC1 **only if F3 S1 is not on `main` when F4 S1 is reviewed, and again before merging, if F3 S1 merged in between (F3 D14)** (otherwise WS-5 AC2 instead, as F4 S1 then merges second), AC3; WS-6; WS-7 AC1, AC2 (not its [Second] relay part unless S1 merges second), AC3 (the sync strip; if S0 ships first, only what S0 does not carry), AC4; WS-9; WS-10. **[Second]:** WS-5 AC2 with F3 S1; WS-7 AC2's relay part with phone-watch story 8 | F2 slice 1 (Open Hub, the hub-tab flag). Works with or without F3 S1 |
 | **S2. Recents and live refresh** (Next) | Open Workspace… with the recent list and Open Hub Folder…; refresh on `ACCESS.md` change | WS-2 AC5, AC6 (S2 entry); WS-1 AC5 (live part); WS-5 AC4 | S1 |
 
@@ -3499,9 +3554,13 @@ persona's file browser, which is the owner's whole ask.
   rules for those two keys, OQ-14's cleanup, OQ-15's report, OQ-18's and OQ-21's
   Dispatch rules, OQ-20's fleet rule) need no hub and no workspace, and apply on
   every OS where ADE sync runs (F4.5). Their sync tests are Rust tests on ADE sync's
-  existing harness and run on every CI OS (today the `backend` and `backend-macos`
-  jobs). Their fleet and Dispatch tests are frontend tests (ubuntu CI) of code with
-  no OS-specific branch, so they need no OS guard.
+  existing harness and run in all three Rust CI jobs: `backend` (ubuntu-22.04),
+  `backend-macos` and `backend-windows` (windows-latest), each running `cargo test
+  --locked`. Their fleet and Dispatch tests are frontend tests (ubuntu CI) of code
+  with no OS-specific branch, so they need no OS guard. Any new or changed Rust that
+  OQ-18 (i) or OQ-21 needs (folder creation, a check that a folder exists) gets its
+  own Rust tests in those three jobs, not only frontend tests with the Rust call
+  stubbed.
 - **F2 dependency.** S1 needs F2 slice 1's Open Hub and hub-tab flag. F4 narrows Open
   Hub on an already-open hub to "bring forward" (D7, OQ-4), makes the run tab a
   workspace tab (OQ-8), and strips hub and workspace paths from sync's export, which
@@ -3515,7 +3574,8 @@ persona's file browser, which is the owner's whole ask.
   of sync's export, for every folder and everyone. Every rule they add (the import
   never takes another machine's value, unreadable values, the cleanup of OQ-14, the
   Dispatch rules of OQ-18 and OQ-21, the fleet's join of OQ-20) concerns only those
-  two fields in those two keys, and none of F2's rows (tab sets, `ade-session`). Re-checked against F2's text on PR #98's branch,
+  two keys, or the orchestrator and the fleet that read them, and none of F2's rows
+  (tab sets, `ade-session`). Re-checked against F2's text on PR #98's branch,
   **F2's text needs no change**: OB-10 AC2's statement that WS-7 AC3 applies the
   same strip and import rule to the other synced keys it lists stays true (the
   shared rule, keeping this machine's stripped fields, still applies to every row;
@@ -3622,9 +3682,9 @@ persona's file browser, which is the owner's whole ask.
 ### F4.10 Open questions for the owner
 
 OQ-1 to OQ-13 were answered by the owner on 2026-11-10 (History). **OQ-14 to OQ-21
-are open** (revisions 3.5 and 3.6, 2026-11-15): they come from applying the owner's decision
-of 2026-11-15 to WS-7 AC3, and each is answerable in one line. Each question is kept
-as asked, with its answer after its title once it has one.
+are open** (revisions 3.5 to 3.7, 2026-11-15): they come from applying the owner's
+decision of 2026-11-15 to WS-7 AC3, and each is answerable in one line. Each
+question is kept as asked, with its answer after its title once it has one.
 
 - **OQ-1. One meaning for "workspace" across F1 and F4 (D1).** **Answered 2026-11-10
   (owner): yes, amend F1** (F1 revision 9m). Amend F1 so a workspace
@@ -3733,7 +3793,8 @@ as asked, with its answer after its title once it has one.
   repository afresh), which stays open. **If no**, O-2 becomes a requirement of F4:
   a way to start the sync repository afresh, or to clear these folders from its
   history, whose cost and effect on other machines' copies the architect states
-  before the owner approves it.
+  before the owner approves it. That would be a new PRD revision with its own
+  criteria; it would not land in S0 or S1 as they are written.
 - **OQ-17. Release notes (WS-7 AC3).** **Open.** Should the release notes of the
   build that ships this tell engineers to update every machine that syncs, since an
   older build writes its folders back and loses its own on import, and, if OQ-16 is
@@ -3758,16 +3819,29 @@ as asked, with its answer after its title once it has one.
   never-take rule, the unreadable rule, OQ-14's cleanup (if yes) and OQ-15's report
   (if yes)? *Recommend all four in S0*: each covers only these two keys, and
   splitting them would ship a strip whose import, unreadable and cleanup rules come
-  later.
-- **OQ-20. Runs from another machine and this machine's panes (WS-7 AC3).**
-  **Open.** In the fleet, never join an agent-tracker entry that came from another
-  machine to a pane on this one? This fixes a bug already on `main`, not one the
-  decision causes: pane ids restart at every launch and are the same on every
-  machine, and the fleet takes a live pane's folder, tab and cost before the
-  entry's own, so an imported run can show this machine's tab and folder and take
-  its cost. *Recommend yes*: without it, WS-7 AC3's "grouped under Unknown project"
-  is false whenever pane ids collide. The criterion is written for yes; if no, the
-  collision is a stated limit.
+  later. S0's criteria and test cases (F4.8) follow this answer; S1 takes whatever
+  S0 does not.
+- **OQ-20. Which agent runs the fleet joins to a live pane (WS-7 AC3).** **Open.**
+  This fixes a bug already on `main`, which goes beyond your decision. Pane ids are
+  made afresh at every launch, restored panes included, and the fleet joins every
+  agent-tracker entry, finished ones too, to the live pane with the same id, taking
+  that pane's tab, folder and cost. That goes wrong two ways. (1) On one machine,
+  with sync off: a run from an earlier launch in pane id `pane-3` takes this
+  launch's `pane-3` tab, folder and cost. (2) Across machines: a run imported from
+  another machine does the same. Fix it by:
+  - (a) an origin marker: each entry records the machine that wrote it, and only
+    this machine's entries are joined. This fixes (2) only, needs a new field on
+    every entry, and does not cover entries imported before this build (WS-7 AC3's
+    stated limit (c)); or
+  - (b) started in this launch: join an entry to a live pane only if this running
+    instance started it. This fixes both, needs no stored field (the instance
+    remembers which runs it started; an entry's start time cannot tell, since
+    another machine's clock can put an imported run after this launch), and covers
+    older entries. Its only cost: a run from an earlier launch never shows a tab,
+    which today is the wrong tab in any case.
+  - (c) leave it, as a stated limit.
+
+  *Recommend (b)*. The criterion is written for (b).
 - **OQ-21. A recorded project folder that does not exist (WS-7 AC3).** **Open.**
   Treat an orchestrator session's `projectDir` that does not exist as a folder on
   this machine as "no folder recorded", so Dispatch all (and per-task Dispatch, if
@@ -3775,7 +3849,11 @@ as asked, with its answer after its title once it has one.
   imported before this build keep another machine's `projectDir` (WS-7 AC3's stated
   limit (c)), and today their agents start in the home folder without the spec.
   The same fixes a session whose folder was deleted on this machine. The old path
-  is replaced by the new one.
+  is replaced by the new one. **The cost:** a folder that is only missing for a
+  while (moved, renamed, or the home path changed) gets a new folder, and the
+  session's earlier work in the old one is cut off from it for good. That is
+  unlikely, since the folder sits under ADE's own `~/.ade/orchestrator/`, which the
+  engineer does not normally touch.
 
 ### F4.11 Handoff
 
@@ -3784,9 +3862,9 @@ as asked, with its answer after its title once it has one.
   add one criterion (WS-1 AC8, OQ-10), make WS-2 AC7 and WS-7 AC3 unconditional, and
   amend F1 (revision 9m), F2 (revision 5) and F3 (a cross-reference line). A delta
   check of that text before S1 is sharded is recommended. Revision 3.5 answers the
-  delta review of 3.4 (F4.12's fifth table) and revision 3.6 that of 3.5 (the
-  sixth); a delta check of 3.6 comes before the owner approves 3.4 to 3.6 and
-  answers OQ-14 to OQ-21.
+  delta review of 3.4 (F4.12's fifth table), revision 3.6 that of 3.5 (the sixth)
+  and revision 3.7 that of 3.6 (the seventh); a delta check of 3.7 comes before the
+  owner approves 3.4 to 3.7 and answers OQ-14 to OQ-21.
 - **Designer:** root rows (label, disambiguated label, path, missing, not-answering
   and not-in-workspace marks, the current-root mark), the file browser's workspace
   menu, the palette entries, Show Hidden Workspace Folders, the Tabs/Tab Sets relabel,
@@ -3853,10 +3931,13 @@ as asked, with its answer after its title once it has one.
     folder known to this profile at export, and discovered checkouts are never
     stored (WS-1 AC5): export must run discovery for each recorded hub (under WS-9's
     bounds) or strip by a rule that needs none. This is a cost for the architect
-    to weigh and record. Since revision 3.4 it applies only to the rows that still
-    depend on workspaces (`ade-session` and tab sets): the orchestrator and
-    agent-tracker rows strip every `projectDir` and `cwd` and need to know no
-    workspace folder.
+    to weigh and record. Since revision 3.4 (corrected in 3.7) this cost applies to
+    no row. The orchestrator and agent-tracker rows strip every `projectDir` and
+    `cwd`. The `ade-session` rows are decided by the saved tab itself: its workspace
+    mark, and for the name rule its own hub folder. The tab-set row is decided by
+    the entry's own fields. So no row needs the workspace folders known to this
+    profile at export, and export runs no discovery. The design's revision 2
+    proposes the same (section 9.2).
   - **m11, parser and labels.** In a Code table cell, `\|` is a literal `|` and does
     not split the cell (GitHub-flavoured Markdown); the frozen fixture gains such a
     row, and its expected path is written by hand. Labels, tooltips and notices
@@ -3972,4 +4053,19 @@ as asked, with its answer after its title once it has one.
 | **m5** OQ-16's "no" | The design's O-2 becomes a requirement, with its cost stated by the architect. |
 | **m6** `previewPath` | Added to "What still syncs", until F3's s1a strips it. |
 | **m7** non-object elements | A list with such elements is readable; they have no field to strip and are exported and imported as they are. |
+
+**Delta review of revision 3.6 (a30acf1): N1 to N4 and m1 to m7 closed; BLOCKED on two majors; answered in revision 3.7.**
+
+| Finding | Answer in revision 3.7 |
+|---|---|
+| **Major 1** OQ-15 "yes" has no criterion or test, though S0 counts it | WS-7 AC3: "[If OQ-15 is yes]": on the machine that skipped it only, the Settings → Sync result names the store in words and says it was not synced; the designer writes the copy. Test: an unreadable local value, then a sync, shows the line for each key, and nothing on another machine. S0's test list includes it. |
+| **Major 2** OQ-20 fixes only the cross-machine half | OQ-20 is restated with both triggers (same machine with sync off, and across machines) and three options: (a) an origin marker, (b) only runs this instance started in this launch, (c) leave it. Each has its cost; (b) is recommended. The criterion is written for (b), with same-machine, across-machines and imported-before tests. It says plainly that this fixes a bug on `main`, beyond the owner's decision. |
+| minor 1 | F4.9: `backend` (ubuntu-22.04), `backend-macos` and `backend-windows` (windows-latest), each running `cargo test --locked`; new Rust for OQ-18 (i) or OQ-21 gets Rust tests. |
+| minor 2 | The fleet bullet: grouped under "Unknown project" unless its pane id is live here (OQ-20). |
+| minor 3 | OQ-18 (i): one folder in any click order, including Dispatch all then a per-task Dispatch; a test for each of the three orders. |
+| minor 4 | OQ-21's test adds per-task Dispatch on a session whose recorded folder does not exist (with OQ-18 (i)). |
+| minor 5 | OQ-21 names its cost: a folder missing only for a while gets a new one, and the earlier work is cut off for good; unlikely under `~/.ade/orchestrator/`. |
+| minor 6 | S0's row and OQ-19: S0's list follows OQ-19's answer; S1 takes whatever S0 does not. |
+| minor 7 | OQ-16 "no" would be a new PRD revision, not part of S0 or S1 as written. |
+| design delta: m9 note | Corrected: the `ade-session` rows are decided by the saved tab and the tab-set row by the entry, so no row needs the workspace folders at export. |
 <!-- F4 ends -->
