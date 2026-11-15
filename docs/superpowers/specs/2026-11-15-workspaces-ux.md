@@ -12,9 +12,12 @@ the states.
   recommended case is designed in full so the spec is complete either way.
 - Every addition beyond the PRD is listed in **section 23.3**.
 
-Status: **draft 2, 2026-11-15. Answers the adversarial review of draft 1
-(BLOCKED: one blocker, ten majors, thirteen minors; section 25 maps each
-finding to its answer). Not approved; a delta review follows.** Mockup:
+Status: **draft 2, in progress, 2026-11-15.** Answers the adversarial review
+of draft 1 (BLOCKED: one blocker, ten majors, thirteen minors; section 25 maps
+each finding to its answer). **Section 26, slice S0's skipped-key line in
+Settings → Sync (design D-5), is complete and stands alone**, so S0 can be
+sharded from it while the rest is revised against PRD 3.10 and design
+revision 4. Not approved; a delta review follows. Mockup:
 `2026-11-15-workspaces-mockup.html` beside this file (self-contained; names
 and paths in it are invented).
 
@@ -1837,3 +1840,173 @@ designed in full.
 lines and strings; ⌘⇧E unbound; the palette single-step; today's rows as
 described; toast timings; token values and the Precision contrast figures;
 the F2 wording reused.
+
+## 26. Slice S0: the skipped-key line in Settings → Sync (design D-5), Dispatch and the fleet
+
+**This section stands alone, so story S0 can be sharded from it while the rest
+of this spec is still in review.** It depends on nothing above it. S0 ships
+first, on every operating system, with no hub and no workspace (PRD 3.10,
+OQ-19), so nothing here says "Mac", "hub" or "workspace".
+
+Sources: PRD F4 revision 3.10 (approved by the owner 2026-11-15), WS-7 AC3,
+"A value sync cannot read", "The engineer sees a skipped key" and "When the
+line goes" (OQ-15); the design on `arch-f4`, revision 4 (d8b9164), 9.5 and
+question D-5; today's `src/components/SyncSettings.tsx` and `src/lib/sync.ts`
+at `origin/main` 84389eb.
+
+### 26.1 Where the line goes
+
+Settings → **Sync**, section **Sync between machines**, inside the block that
+today shows the last result (`SyncSettings.tsx:158` to `:172`): after *Last
+synced 2 min ago · devices: …*, and after the *Edited on two machines* line
+when there is one. One line for each entry of the latest report's
+`skippedKeys` (design 9.5), in this order: Orchestrator sessions before Agent
+runs; for one store, this machine's copy before the synced copy.
+
+- **Look:** each line is its own block, as the *Edited on two machines* line
+  is: 11 px, line height 1.6, `margin-top: 4px`, in `--yellow` (the conflicts
+  line uses the fixed `#fbbf24` today; the new lines use the theme's token,
+  which is at least 5.3:1 on the panel in every preset). The first clause, up
+  to the colon, is weight 600; the rest is normal weight. No icon, no button,
+  no ✕: the line is a state, not a message, and it goes by itself.
+- **Not announced.** Like the rest of the result block it is static text, read
+  when the engineer opens Settings → Sync. It is not a live region and not a
+  toast.
+- **Shown while a report holds it.** When the latest sync failed, today's
+  *Last sync failed: …* shows above the block and the block keeps the last
+  good report, so the skipped lines stay with it (`sync.ts:57`). No other
+  machine shows them: the set lives in this machine's `sync-state.json`.
+
+### 26.2 The copy (D-5)
+
+`<store>` is never the key's name. Two stores can be skipped; each has fixed
+words:
+
+| Key | Named on screen | Its own entries, in the second sentence of an import line |
+|---|---|---|
+| `better-terminal-orchestrator` | **Orchestrator sessions** | orchestrator sessions |
+| `better-terminal-agent-tracker` | **Agent runs** | agent runs |
+
+"Orchestrator" is the app's own word (the palette's **Open Orchestrator**, the
+shortcuts list's **Orchestrator**); an agent-tracker entry is one agent's run,
+which the Fleet view groups by project, so **Agent runs**.
+
+**A local skip** (side `local`: this machine's copy could not be read, so the
+key was not exported):
+
+> **Orchestrator sessions were not synced from this machine:** the copy here
+> could not be read. Other machines keep the last copy they received. Each
+> sync tries again; this line goes once a sync can read it.
+
+> **Agent runs were not synced from this machine:** the copy here could not
+> be read. Other machines keep the last copy they received. Each sync tries
+> again; this line goes once a sync can read it.
+
+**An import skip** (side `import`: the synced copy could not be read, so it was
+not applied):
+
+> **Orchestrator sessions from other machines were not applied at start-up:**
+> the synced copy could not be read. This machine's own orchestrator sessions
+> are unchanged. This line goes after a start-up that can read the synced
+> copy.
+
+> **Agent runs from other machines were not applied at start-up:** the synced
+> copy could not be read. This machine's own agent runs are unchanged. This
+> line goes after a start-up that can read the synced copy.
+
+**A key the screen has no name for** (the design says only those two keys are
+ever in the set; this keeps a future one from being silent or named by its
+key):
+
+> **Some app data was not synced from this machine:** the copy here could not
+> be read. Each sync tries again; this line goes once a sync can read it.
+
+> **Some app data from other machines was not applied at start-up:** the
+> synced copy could not be read. This line goes after a start-up that can
+> read the synced copy.
+
+Rules the copy keeps:
+
+- **No key name, no "workspace"** (WS-10 AC2), no product name (today's panel
+  says "ADE" in places and the rest of the app says "Better Terminal"; the
+  line needs neither), and no "Mac": S0 runs on every OS.
+- **It reads right on every later sync while it shows.**
+  - A local line is in the present for what happens next (*Each sync tries
+    again*) and in the past only for what happened (*were not synced*). It
+    stays true through every periodic sync that still cannot read the copy,
+    and it goes at the first export that can (PRD: "clears when that key is
+    next exported successfully"; design 9.5).
+  - An import line names the moment it is about, *at start-up*, because imports
+    run only then (`sync.ts`, `applyRemote`; today's panel: "Changes from other
+    machines are applied when ADE starts"). So it stays true through the
+    periodic syncs that follow, **including one that exports the same key
+    successfully**, which by the PRD does not clear it. It does not say the
+    synced copy *is* unreadable, which after such an export would be false.
+    It goes after a start-up whose import reads the copy, whether or not that
+    copy is then newer and applied.
+  - Neither line says when it began. The set carries `sinceMs`; a date would
+    add a format to test and nothing the engineer can act on (rejected).
+- **It promises nothing it cannot keep.** It does not say how to repair the
+  copy: the app has no repair for an unreadable store, and pointing at
+  **Local snapshots → Restore** would replace all of the app's state to fix
+  one store.
+- **Both lines at once.** A store can have both entries (this machine's copy
+  and the synced copy both unreadable); both lines show, the local one first.
+
+**Tests these strings serve** (PRD WS-7 AC3's frontend test; design 9.10,
+`SyncSettings.test.tsx` on `skip-reports.json`): "a line naming each store,
+in words" is met by **Orchestrator sessions** and **Agent runs** at the start
+of the line; "no key name" and "no workspace" by the copy above; "the local
+line goes and the import line stays" after an export-only report by the
+lines' presence, not their wording. The test should match on the store's
+words and the side's phrase (*from this machine* / *from other machines*),
+not the whole sentence, so a later copy edit does not break it.
+
+Mockup: Settings → Sync, scenario `syncskip`, with a switch that steps
+through the PRD's sequence of reports.
+
+### 26.3 Dispatch (OQ-18, OQ-21)
+
+No new control, state or string.
+
+- **Per-task Dispatch** (the task card's **Dispatch** button,
+  `OrchestratorTab.tsx:735` to `:752`) on a session with no project folder on
+  this machine makes the folder first, as **Dispatch All** does. While it is
+  made, the button looks as it does today; a second click of either button
+  waits for the same folder (design 9.9) and shows nothing more.
+- **If the folder cannot be made**, nothing starts, and the task panel's
+  existing alert strip (`role="alert"`, under the **Tasks** heading,
+  `:611` to `:626`) shows **today's words exactly**: *Could not create the
+  project folder: <the system's message>*. Per-task Dispatch already clears
+  that strip when it starts (`dispatchOne`, `:376`), so an old message never
+  stays above a new attempt.
+- **A recorded folder that no longer exists** (OQ-21) is replaced by a new one
+  with no message. The owner accepted the cost; and for a session received
+  from another machine, the usual case, a message would appear every time and
+  say nothing the engineer can act on. Recorded here as a decision of this
+  spec, not an addition.
+
+Noted for the architect, not designed here: today nothing stops a second
+click on one task's **Dispatch** from starting that task twice, and the wait
+for the folder makes that window longer. A disabled button while the task is
+being dispatched would be a new state; this spec does not add it.
+
+### 26.4 The fleet (OQ-20 (b′))
+
+No new control, state or string. Runs that are not joined to a live pane show
+with no tab, under their own folder, in the groups the Fleet view has today;
+runs with no folder (another machine's, and the agent picker's and the
+board's from before this build) go to today's **Unknown project** group with
+no cost. The one-time move of older runs into **Unknown project** is the
+owner's accepted loss (PRD 3.10); nothing on screen explains it.
+*Recommended to devops:* one sentence in the release note of the build that
+ships S0, beside OQ-17's, so an engineer who sees older runs under Unknown
+project knows why.
+
+### 26.5 S0b and OQ-22
+
+Nothing on screen. `ade-session` is never imported, so leaving every tab's
+path fields (PRD 3.11, pending) and, by the owner's answer to OQ-22, the names
+ADE derives from a path out of its export changes nothing any machine shows.
+Today's Sync note, *each machine's terminal session is kept under its own
+device name*, stays true.
