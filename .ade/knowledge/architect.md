@@ -89,3 +89,9 @@
   - Imports run only at launch (`sync.ts`, `applyRemote`); each periodic sync replaces `lastReport` (`:57`). Anything a launch sync must keep showing goes in `sync-state.json` (`SyncState`, `sync.rs:130`), not in the report alone.
   - jsdom's user agent is not a Mac, so `IS_MAC` is false in vitest; the pattern is `FileBrowserOpen.test.tsx:15`'s `vi.mock("../../lib/shortcuts", …IS_MAC: true)`.
   - Next free ADR is still 0042.
+- 2026-11-15: F4 design revision 4 (after revision 3's delta review: no blockers, five majors; PRD 3.10 0652d41 approved).
+  - A parked call must keep its slot, or path-first marking lets a second wave into a dead mount. Coalesce identical in-flight calls so a missed mount point costs one slot.
+  - Budget descriptors explicitly: a queued job holds none (carry text + device + inode, re-open and check). Rust 1.97's std does not raise `RLIMIT_NOFILE` (`library/std/src/sys/pal/unix/mod.rs`, fetched from GitHub; no rust-src in this container). Raising it at start-up would also raise it for every PTY child.
+  - `syn` 2.0.117 is in `src-tauri/Cargo.lock` transitively, but `src-tauri` has no `[dev-dependencies]`; naming it is a new direct dependency. Static rules can use a small lexer in a `cfg(test)` module instead.
+  - The Windows CI job's display name is `Backend on Windows (compile + test)` (`ci.yml:222`).
+  - A PRD's status line can lag an owner approval relayed by the coordinator: say both.

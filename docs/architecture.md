@@ -15,7 +15,7 @@ designs. The designs themselves stay where this repo keeps them: feature designs
 | Feature | Design | Contracts | ADRs |
 |---|---|---|---|
 | F1 Personas and engagements (`docs/prd.md` F1) | `docs/superpowers/specs/2026-11-08-personas-and-engagements-design.md` (revision 4 approved by the owner 2026-11-08; approved at revision 5g on 2026-11-08, after the delta review of revisions 5 to 5g passed; approved at revision 5j on 2026-11-08: the slice-1 gaps (5h), its review's answers (5i) and the delta check's minors (5j), confirmed by the owner) | `engagement-profiles.md`, `engagement-requests.md`, `engagement-registry.md` | 0015 to 0024 (0024 Accepted 2026-11-08) |
-| F4 Workspaces, slices S0 and S1 (`docs/prd.md` F4) | `docs/superpowers/specs/2026-11-15-workspaces-design.md` (revision 3, proposed 2026-11-15, answering the blocked delta review of revision 2 and building the owner's answers of 2026-11-15 to OQ-14 to OQ-21; not approved, a delta review follows; proposes one addition to the verification command for four stories, below, not in force; its section 21 reconciles it with PRD revision 3.7) | `workspaces.md`, `sync-local-fields.md` (shared with F2) | `0037-the-workspace-record-is-one-rust-owned-local-file`, `0038-a-workspace-is-the-folders-of-one-hub`, `0039-a-finished-hub-is-read-from-the-repository-files-without-git`, `0040-sync-splits-shared-keys-into-a-public-and-a-local-part`, `0041-workspace-file-system-calls-run-in-one-bounded-pool-guarded-by-mount` (all Proposed; numbers provisional) |
+| F4 Workspaces, slices S0 and S1 (`docs/prd.md` F4) | `docs/superpowers/specs/2026-11-15-workspaces-design.md` (revision 4, proposed 2026-11-15, answering the delta review of revision 3 (no blockers, five majors) against PRD revision 3.10, approved; not approved, a delta review follows; proposes two additions to the verification command, below, neither in force; its section 21 reconciles it with PRD 3.10) | `workspaces.md`, `sync-local-fields.md` (shared with F2) | `0037-the-workspace-record-is-one-rust-owned-local-file`, `0038-a-workspace-is-the-folders-of-one-hub`, `0039-a-finished-hub-is-read-from-the-repository-files-without-git`, `0040-sync-splits-shared-keys-into-a-public-and-a-local-part`, `0041-workspace-file-system-calls-run-in-one-bounded-pool-guarded-by-mount` (all Proposed; numbers provisional) |
 | Sub-terminals and `ade open` | `docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md` | `terminal-open.md` | `0014-terminals-open-terminals-through-the-hook-endpoint` |
 | Desktop end-to-end tests | `docs/superpowers/specs/2026-11-09-desktop-e2e-design.md` (revision 1, proposed 2026-11-09; not approved; adds no verification line) | `e2e-control-channel.md` (written by its first story) | `0030-desktop-e2e-webdriver-on-linux-and-a-compiled-out-test-channel` (Proposed) |
 | Earlier features | `docs/superpowers/specs/`, `_bmad-output/plan-*.md` | `.ade/context/` | `.ade/context/decisions/` |
@@ -48,7 +48,7 @@ builds. These are the lines in
 ### F4 stories w2, w4, w5 and w11: proposed addition, NOT in force (needs the owner's approval)
 
 **Status:** proposed by the F4 design (`docs/superpowers/specs/2026-11-15-workspaces-design.md`,
-sections 17.5 and 20, revision 3) on 2026-11-15. The owner has not approved it. Until the
+sections 17.5 and 20, revision 4) on 2026-11-15. The owner has not approved it. Until the
 owner does, the command in force above is the whole gate for every F4 story, and this
 paragraph changes nothing.
 
@@ -62,12 +62,24 @@ machine the lines above pass without running them. The proposal, for F4 stories 
 also needs a run of the `CI` workflow on the story's SHA in which the job
 `Backend on macOS (cargo test)` passed, with QA pasting from that job's log the
 `test … ok` line of each test the design's section 17.5 lists for that story. If a run
-fails and the only failing test is the timing test of `workspace::open::macos_only`, one
-more dispatch on the same SHA is allowed, and QA cites both runs. (Revision 1 of the
+fails and the only failing tests are the timing test of `workspace::open::macos_only` or the
+two `bounded::macos_only` tests that attach a disk image, one more dispatch on the same SHA
+is allowed, and QA cites both runs. (Revision 1 of the
 design copied the F1 gate's "dispatched once, never re-run"; with a timing test on a
 shared runner that would make Done depend on the runner's load.) No workflow, job or
-line of `ci.yml` changes. No other F4 story is affected; slice S0 (w12a to w12c) has no
-platform branch and needs nothing beyond the lines above.
+line of `ci.yml` changes. No other F4 story is affected by this paragraph.
+
+### F4 stories w12a and w12c (slice S0): proposed addition, NOT in force (needs the owner's approval)
+
+**Status:** proposed by the F4 design (section 20, revision 4; owner question O-6) on
+2026-11-15. Until the owner approves it, the command in force above is the whole gate.
+
+S0 ships on every OS where ADE sync runs, and its Rust (the sync rows, the folder command)
+runs in CI's `backend`, `backend-macos` and `backend-windows` jobs; but Done is the lines
+above on one machine, usually Linux, so a failure only on Windows would not stop a story
+being Done. The proposal, for **w12a** and **w12c** only: Done also needs a run of the `CI`
+workflow on the story's SHA in which the job `backend-windows` (`Backend on Windows (compile + test)`, `ci.yml:222`) passed, with QA pasting its
+`test result: ok` line for the root crate. No workflow, job or line of `ci.yml` changes.
 
 ### F1 stories (gate D28): approved, in force (2026-11-08)
 

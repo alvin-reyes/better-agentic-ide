@@ -2,8 +2,8 @@
 
 - **Decided in:** ADR `0037-the-workspace-record-is-one-rust-owned-local-file`, ADR `0038-a-workspace-is-the-folders-of-one-hub`, ADR `0039-a-finished-hub-is-read-from-the-repository-files-without-git`, ADR `0041-workspace-file-system-calls-run-in-one-bounded-pool-guarded-by-mount`.
 - **Design:** `docs/superpowers/specs/2026-11-15-workspaces-design.md`.
-- **PRD:** F4, revision 3.3 approved; revisions 3.4 to 3.7 pending the owner's approval of their text.
-- **Status:** proposed 2026-11-15, design revision 3 (answers the blocked delta review of revision 2); not approved, not built. Where a rule below is a default awaiting an answer, it says so and names the design's question.
+- **PRD:** F4, revision 3.10 (approved with 3.4 to 3.9).
+- **Status:** proposed 2026-11-15, design revision 4 (answers the delta review of revision 3: no blockers, five majors); not approved, not built. PRD F4 revisions 3.4 to 3.10 approved by the owner 2026-11-15. Where a rule below is a default awaiting an answer, it says so and names the design's question.
 
 ## The word
 
@@ -27,10 +27,13 @@ A **workspace** is the folders of one finished hub, shown together, and the tabs
 
 - Every file-system call F4 makes on a hub, a checkout, an added folder or a watched folder is made by a job of `workspace::bounded::Bounded`, through the job's context (`stat_at`, `open_at`, `readlink_at`, `read`, `read_dir_batch`, `fstat`). Reading and writing the record file is not.
 - **`Bounded` is a value** in Tauri managed state, passed to every function that touches those paths. No process-wide state in `workspace/` or `pathkey.rs`. Tests build their own, with a fake file system and a fake mount table; hang seams are guards that release on drop.
-- 8 workers, 8 spares, at most 4 calls in flight per mount. Queues per mount, round-robin by submitter, no refusing cap; an open job keeps at most 16 jobs queued.
+- 8 workers, 8 spares, **4 slots per mount: calls in flight plus calls parked there**. Identical calls in flight are coalesced. Queues per mount, round-robin by submitter, no refusing cap; an open job keeps at most 16 jobs queued.
 - **The bound is per system call: 2 seconds from when the call is issued.** Only a call blocked past it marks anything. Each job has a deadline for its answer (2 seconds for a root, an `ACCESS.md`, a listing, the finished-hub check, `workspace_resolve`, `workspace_locate`); past it the answer is "not answering" and nothing is marked. A job queued again under another mount keeps its deadline.
 - **Every call is made through a descriptor of the folder already resolved, and follows no link.** It is charged to the child's own mount when the child is a mount point in the mount table (on macOS matched as listed and without `/System/Volumes/Data`), else to the device (`st_dev`) of the folder it is made in. Never by the longest mount-point prefix of the text (firmlinks defeat it).
-- **A blocked call marks its path**; calls at or below it answer at once. The **mount** is marked when the blocked path is its mount point, or a second unrelated path on it blocks. A parked call leaves its mount's count.
+- **A blocked call marks its path** and keeps its slot; calls at or below the path answer at once. The **mount** is marked when the blocked path is its mount point, or all 4 of its slots are parked. A mount parks at most 4 threads; four dead mounts at once park all 16.
+- **Descriptors:** none held while a job is queued (it carries text, device and inode, and re-opens and checks on resume); a running job holds at most 2; a watch tick opens and closes each parent inside its read; F4 holds at most 33 in all, enforced by a semaphore. `EMFILE` answers "not answering" and marks nothing.
+- **Threads:** an open job's coordinator is its own thread and never takes a worker; the mark-lift listener is told through a channel with no `Bounded` lock held; a late return frees its slot once.
+- **Static rules** (a token checker in `static_rules.rs`, with planted violations): outside `fs_unix.rs`, `fs_windows.rs`, `mounts.rs` (and `std::fs` in `record.rs`), no `std::fs` in any spelling, no `std::os::*::fs`, no `libc`, no `Path` method that touches the disk, no `std::process`, `notify` or `walkdir`; no `static` item, `OnceLock`, `LazyLock`, `OnceCell`, `Once`, `once_cell`, `lazy_static`, `thread_local`, `Box::leak`; no log output.
 - A mark lifts when a parked call under it returns or its mount leaves the table. Then the registry re-checks every open hub's state, roots and files shown "not answering" under it and publishes a new view; watch sets re-add their folders.
 - The mount table is a snapshot (`getfsstat` with `MNT_NOWAIT` on macOS, `/proc/self/mountinfo` on Linux), refreshed by its own thread.
 - Every F4 command is `async` and works inside `tauri::async_runtime::spawn_blocking`.

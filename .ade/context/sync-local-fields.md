@@ -4,7 +4,7 @@
 - **Design:** `docs/superpowers/specs/2026-11-15-workspaces-design.md`, section 9.
 - **PRD:** F4 WS-7 AC3 (OQ-5; revisions 3.4 to 3.7, pending the owner's approval of their text); F2 OB-10 AC2 and OB-14 AC5 (revisions 5 and 5.1). One mechanism for both features.
 - **Owner decisions, 2026-11-15:** an orchestrator session's `projectDir` and an agent-tracker entry's `cwd` are never synced, for anyone, hub or not; each machine keeps its own. OQ-14 to OQ-21 answered as recommended (cleanup yes; notice yes; history kept; release note; per-task Dispatch makes the folder; S0 ships ahead with all four rules; a missing recorded folder counts as none), and OQ-20 as (b′).
-- **Status:** proposed 2026-11-15, design revision 3; not approved, not built.
+- **Status:** proposed 2026-11-15, design revision 4; not approved, not built. PRD F4 revisions 3.4 to 3.10 approved by the owner 2026-11-15.
 
 ## The rule
 
@@ -25,7 +25,7 @@
 | Imported value of a local field | **never taken** | **never taken** | taken when this machine holds none for that entry | |
 | Imported copy unreadable | not imported; local stays; recorded `imported_unreadable` | the same | as today (whole replace) | |
 | Cleanup of the repo's current file (OQ-14) | yes, when the copy is a list; keeps `updated_at`, `device` | the same | no | no |
-| Shown in Settings → Sync (OQ-15) | yes, until the key next syncs | yes | no | no |
+| Shown in Settings → Sync (OQ-15) | yes: a local skip until the key's next successful export; an import skip until a later import reads the copy | the same | no | no |
 
 Every other key (`better-terminal-prompt-history`, `better-terminal-saved-notes`, `ade-scratchpad-draft`, the rest): no local field, no new rule.
 
@@ -46,7 +46,7 @@ pub fn clean(key: &str, repo_value: &str) -> Option<String>; // rows 1, 2 only
 - **Export** writes `public(local value)`; `Err` on rows 1, 2 means not exported in that run, recorded.
 - **Cleanup** (rows 1, 2): before the export's comparison, a repo copy that is a list and holds the field is rewritten with `clean` of it, keeping its `updated_at` and `device`.
 - **Import** imports a key when `public(local)` differs from `public(repo copy)` and the repo copy is newer, and writes `join(repo copy, local)`; `Err` on rows 1, 2 means not imported, the local value stays, recorded.
-- **Skipped keys** are kept in `SyncState.skipped` (`sync-state.json`, this machine only) as `{ key, why, sinceMs }`, until a run reads the failing side as the key's list again. Every `SyncReport.skippedKeys` comes from it. `SyncSettings.tsx` shows one line per entry, naming the store in words; the copy is the designer's.
+- **Skipped keys** are kept in `SyncState.skipped` (`sync-state.json`, this machine only) as `{ key, side: "local" | "import", sinceMs }`, one entry per key and side. A **local** skip is removed when the key is next exported successfully. An **import** skip is removed only when a later import reads the repo copy as the key's list (normally the next launch); a periodic export does not remove it, nor does the cleanup reading the copy. Every `SyncReport` carries the whole set as `skippedKeys`, plus `exportedKeys` and `importedKeys`. `SyncSettings.tsx` shows one line per entry of the latest report, naming the store in words; the copy is the designer's.
 
 ## `join`, every case
 
@@ -71,8 +71,9 @@ pub fn clean(key: &str, repo_value: &str) -> Option<String>; // rows 1, 2 only
 
 ## What ships with rows 1 and 2 in S0
 
+- **Every run records its folder (OQ-20 (b′)).** `runFolder(paneId, openedIn)` gives the `cwd` `startSession` records: `null` in a tab with F2's hub-tab flag (with whichever of S0 and F2 slice 1 merges second; the mirror goes into that F2 story's ticket or `.ade/context/f4-merges-second.md`, one section per mirror), else the pane's live folder, else `openedIn`. The agent picker, `dispatchAgent` and orchestrator dispatch call it. Picker and board runs recorded before this build have no `cwd`: a one-time loss the owner accepted.
 - **The fleet (OQ-20 (b′)).** `agentTrackerStore.ts` keeps `startedHere`, a module-level `Set` of the ids `startSession` minted in this page, never saved or synced; `startedThisLaunch(entry)` asks it. `buildLanes(sessions, subagents, paneMeta, joinable)` joins an entry to `paneMeta[entry.paneId]` only when `joinable(entry)`; every other entry has no tab and only its own `cwd`. The agent picker and `dispatchAgent` pass the run's folder to `startSession`, as orchestrator dispatch does.
-- **Dispatch (OQ-18 (i), OQ-21).** Rust command `orchestrator_project_dir(recorded: Option<String>, name: Option<String>) -> Result<String, String>` (`src-tauri/src/orchestrator_dir.rs`): the recorded path when it is an existing folder, else a new `~/.ade/orchestrator/<slug>-<ms base 36>` (`-2`, `-3` … when taken). Webview `projectDirFor(sessionId)` (`src/lib/orchestratorProjectDir.ts`): one in-flight promise per session; writes `SPEC.md` before `setProjectDir`; called by Dispatch all, per-task Dispatch and generation. On failure no agent starts and nothing is recorded.
+- **Dispatch (OQ-18 (i), OQ-21).** Rust command `orchestrator_project_dir(recorded: Option<String>, name: Option<String>) -> Result<String, String>` (`src-tauri/src/orchestrator_dir.rs`): the recorded path when it is an existing folder, else a new `~/.ade/orchestrator/<slug>-<ms base 36>` (`-2`, `-3` … when taken). The command works inside `spawn_blocking`. Webview `projectDirFor(sessionId, spec: "if_new" | "always")` (`src/lib/orchestratorProjectDir.ts`): calls for one session run one after another; writes `SPEC.md` when the folder is new or `spec` is `"always"`, before `setProjectDir`; called by generation (`"always"`, so every generation rewrites the spec in the session's one folder), Dispatch all and per-task Dispatch (`"if_new"`). On failure no agent starts and nothing is recorded.
 
 ## Stated limits
 
