@@ -15,7 +15,9 @@ the UX are approved.
 - **UX** (branch `ux-f4`): `2026-11-15-workspaces-ux.md` and
   `2026-11-15-workspaces-mockup.html`. Draft 1 was BLOCKED in adversarial review: one
   blocker, ten majors, thirteen minors (`2026-11-15-workspaces-ux-review-1.md` on that
-  branch). Draft 2 is being written.
+  branch). **Draft 2 is written** and answers every finding (its section 25 is the
+  findings table). It has not had its delta review. It carries one question for the
+  owner (O1) and 23 for the product manager (P1 to P23, section 23).
 - Both branches sit on `prd-workspaces` and are 30 commits behind `main`. Today's code
   was read from `origin/main` at 84389eb.
 
@@ -39,8 +41,8 @@ lists the exact amendment; the PRD is not yet changed.
 
 ## Next steps
 
-1. Finish design revision 2 and UX draft 2, each answering every finding with a findings
-   table.
+1. Finish design revision 2, answering every finding with a findings table. (UX draft 2
+   is done.)
 2. Delta review of each by the adversarial reviewer.
 3. The product manager applies the PRD amendments and answers the product questions; the
    owner approves the changed PRD text.
