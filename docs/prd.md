@@ -3798,7 +3798,9 @@ two journal-line formats and a precedence clause.
   owner chooses: (a) fix and one more round, (b) accept the risk on the record,
   or (c) drop the artifact or the blocked part. The choice is a decision line.
 - **LR-5. Short reports:** a verdict and the most severe findings, at most 40
-  lines (OQ-6). A reviewer with more says how many more there are. Evidence the
+  lines (OQ-6). Every blocking and major finding is always listed, one line each
+  if needed, even past the 40-line cap; a reviewer with more minors says how many
+  more there are. Evidence the
   rules require (the verification output in a story's Verification section) is
   still recorded in full; a report cites it by path.
 - **LR-6. A new coordinator session from a handoff note** when ADE warns that the
@@ -3816,7 +3818,8 @@ per round and one per owner choice:
 The formats are recorded in `.ade/context/` with S1, for TG-6 and TG-9 to read.
 
 **Precedence.** Where an agent file or any other file ADE installs says
-otherwise (for example "Report **every** finding"), the lean section wins.
+otherwise (for example "Report **every** finding"), the lean section wins. An
+owner changes lean behaviour by editing the lean section itself.
 
 Acceptance criteria (tests on the generated files, `projectMethodology.test.ts`):
 
@@ -3834,7 +3837,7 @@ Acceptance criteria (tests on the generated files, `projectMethodology.test.ts`)
   the lean section, seeded with the reviewer's "Report **every** finding". It
   fails if a listed phrase appears in any installed file while the generated
   rules lack the precedence clause, and if any installed file contradicts the
-  verdicts or LR-4 with a phrase not on the list (reviewed by hand at S1 and S2).
+  verdicts or LR-4 with a phrase on the list.
 - **AC5.** A BMAD switch (v4 to v6 and back) and its rollback, run on rules that
   hold the lean section, leave the lean section present once and byte-identical;
   the archive section is added and taken off as today (`append_archive_rule`,
@@ -3863,7 +3866,9 @@ live in ADE and need no ade-setup release, which is why S1 ships first.
   `<!-- ade:methodology -->` or `@.ade/rules.md` (the test setup uses,
   `has_import` in `projectsetup.rs`) and `.ade/rules.md` exists. If that file has
   no `<!-- ade:lean -->` marker, the project is offered the lean section once, on
-  its first open after updating, with the text to be added shown.
+  its first open after updating, with the text to be added shown. The offer's
+  text says that the lean section replaces the rules' "Material flaws block; they
+  are not waved through" (TG-1 AC2).
 - **AC2.** Accepting appends the section at the end of the file, after the
   archive section if there is one, and changes no other byte. Done in place: the
   file keeps its permissions, a symlink stays a link and its target gets the
@@ -3889,7 +3894,8 @@ live in ADE and need no ade-setup release, which is why S1 ships first.
 - **AC1.** While any measured session has written to its transcript in the last
   10 minutes, ADE re-reads usage at least every 30 s, whether or not the Tokens
   panel is open. A test with a fake clock shows the warning within 60 s of the
-  crossing.
+  crossing. Note for the architect: re-reading every 30 s needs incremental reads
+  of large transcripts, not a full re-read each time.
 - **AC2.** When a measured session's context passes the threshold (setting;
   default 150 K for every model, OQ-7; can be off), ADE warns in the Tokens panel
   and, if the session is matched to a terminal (AC5), on that terminal's fleet
@@ -3914,7 +3920,8 @@ live in ADE and need no ade-setup release, which is why S1 ships first.
   the matched terminal, the way the `/compact` tip sends its command. It asks the
   agent to write a handoff note of at most 60 lines (done, next, the files and
   sections that matter) to `.ade/handoff/<session id>.md`; a later request for
-  the same session replaces it.
+  the same session replaces it. `.ade/handoff/` is committed, not git-ignored, so
+  a new session on another machine or in a fresh clone can pick the note up.
 - **AC2.** When the note exists, ADE offers to open a new Claude Code session in
   the same folder, briefed with the note. Nothing starts without that click; the
   old session is left running for the owner to close.
@@ -3962,7 +3969,8 @@ live in ADE and need no ade-setup release, which is why S1 ships first.
   approves plans, answers a first LR-4 escalation on an artifact with (a) and a
   second with (b), and answers anything else "proceed as you recommend". The
   pre-F6 arm must show at least one artifact reviewed in 2 or more rounds;
-  otherwise the workload is revised and both arms rerun.
+  otherwise the workload is revised and both arms rerun. Each revision is logged,
+  with its reason, in the committed results file; at most 2 revisions.
 - **AC3.** Three runs per arm. A run counts only if the verification command
   passes. A run is rerun only for a fault outside the agents (an API outage, a
   rate limit, a driver crash), logged with its reason; a run that fails for any
@@ -3998,6 +4006,9 @@ live in ADE and need no ade-setup release, which is why S1 ships first.
 | **S3. Proof** | The reference workload in both arms; the claim check | TG-9; TG-10 | S1, S2, S4 (per-sub-agent context, TG-4 AC4) |
 | **S5. Review rounds** | Round counting and the third-round flag | TG-6; TG-8 AC3 | S1 |
 | **S6. Budgets** | Story and plan budgets with the 80 % warning | TG-7; TG-8 AC2 | S4 |
+
+The S1 and S2 review briefs include checking by hand that no installed file
+contradicts the verdicts or LR-4 with a phrase not on TG-1 AC4's list.
 
 Order: S1, S2, S4, S3, then S5 and S6 in either order. The website says nothing
 about savings until S3 is Done.
