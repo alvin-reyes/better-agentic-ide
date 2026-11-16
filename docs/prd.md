@@ -12,7 +12,7 @@ approval, and the change is noted in that section's history.
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
 | F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10; opener folder from a non-terminal tab (F3.1, VV-11 AC2), approved by the owner 2026-11-10 |
-| F6 | [Token cost guardrails](#f6-token-cost-guardrails) | Draft 2026-11-16, revision 1: pending adversarial review and owner approval |
+| F6 | [Token cost guardrails](#f6-token-cost-guardrails) | Draft 2026-11-16, revision 2 (answers review round 1; OQ-1 to OQ-8 answered by the owner): pending review round 2 and owner approval |
 
 ---
 
@@ -3693,27 +3693,36 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
 <!-- F6 begins -->
 ## F6: Token cost guardrails
 
-- **Status:** Draft, revision 1 (2026-11-16). Pending adversarial review and owner
-  approval. Nothing here is approved for sharding.
+- **Status:** Draft, revision 2 (2026-11-16). Pending review round 2, the last
+  under LR-4, and owner approval. Not approved for sharding. Review round 1 of
+  revision 1 blocked on two findings (S1's rules contradicted the installed
+  reviewer file; S1 used journal formats that arrived in S5), with eight more
+  findings and six nits; revision 2 answers all of them. The owner answered OQ-1
+  to OQ-8 on 2026-11-16, each at its recommendation (F6.9); OQ-8 is settled by
+  the code, so per-sub-agent context is now a requirement (TG-4 AC4).
 - **Source:** the owner, 2026-11-16: "I don't want any ADE users to experience
-  this"; "one of our value props is token cost optimization". The direction in
-  F6.6 (lean defaults shipped to every project, in-app guardrails, a measured
-  claim) was approved by the owner that day, including that it needs an ade-setup
-  release. The evidence and the six rules come from this project's coordinator
+  this"; "one of our value props is token cost optimization". The direction
+  (lean defaults shipped to every project, in-app guardrails, a measured claim)
+  was approved by the owner that day, including that it needs an ade-setup
+  release. The evidence and the rules come from this project's coordinator
   knowledge (`.ade/knowledge/coordinator.md`, branch `docs/token-budget`).
 
 ### F6.1 Terms
 
-- **Context:** the tokens a Claude Code session sends on one request, as the
-  Tokens panel already reads it (`contextTokens`, `peakContextTokens`).
+- **Context:** the tokens one request of a Claude Code session or sub-agent
+  sends, as ADE's usage reader already reads it (`contextTokens`,
+  `peakContextTokens`).
 - **Agent:** one Claude Code, Codex or Ollama session ADE runs in a terminal or
-  the fleet. A **sub-agent** runs inside a session.
-- **Coordinator:** the session that delegates work to agents.
-- **Review round:** one full review of one artifact (a PRD section, an
-  architecture, a design, a story's plan or code) by the adversarial-reviewer.
-- **Lean rules:** the six rules of F6.6, LR-1 to LR-6.
-- **Measured:** a figure read from a session's own usage records. Anything else is
-  **not measured**.
+  the fleet. A **sub-agent** runs inside a session (`<session>/subagents/*.jsonl`).
+- **Coordinator:** the session that briefs agents and relays their reports.
+- **Task:** one brief given to one agent: write or revise an artifact, review it
+  once, build or verify one story.
+- **Review round:** one full or delta review of one artifact by the
+  adversarial-reviewer.
+- **Lean section:** the rules section F6 adds, delimited by `<!-- ade:lean -->`.
+- **Total tokens:** input + cache write + cache read + output.
+- **Measured:** read from a session's own usage records. Anything else is **not
+  measured**.
 
 ### F6.2 Problem
 
@@ -3729,230 +3738,305 @@ agents resumed for weeks instead of started fresh (one architect, 224 turns,
 whole-document reads of a 4,000-line PRD; long reports relayed through the
 coordinator.
 
-Nothing ADE installs tells agents to avoid this, and setup never updates a
-project's rules once written (`projectMethodology.ts`: "writes the ones a
-project is missing and never overwrites"). The Tokens panel measures cost and
-offers tips (`tipsFor`: a `/compact` tip when the latest session passes 150 K),
-but only for the latest session, only when the panel is open, and it prevents
-nothing.
+Nothing ADE installs tells agents to avoid this. The installed reviewer is told
+to "Report **every** finding" and has no PASS WITH MINORS, and setup never
+updates a project's rules once written ("writes the ones a project is missing
+and never overwrites", `projectMethodology.ts`). The Tokens panel measures cost
+and offers tips (`tipsFor`: a `/compact` tip when the latest session passes
+150 K), but only for the latest session, only when the panel is open, and it
+prevents nothing.
 
 ### F6.3 Users
 
-The owner of an ADE project who takes plans through review to Done with a fleet of
-agents and pays for the tokens; and the coordinator and agents, which follow the
-rules and agent files ADE installs.
+The owner of an ADE project who takes plans through review to Done with a fleet
+of agents and pays for the tokens; and the coordinator and agents, which follow
+the rules and agent files ADE installs.
 
 ### F6.4 Goals (measurable)
 
-- **G1. Cost.** On the reference workload (TG-9), the median total tokens of three
-  runs with F6's defaults is at least **50 % lower** than with the pre-F6 defaults
-  (ADE 0.24.0, ade-setup v1.0.4), and every run in both arms reaches Done (the
-  verification command passes). Target to confirm: OQ-1.
-- **G2. Reach.** 100 % of projects ADE sets up after S1 get the lean rules, and
-  100 % of projects set up before it are offered them on their first open after
-  updating (TG-3 tests).
-- **G3. Shape.** In the F6 arm of the reference workload: 0 agents whose peak
-  context passes 150 K, and 0 artifacts with more than 2 review rounds.
-- **G4. Honest numbers.** 0 places where ADE shows an unmeasured agent as 0 tokens
-  or as under budget (TG-8), and 0 token-saving figures on the website or README
-  that do not match the recorded measurement (TG-10).
+- **G1. Cost.** On the reference workload (TG-9), the median total tokens of the
+  F6 arm is at least **50 % lower** than the pre-F6 arm's (OQ-1), under TG-9's
+  run, rerun and spread rules, with every counted run reaching Done.
+- **G2. Reach.** 100 % of projects ADE sets up after S1 have the lean section;
+  100 % of projects recognised as set up before it (TG-3 AC1) are offered it on
+  their first open after updating (TG-3 tests).
+- **G3. Shape.** In the F6 arm: 0 agents or sub-agents whose peak context passes
+  150 K, and 0 artifacts with more than 2 review rounds, counted from the
+  transcripts (TG-9 AC4) and excluding rounds the owner allowed under LR-4 (a).
+- **G4. Honest numbers.** 0 places where ADE shows an unmeasured agent as 0
+  tokens or as under budget (TG-8), and 0 token-reduction figures on the website
+  or README outside the compared claim elements (TG-10).
 
 ### F6.5 Non-goals (deliberately out)
 
-- **Stopping or throttling agents.** Guardrails warn and offer; they never kill,
-  pause or block an agent, and never change its model.
-- **Estimating usage** for Codex, Ollama or any agent that publishes none.
+- **Forcing agents to follow the rules.** Rules are instructions; guardrails
+  warn and offer. They never kill, pause or block an agent, nor change its model.
+- **Reading Codex or Ollama usage.** ADE does not read it today; F6 adds no reader
+  (TG-8).
 - **Changing the Definition of Done or the verification command.** Fewer review
   rounds never make a story Done; only the verification command does.
-- **Automatic summarising or compaction** without the owner's click.
+- **Summarising or compacting** without the owner's click.
 - **Per-turn cost prediction**, billing integration, or team-wide budgets.
 
 ### F6.6 Requirements
 
-#### TG-1. Lean rules in the rules ADE installs (MVP, S1)
+#### TG-1. The lean section in the rules ADE installs (MVP, S1)
 
-The rules template (`RULES_MD`, written to `.ade/rules.md`) gains a "Working
-lean" section with these rules:
+The rules ADE installs (`RULES_BODY` in `src/lib/projectMethodology.ts`, written
+as `.ade/rules.md`) gain the lean section. It holds seven rules, three verdicts,
+two journal-line formats and a precedence clause.
 
 - **LR-1. A fresh agent per task**, briefed with the exact files and sections it
-  needs. An agent whose context has passed about 150 K tokens is not resumed; a new
-  one starts from a short summary.
+  needs. An agent is resumed only within the task it was started for; the next
+  task gets a new agent and a short summary.
 - **LR-2. Targeted reads:** briefs name sections ("§9", "TG-4 AC2"), never "read
   the whole document".
-- **LR-3. Stop at PASS WITH MINORS:** the author applies the minors and the
-  coordinator checks the diff; no further full round follows.
-- **LR-4. At most 2 review rounds per artifact.** If the second still blocks, the
-  remaining issue goes to the owner, who decides.
-- **LR-5. Short reports:** a verdict and the top findings, not every check.
-- **LR-6. A new session from a handoff note** when the coordinator's context
-  passes about 150 K, rather than carrying the conversation on.
+- **LR-3. Stop at PASS WITH MINORS:** the author applies only the listed minors
+  and the coordinator checks the diff; no further full round. Any change beyond
+  the listed minors needs a delta review, which counts as a round.
+- **LR-4. At most 2 review rounds per artifact.** If round 2 still blocks, the
+  owner chooses: (a) fix and one more round, (b) accept the risk on the record,
+  or (c) drop the artifact or the blocked part. The choice is a decision line.
+- **LR-5. Short reports:** a verdict and the most severe findings, at most 40
+  lines (OQ-6). A reviewer with more says how many more there are. Evidence the
+  rules require (the verification output in a story's Verification section) is
+  still recorded in full; a report cites it by path.
+- **LR-6. A new coordinator session from a handoff note** when ADE warns that the
+  coordinator's context is large (TG-4) or the owner asks.
+- **LR-7. One review at a time per artifact** (OQ-5); no review of a draft still
+  being written.
 
-Acceptance criteria:
+**Verdicts.** PASS: no findings above minor and none to fix. PASS WITH MINORS:
+only minor findings. BLOCK: at least one blocking or major finding.
 
-- **AC1.** A test reads the generated `.ade/rules.md` and finds each of LR-1 to
-  LR-6 by a stable phrase, inside one marked section.
-- **AC2.** "Adversarial review is mandatory" stays, and the rules say how it meets
-  LR-4: review still happens on every artifact; after round 2 the owner decides,
-  and the decision is a journal line (TG-6 AC1). A test finds both.
-- **AC3.** LR-5 never shortens evidence: the rules say the verification output is
-  still recorded in full in the story's Verification section; a report may cite it
-  by path. A test finds this.
-- **AC4.** "Keep the journal" adds one line per review round (TG-6 AC1).
+**Journal lines.** The coordinator writes them (the reviewer is read-only), one
+per round and one per owner choice:
+`YYYY-MM-DD · review · <artifact path>[#section] · round <n> · <verdict>` and
+`YYYY-MM-DD · decision · <artifact path>[#section] · <a|b|c>: <one line>`.
+The formats are recorded in `.ade/context/` with S1, for TG-6 and TG-9 to read.
+
+**Precedence.** Where an agent file or any other file ADE installs says
+otherwise (for example "Report **every** finding"), the lean section wins.
+
+Acceptance criteria (tests on the generated files, `projectMethodology.test.ts`):
+
+- **AC1.** The generated rules hold the lean section once, between markers, before
+  `<!-- ade:archive -->`, with LR-1 to LR-7, the verdicts, both line formats and
+  the precedence clause, each found by a stable phrase. No rule names a context
+  size (agents cannot see their own).
+- **AC2.** The non-negotiable "Adversarial review is mandatory" is reworded to
+  agree with LR-4: "Material flaws block until they are fixed, or until the owner,
+  after round 2, accepts the risk on the record or drops the work (LR-4); they are
+  never waved through by the author or the coordinator." The old sentence is gone.
+- **AC3.** "Keep the journal" in the rules, and the journal paragraph of the
+  CLAUDE.md ADE installs, both add the coordinator's review and decision lines.
+- **AC4.** A test holds the list of phrases in files ADE installs that contradict
+  the lean section, seeded with the reviewer's "Report **every** finding". It
+  fails if a listed phrase appears in any installed file while the generated
+  rules lack the precedence clause, and if any installed file contradicts the
+  verdicts or LR-4 with a phrase not on the list (reviewed by hand at S1 and S2).
+- **AC5.** A BMAD switch (v4 to v6 and back) and its rollback, run on rules that
+  hold the lean section, leave the lean section present once and byte-identical;
+  the archive section is added and taken off as today (`append_archive_rule`,
+  `strip_archive_rule` in `bmadswitch.rs`).
 
 #### TG-2. Lean agent definitions (Next, S2)
 
 - **AC1.** The adversarial-reviewer definition states the three verdicts, that
   PASS WITH MINORS ends the review, that a delta review checks only the previous
-  findings and the changed text, and that the report is a verdict plus findings
-  in at most 40 lines (OQ-6).
-- **AC2.** Every role definition states LR-2 and LR-5 for its own reports, and the
+  findings and the changed text, and LR-5's 40-line report. "Report **every**
+  finding" is gone, and TG-1 AC4's list of contradicting phrases is empty.
+- **AC2.** Every role definition states LR-2 and LR-5 for its own reports; the
   developer and QA definitions keep "paste the real result" unchanged.
-- **AC3.** The prose lives in ade-setup and nowhere else: ADE's existing source
-  tests (`scripts/agentSource.test.ts`, `scripts/subAgentSource.test.ts`) pass
-  against the re-vendored files, with no copy of the prose in ADE.
+- **AC3.** The prose lives only in ade-setup: `scripts/agentSource.test.ts` and
+  `scripts/subAgentSource.test.ts` pass against the re-vendored files.
 
-**How it ships.** The agent prose is changed in a pull request to ade-setup
+**How it ships.** The agent prose changes in a pull request to ade-setup
 (`alvin-reyes/ade-setup`). Merging it to main tags and publishes a release
-(ADR 0007). ADE then re-vendors at that release with `npm run sync:agents`,
-updates `vendor/ade-setup/VERSION`, and ships in the next ADE release. The rules
-template (TG-1) lives in ADE (`src/lib/projectMethodology.ts`) and needs no
-ade-setup release, which is why S1 can ship first.
+(ADR 0007). ADE re-vendors at that release with `npm run sync:agents`, updates
+`vendor/ade-setup/VERSION`, and ships it in its next release. The rules (TG-1)
+live in ADE and need no ade-setup release, which is why S1 ships first.
 
 #### TG-3. Reaching existing projects (MVP, S1 for the rules; S2 for agents)
 
-- **AC1.** A project ADE set up before S1, whose `.ade/rules.md` has no lean
-  section, is offered it once on its first open after updating, showing the text
-  to be added (OQ-2).
-- **AC2.** Accepting appends the marked section and changes no other byte of the
-  file; declining is remembered and not asked again for that project.
-- **AC3.** A project that already has the section (by marker) is never offered it
-  again and never gets it twice.
-- **AC4.** After S2, an agent file under `.claude/agents/` that is exactly what an
-  earlier ADE wrote is offered the new version the same way; one the owner edited
-  is listed as "edited, not updated" and left alone.
+- **AC1.** A project counts as set up by ADE when its CLAUDE.md holds
+  `<!-- ade:methodology -->` or `@.ade/rules.md` (the test setup uses,
+  `has_import` in `projectsetup.rs`) and `.ade/rules.md` exists. If that file has
+  no `<!-- ade:lean -->` marker, the project is offered the lean section once, on
+  its first open after updating, with the text to be added shown.
+- **AC2.** Accepting appends the section at the end of the file, after the
+  archive section if there is one, and changes no other byte. Done in place: the
+  file keeps its permissions, a symlink stays a link and its target gets the
+  section, and a CRLF file gets CRLF lines.
+- **AC3.** A file that cannot be read or written (unreadable, read-only, a link
+  that leads nowhere) is not changed; the offer says why, and comes back on the
+  next open (it is not a decline). A write that fails part-way is cut back to the
+  original bytes, as `append_archive_rule` does. No offer is made while a BMAD
+  switch is running on the project.
+- **AC4.** Declining is stored on this machine, beside setup's own declined list
+  (`setupDeclined`, keyed by the normalised root), never in the project. A
+  declined project, or one that has the marker, is never offered again and never
+  gets the section twice.
+- **AC5 (S2).** ADE keeps a committed list of the hashes (LF-normalised) of every
+  agent-file version it has shipped, per role and methodology; a test fails if a
+  release ships an agent file whose hash is not on it. A file under
+  `.claude/agents/` whose hash is on the list is offered the new version under
+  AC2 to AC4's rules; any other file counts as edited, is listed "edited, not
+  updated" and is left alone.
 
 #### TG-4. Context warning (Next, S4)
 
-- **AC1.** When a measured session's context passes the threshold (setting;
-  default 150 K; can be off), ADE shows a warning on that session in the fleet
-  and in the Tokens panel, naming the session and its context, within one usage
-  refresh. Today's tip covers only the latest session; this covers every one.
-- **AC2.** The warning shows once per crossing, and again only after the session
-  drops below the threshold (for example after `/compact`) and passes it again.
-- **AC3.** The warning offers **Start fresh from a summary** (TG-5).
-- **AC4.** Sub-agents: if the architect confirms their transcripts give each
-  sub-agent's own context, AC1 applies to them, naming the parent session;
-  otherwise the warning is per session only (OQ-8).
+- **AC1.** While any measured session has written to its transcript in the last
+  10 minutes, ADE re-reads usage at least every 30 s, whether or not the Tokens
+  panel is open. A test with a fake clock shows the warning within 60 s of the
+  crossing.
+- **AC2.** When a measured session's context passes the threshold (setting;
+  default 150 K for every model, OQ-7; can be off), ADE warns in the Tokens panel
+  and, if the session is matched to a terminal (AC5), on that terminal's fleet
+  lane. Once per crossing: again only after the context drops below the threshold
+  (for example after `/compact`) and passes it again.
+- **AC3.** The warning offers **Start fresh from a summary** (TG-5) for a matched
+  session.
+- **AC4.** Sub-agents are measured one by one: the usage reader, which today folds
+  `<session>/subagents/*.jsonl` into the parent (`usage.rs`), also keeps each
+  sub-agent's own context and peak. A sub-agent past the threshold gets AC2's
+  warning, naming it and its parent session, and saying the next task gets a
+  fresh agent (LR-1).
+- **AC5.** A session is matched to a terminal only when it is unambiguous: its
+  transcript's folder is the terminal's folder, exactly one open terminal there
+  runs Claude Code, and the session's last request came after that terminal
+  started. Otherwise the warning is in the Tokens panel only, named by the
+  session's first prompt. The architect may use a stronger link if one exists.
 
 #### TG-5. Start fresh from a summary (Next, S4)
 
-- **AC1.** The action asks the session's agent to write a handoff note (what is
-  done, what is next, the files and sections that matter) to a file in the
-  project, at a path recorded in `.ade/context/`.
-- **AC2.** When the note exists, ADE offers to open a new session of the same
-  agent CLI in the same folder, briefed with the note; nothing starts without
-  that click. The old session is left running for the owner to close.
-- **AC3.** If no note appears (the agent refuses, errors or is not Claude Code),
-  ADE says so and starts nothing.
+- **AC1.** The action types one fixed prompt, recorded in `.ade/context/`, into
+  the matched terminal, the way the `/compact` tip sends its command. It asks the
+  agent to write a handoff note of at most 60 lines (done, next, the files and
+  sections that matter) to `.ade/handoff/<session id>.md`; a later request for
+  the same session replaces it.
+- **AC2.** When the note exists, ADE offers to open a new Claude Code session in
+  the same folder, briefed with the note. Nothing starts without that click; the
+  old session is left running for the owner to close.
+- **AC3.** If no note appears within 5 minutes, or the terminal closes first, ADE
+  says so and starts nothing.
 
 #### TG-6. Review rounds (Next, S5)
 
-- **AC1.** Each review round is one dated journal line in a recorded format
-  naming the artifact, the round number and the verdict, written by the
-  coordinator (the reviewer is read-only). The format is a shared contract in
-  `.ade/context/`.
-- **AC2.** ADE counts the rounds per artifact from the journal, for any agent CLI.
-- **AC3.** When a third round is recorded for one artifact (setting: flag at
-  round N, default 3), ADE flags the artifact and says LR-4 sends it to the
-  owner. An owner's decision line clears the flag.
+- **AC1.** ADE counts rounds per artifact from TG-1's review lines, for any CLI.
+- **AC2.** When a third round is recorded (setting: flag at round N, default 3),
+  ADE flags the artifact and says LR-4 sends it to the owner. A decision line (a)
+  keeps the flag, marked "allowed by the owner" (OQ-4); (b) or (c) clears it.
 
 #### TG-7. Budgets (Next, S6)
 
-- **AC1.** The owner can set an optional token budget on a story (its worktree)
-  or a plan (the project from a start the owner sets until approval). No budget
-  is set by default.
-- **AC2.** A budget counts the measured sessions ADE can attribute to it, and
-  shows its share used.
-- **AC3.** At 80 % (setting) ADE warns once, in the fleet and the Tokens panel; at
-  100 % the warning says "over". Neither stops anything.
+- **AC1.** The owner can set an optional budget in total tokens, with the
+  list-price estimate shown beside it (OQ-3), on a story or on a plan. None is set
+  by default.
+- **AC2.** A story budget counts the measured requests (sub-agents included) of
+  sessions whose transcript folder is inside the story's worktree, from when the
+  budget is set until the story's Done line or the owner closes it. A plan budget
+  counts those of sessions in the project folder or any of its worktrees, from a
+  start the owner sets until the plan's approval line or the owner closes it. One
+  request may count toward a plan and a story. It refreshes as TG-4 AC1.
+- **AC3.** At 80 % (setting) ADE warns once in the Tokens panel, and on matched
+  fleet lanes; at 100 % the warning says "over". Neither stops anything.
 
-#### TG-8. Only what is observable (MVP for every guardrail)
+#### TG-8. Only what is observable (with S4 to S6, each for its guardrail)
 
-- **AC1.** Claude Code sessions are measured (their transcripts carry usage).
-  Codex and Ollama publish none: their sessions show "not measured", never 0.
-- **AC2.** A budget with unmeasured sessions says how many it could not count,
-  and is never shown as under budget on their account.
+- **AC1.** Claude Code sessions are measured. ADE does not read Codex or Ollama
+  usage (Codex writes counts in its session files and Ollama's API returns them,
+  but ADE reads neither), so their sessions show "not measured", never 0.
+- **AC2.** A budget whose window holds unmeasured sessions says how many it could
+  not count, and is never shown as under budget on their account.
 - **AC3.** Review rounds (TG-6) come from the journal, so they work for every CLI.
 
 #### TG-9. Reference workload (Next, S3)
 
-- **AC1.** One recorded workload: a small fixture project in this repository and
-  one small plan taken through PRD, architecture, review, one story, build and
-  QA to Done, with scripted owner answers, a pinned model and pinned agent CLI.
+- **AC1.** One workload: a fixture project in this repository holding a large
+  document (at least 2,000 lines), and one small plan that amends it, taken
+  through PRD, architecture, review, one story, build and QA to Done.
 - **AC2.** Two arms, identical except the defaults: pre-F6 (ADE 0.24.0, ade-setup
-  v1.0.4) and F6. Three runs each. A run counts only if the verification command
-  passes.
-- **AC3.** Recorded per run: input, cache write, cache read and output tokens,
-  peak context per agent, review rounds per artifact, and the list-price cost
-  from the Tokens panel's own price table. The raw numbers, versions and date are
-  committed in one file.
-- **AC4.** The result reports the median and the spread of each arm, and whether
+  v1.0.4) and F6. Pinned in both: model, Claude Code version, the coordinator's
+  prompt, and the driver that starts it and answers as the owner. The driver
+  approves plans, answers a first LR-4 escalation on an artifact with (a) and a
+  second with (b), and answers anything else "proceed as you recommend". The
+  pre-F6 arm must show at least one artifact reviewed in 2 or more rounds;
+  otherwise the workload is revised and both arms rerun.
+- **AC3.** Three runs per arm. A run counts only if the verification command
+  passes. A run is rerun only for a fault outside the agents (an API outage, a
+  rate limit, a driver crash), logged with its reason; a run that fails for any
+  other reason stays a failure, and G1 is then not met. If either arm's spread
+  (max minus min) exceeds 30 % of its median, both arms get two more runs and the
+  median of five decides.
+- **AC4.** Recorded per run, from the transcripts: the four token kinds, total
+  tokens, the list-price cost from the Tokens panel's price table, peak context
+  per agent and sub-agent (TG-4 AC4), and review rounds per artifact counted from
+  adversarial-reviewer runs, not journal lines (any mismatch with the journal is
+  reported). The raw numbers, versions, driver and date are committed in one file.
+- **AC5.** The result gives every run, each arm's median and spread, and whether
   G1 and G3 are met.
 
 #### TG-10. Claims quote the measurement (Next, S3)
 
-- **AC1.** Any token or cost saving on the website (`docs/index.html`) or README
-  quotes the TG-9 file's median, workload and date.
-- **AC2.** A test fails when such a figure differs from the recorded file, the way
-  ADR 0007's site check works. No claim ships before S3.
+- **AC1.** A token or cost reduction claim appears only in a marked element on
+  the website (`docs/index.html`) or between marked lines in the README, and
+  quotes TG-9's median, workload and date. No claim ships before S3.
+- **AC2.** A test compares every marked claim with TG-9's file, and fails on a
+  percentage or multiple of token or cost saving outside the marks.
+- **AC3.** The README's existing "cache savings" and "token savers", and the
+  site's "savings from caching", name per-user measurements and features, not a
+  reduction from ADE's defaults: they stay, allowed by exact phrase.
 
 ### F6.7 Slices
 
 | Slice | Delivers | Acceptance criteria | Depends on |
 |---|---|---|---|
-| **S1. Lean rules** (MVP) | The six rules in the rules ADE installs; the one-time offer to existing projects | TG-1; TG-3 AC1 to AC3 | nothing; ADE only, no ade-setup release |
-| **S2. Lean agent definitions** | Reviewer verdicts and round rules, short reports, via an ade-setup release and re-vendor | TG-2; TG-3 AC4 | S1; an ade-setup release |
-| **S3. Proof** | The reference workload measured in both arms; the claim check | TG-9; TG-10 | S1, S2 |
-| **S4. Context warning** | The per-session warning and Start fresh from a summary | TG-4; TG-5; TG-8 AC1 | S1 |
+| **S1. Lean rules** (MVP) | The lean section in the rules and CLAUDE.md ADE installs, the reworded non-negotiable, the journal formats, the one-time offer to existing projects | TG-1; TG-3 AC1 to AC4 | nothing; ADE only, no ade-setup release |
+| **S2. Lean agent definitions** | Reviewer verdicts and rounds, short reports, via an ade-setup release; agent-file updates for existing projects | TG-2; TG-3 AC5 | S1; an ade-setup release |
+| **S4. Context warning** | Per-session and per-sub-agent warnings, the poller, Start fresh from a summary | TG-4; TG-5; TG-8 AC1 | S1 |
+| **S3. Proof** | The reference workload in both arms; the claim check | TG-9; TG-10 | S1, S2, S4 (per-sub-agent context, TG-4 AC4) |
 | **S5. Review rounds** | Round counting and the third-round flag | TG-6; TG-8 AC3 | S1 |
 | **S6. Budgets** | Story and plan budgets with the 80 % warning | TG-7; TG-8 AC2 | S4 |
 
-S4 to S6 can be built in any order after their dependency. The website says
-nothing about savings until S3 is done.
+Order: S1, S2, S4, S3, then S5 and S6 in either order. The website says nothing
+about savings until S3 is Done.
 
 ### F6.8 Risks
 
-- **Fewer rounds, more escaped flaws.** Mitigation: Done is still the
-  verification command's; after round 2 the owner decides with the issue in hand.
-- **Agents ignore the rules.** Rules are instructions, not enforcement; S4 to S6
-  make breaches visible. S3 measures whether the rules work at all.
-- **Noisy measurement.** Model output varies between runs. Three runs per arm,
-  median and spread reported; G1 is judged on medians.
-- **Not representative.** One small workload may save more or less than a real
-  project. Claims name the workload (TG-10).
+- **Fewer rounds, more escaped flaws.** Done is still the verification command's;
+  after round 2 the owner decides with the issue in hand (LR-4).
+- **Agents are not forced.** Rules are instructions; an agent can ignore them, and
+  ADE says so (OQ-9). S4 to S6 make breaches visible; S3 measures whether the
+  rules work.
+- **Agents cannot see their own context size.** LR-1 and LR-6 use triggers an
+  agent can see (a new task; ADE's warning); TG-4 is what catches size.
+- **Noisy measurement.** TG-9 AC3's rerun and spread rules; G1 is judged on
+  medians.
+- **Not representative.** One workload may save more or less than a real
+  project; claims name it (TG-10).
 - **Transcript format changes.** Claude Code's usage records are not a public
-  contract; a change can break the counters. TG-8 shows "not measured" rather
-  than a wrong number.
-- **Edited rules files.** Owners edit `.ade/rules.md`; TG-3 only appends a marked
-  section and never rewrites.
+  contract; TG-8 shows "not measured" rather than a wrong number.
+- **Edited files.** TG-3 only appends a marked section, and replaces only agent
+  files whose hash ADE shipped.
 - **Cross-repo release.** S2 couples an ADE release to an ade-setup release; S1
   does not, so the main saving is not held up by it.
 
 ### F6.9 Open questions for the owner
 
-- **OQ-1.** Target: at least 50 % fewer total tokens, median of three runs?
-  *Recommend yes.*
-- **OQ-2.** Existing projects: a one-time offer, or append the lean section
-  without asking? *Recommend the offer.*
-- **OQ-3.** Budgets in tokens or dollars? *Recommend tokens, with list-price
-  dollars shown as an estimate.*
-- **OQ-4.** After round 2 blocks, may the owner allow a third round?
-  *Recommend yes, recorded in the journal; the flag still shows.*
-- **OQ-5.** Add the project's seventh rule, "one review at a time per artifact"?
-  *Recommend yes; it is one line.*
-- **OQ-6.** Report cap for the reviewer: 40 lines? *Recommend 40.*
-- **OQ-7.** Keep 150 K absolute for every model, whatever its window?
-  *Recommend yes: the cost is per token resent, not per share of the window.*
-- **OQ-8.** Sub-agent warnings only if the architect confirms the data, else per
-  session? *Recommend yes.*
+Answered 2026-11-16 (owner), each at its recommendation:
+
+- **OQ-1.** At least 50 % fewer total tokens, median of three runs (G1, TG-9).
+- **OQ-2.** Existing projects get a one-time offer (TG-3).
+- **OQ-3.** Budgets in tokens, with a list-price estimate (TG-7).
+- **OQ-4.** After round 2 blocks, the owner may allow a third round (LR-4 (a)).
+- **OQ-5.** "One review at a time" is added (LR-7).
+- **OQ-6.** Reports are at most 40 lines (LR-5).
+- **OQ-7.** One threshold, 150 K, for every model (TG-4).
+- **OQ-8.** Per sub-agent, since the data exists (TG-4 AC4).
+
+Open:
+
+- **OQ-9.** Say openly, in the lean section and beside any claim, that the rules
+  guide agents and do not force them? *Recommend yes: one sentence each.*
 <!-- F6 ends -->
