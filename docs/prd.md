@@ -12,7 +12,7 @@ approval, and the change is noted in that section's history.
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
 | F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10; opener folder from a non-terminal tab (F3.1, VV-11 AC2), approved by the owner 2026-11-10 |
-| F6 | [Token cost guardrails](#f6-token-cost-guardrails) | Draft 2026-11-16, revision 2 (answers review round 1; OQ-1 to OQ-8 answered by the owner): pending review round 2 and owner approval |
+| F6 | [Token cost guardrails](#f6-token-cost-guardrails) | Approved by the owner 2026-11-16, revision 2 (review round 2 passed with minors, applied; OQ-1 to OQ-9 answered at recommendation; six slices; not sharded) |
 
 ---
 
@@ -3693,13 +3693,16 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
 <!-- F6 begins -->
 ## F6: Token cost guardrails
 
-- **Status:** Draft, revision 2 (2026-11-16). Pending review round 2, the last
-  under LR-4, and owner approval. Not approved for sharding. Review round 1 of
-  revision 1 blocked on two findings (S1's rules contradicted the installed
-  reviewer file; S1 used journal formats that arrived in S5), with eight more
-  findings and six nits; revision 2 answers all of them. The owner answered OQ-1
-  to OQ-8 on 2026-11-16, each at its recommendation (F6.9); OQ-8 is settled by
-  the code, so per-sub-agent context is now a requirement (TG-4 AC4).
+- **Status:** Approved by the owner 2026-11-16, revision 2 with review round 2's
+  minors applied; every open question (OQ-1 to OQ-9) answered at its
+  recommendation (F6.9). Not sharded.
+- **History:** revision 1 (2026-11-16) blocked in review round 1 on two findings
+  (S1's rules contradicted the installed reviewer file; S1 used journal formats
+  that arrived in S5), with eight more findings and six nits. Revision 2 answered
+  them; the owner answered OQ-1 to OQ-8 on 2026-11-16 (OQ-8 settled by the code,
+  so per-sub-agent context is a requirement, TG-4 AC4). Review round 2 passed with
+  minors, which were applied and checked by the coordinator. The owner answered
+  OQ-9 and approved F6 as the requirements on 2026-11-16.
 - **Source:** the owner, 2026-11-16: "I don't want any ADE users to experience
   this"; "one of our value props is token cost optimization". The direction
   (lean defaults shipped to every project, in-app guardrails, a measured claim)
@@ -3821,11 +3824,15 @@ The formats are recorded in `.ade/context/` with S1, for TG-6 and TG-9 to read.
 otherwise (for example "Report **every** finding"), the lean section wins. An
 owner changes lean behaviour by editing the lean section itself.
 
+**Not enforced.** One sentence in the lean section says plainly that these rules
+guide agents but cannot force them (OQ-9).
+
 Acceptance criteria (tests on the generated files, `projectMethodology.test.ts`):
 
 - **AC1.** The generated rules hold the lean section once, between markers, before
   `<!-- ade:archive -->`, with LR-1 to LR-7, the verdicts, both line formats and
-  the precedence clause, each found by a stable phrase. No rule names a context
+  the precedence clause and the not-enforced sentence, each found by a stable
+  phrase. No rule names a context
   size (agents cannot see their own).
 - **AC2.** The non-negotiable "Adversarial review is mandatory" is reworded to
   agree with LR-4: "Material flaws block until they are fixed, or until the owner,
@@ -3995,6 +4002,9 @@ live in ADE and need no ade-setup release, which is why S1 ships first.
 - **AC3.** The README's existing "cache savings" and "token savers", and the
   site's "savings from caching", name per-user measurements and features, not a
   reduction from ADE's defaults: they stay, allowed by exact phrase.
+- **AC4.** Beside every marked claim, one sentence says plainly that the rules
+  guide agents but cannot force them (OQ-9). AC2's test fails on a marked claim
+  without it.
 
 ### F6.7 Slices
 
@@ -4046,8 +4056,6 @@ Answered 2026-11-16 (owner), each at its recommendation:
 - **OQ-7.** One threshold, 150 K, for every model (TG-4).
 - **OQ-8.** Per sub-agent, since the data exists (TG-4 AC4).
 
-Open:
-
-- **OQ-9.** Say openly, in the lean section and beside any claim, that the rules
-  guide agents and do not force them? *Recommend yes: one sentence each.*
+- **OQ-9.** Yes: one sentence in the lean section and one beside every savings
+  claim say the rules guide agents but cannot force them (TG-1, TG-10 AC4).
 <!-- F6 ends -->
