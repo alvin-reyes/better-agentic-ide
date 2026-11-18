@@ -12,7 +12,7 @@ approval, and the change is noted in that section's history.
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
 | F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10; opener folder from a non-terminal tab (F3.1, VV-11 AC2), approved by the owner 2026-11-10 |
-| F7 | [Saved servers (SSH)](#f7-saved-servers-ssh) | Draft, revision 7 (2026-11-18): **not approved; pending the owner's approval**. Revision 7 is a wording pass that answers the delta check of revision 6, which **passed S1 with five minors (answered)** and **blocked S1b on one blocker (answered, with two small decisions of the product manager's flagged for the owner; awaiting a re-check, not run)**. The owner is asked to approve S1 (SV-1 to SV-9), and separately whether to approve S1b (SV-13) now or hold it. Revision 6 recorded the owner's two decisions of 2026-11-18: an open ade-brain hub's recorded SSH server is offered in the server list, read-only and marked as the hub's (a new slice, S1b, SV-13, with criteria; not buildable before F4 slice S1 and F7 S1 are on `main`), and the roles in ade-setup are told about the feature (follow-up work in that repository, F7.11). **S1 is unchanged in substance.** Before it, the final delta check, of revision 4, found S1 blocked on one blocker (1 blocker, 2 majors, 14 minors; every finding a text change) and the stored-password gate complete; revision 5 answered every finding (F7.12, fourth table), and the delta check of revision 6 found each resolved. **Every owner question is answered** (OQ-1 to OQ-22, F7.10): none is open. **S1, the saved list and the terminal, stores no password or passphrase**; a stored password is a later slice (S2), gated on the architect's spike, with no criteria yet and not buildable; key passphrases are not stored by ADE. Not available inside an engagement for now. Five slices (S1, S1b, S2, S3, S4); not sharded. F2 (PR #98), F4 (PR #113), F5 (PR #115) and F6 (`prd-token-cost`) add their rows when they merge |
+| F7 | [Saved servers (SSH)](#f7-saved-servers-ssh) | **Slice S1 approved by the owner 2026-11-18** (revision 7, S1 approved): SV-1 to SV-9, with F7.11's items 1 to 7. **S1b (SV-13) is not approved:** held pending an adversarial re-check of its answers and the owner's separate decision. The approval does not cover the gated password slice (S2, SV-12), S3, S4, Windows or use inside an engagement. Revision 7 is a wording pass that answers the delta check of revision 6, which **passed S1 with five minors (answered)** and **blocked S1b on one blocker (answered, with two small decisions of the product manager's flagged for the owner; awaiting a re-check, not run)**. Revision 6 recorded the owner's two decisions of 2026-11-18: an open ade-brain hub's recorded SSH server is offered in the server list, read-only and marked as the hub's (a new slice, S1b, SV-13, with criteria; not buildable before F4 slice S1 and F7 S1 are on `main`), and the roles in ade-setup are told about the feature (follow-up work in that repository, F7.11). **S1 is unchanged in substance.** Before it, the final delta check, of revision 4, found S1 blocked on one blocker (1 blocker, 2 majors, 14 minors; every finding a text change) and the stored-password gate complete; revision 5 answered every finding (F7.12, fourth table), and the delta check of revision 6 found each resolved. **Every owner question is answered** (OQ-1 to OQ-22, F7.10): none is open. **S1, the saved list and the terminal, stores no password or passphrase**; a stored password is a later slice (S2), gated on the architect's spike, with no criteria yet and not buildable; key passphrases are not stored by ADE. Not available inside an engagement for now. Five slices (S1, S1b, S2, S3, S4); not sharded. F2 (PR #98), F4 (PR #113), F5 (PR #115) and F6 (`prd-token-cost`) add their rows when they merge |
 
 ---
 
@@ -3694,16 +3694,20 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
 
 ## F7: Saved servers (SSH)
 
-- **Status:** Draft, revision 7 (2026-11-18). **Not approved: pending the owner's
-  approval.** Revision 7 is a wording pass that answers the delta check of revision
+- **Status:** **Slice S1 approved by the owner 2026-11-18** (revision 7, S1
+  approved): SV-1 to SV-9, with items 1 to 7 of F7.11's "accept knowingly" list.
+  **S1b (SV-13) is not approved:** it is held pending an adversarial re-check of its
+  answers and the owner's separate decision. The approval does not cover the gated
+  password slice (S2, SV-12), S3, S4, Windows or use inside an engagement (F7.11).
+  Revision 7 is a wording pass that answers the delta check of revision
   6 (F7.12, sixth table). **That check passed S1 with five minors, which are
-  answered here,** so S1 (SV-1 to SV-9) goes to the owner. **It blocked S1b (SV-13)
+  answered here,** so S1 (SV-1 to SV-9) went to the owner. **It blocked S1b (SV-13)
   on one blocker,** with one major and eight minors, all text changes; they are
   answered here, with two small decisions of the product manager's that are flagged
   for the owner (F7.11, item 11), and **S1b's answers await a re-check, which has
-  not been run.** Revision 7 itself has not been reviewed. The owner is asked two
-  things, separately (F7.11): to approve S1, and whether to approve S1b now or hold
-  it. Revision 6 recorded the owner's two decisions of 2026-11-18 (F7.10, OQ-21 and
+  not been run.** Revision 7 itself has not been reviewed. The owner was asked two
+  things, separately (F7.11): to approve S1, which the owner did on 2026-11-18, and
+  whether to approve S1b now or hold it, which is still asked. Revision 6 recorded the owner's two decisions of 2026-11-18 (F7.10, OQ-21 and
   OQ-22). **First: when an ade-brain hub is open, the SSH server its `hub.conf`
   records is offered in the server list, read-only and marked as the hub's** (D16).
   It is a slice of its own after the list and the terminal, **S1b** (SV-13): it has
@@ -3731,8 +3735,8 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
   passphrase; a stored password is a later slice (S2), gated on the architect
   proving its mechanism safe against a real test server, with no acceptance criteria
   yet and not buildable; key passphrases are not stored by ADE at all.** What the
-  owner is asked to approve, and what approval does not cover, is listed in F7.11.
-  Not sharded.
+  owner approved, what is still asked, and what approval does not cover, is listed
+  in F7.11. Not sharded.
 - **Number:** F2 is the PRD for agentic-environment onboarding (PR #98, branch
   `onboarding-prd`), F4 workspaces (PR #113, `prd-workspaces`), F5 prompt templates
   (PR #115, `prd-prompt-templates`) and F6 token cost guardrails (branch
@@ -3859,6 +3863,17 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
     assertion for the quit and window-close teardown, and the wait it implies
     (R6-m2); three lines for the design (R6-m3 to R6-m5). Not reviewed; S1b's
     answers await a re-check.
+  - 2026-11-18: **slice S1 approved by the owner**, revision 7 (revision 7, S1
+    approved). Asked "Do you approve F7 slice 1 as written?", after being shown the
+    "accept knowingly" items for S1 (the stricter "Remote server" reading, the
+    engagement consequence, a pane that can stay "connecting", End asking no second
+    question, and quit or window close ending live connections unasked), the owner
+    answered yes. Approved: S1, which is SV-1 to SV-9, with F7.11's items 1 to 7.
+    **Not approved: S1b (SV-13).** The owner was told that its answers have not been
+    re-checked and that it can be held; it stays pending an adversarial re-check and
+    the owner's separate decision. Not covered: the gated password slice (S2,
+    SV-12), S3, S4, Windows and use inside an engagement. No requirement is changed
+    and the revision is not renumbered.
 
 ### F7.0 What exists today (checked on `origin/main` at 84389eb)
 
@@ -7185,19 +7200,25 @@ are not held in this file; what is recorded is the choice.
 
 ### F7.11 Handoff
 
-Not before the owner's approval. The delta check of revision 6 **passed S1 with five
+**S1 is approved by the owner (2026-11-18) and is handed off; S1b is not.** The
+delta check of revision 6 **passed S1 with five
 minors** and **blocked S1b on one blocker**; revision 7 answers every finding
-(F7.12, sixth table). By that check S1 is fit to go to the owner. **S1b's answers
+(F7.12, sixth table). By that check S1 was fit to go to the owner. **S1b's answers
 have not been re-checked:** the re-check comes before S1b is approved, or the owner
 holds S1b. Revision 7 itself has not been reviewed.
 
+**What follows the approval of S1.** The architect designs S1, and fixes nothing in
+the in-force verification command without the owner. The designer draws S1.
+Sharding follows the approval of the design. Nothing of S1b, S2, S3 or S4 is
+designed, sharded or built on this approval.
+
 **What the owner is asked, and what approval covers**
 
-- **Asked: to approve S1, which is SV-1 to SV-9:** the saved list and the terminal,
-  under D1 to D15 and the answers in F7.10, with items 1 to 7 of the list below.
-  Approval lets the architect design S1 and the designer draw it; the verification
-  command is fixed with the architect's design, and sharding follows.
-- **Asked separately: whether to approve S1b, which is SV-13, now, or to hold it:**
+- **Approved by the owner 2026-11-18: S1, which is SV-1 to SV-9:** the saved list
+  and the terminal, under D1 to D15 and the answers in F7.10, with items 1 to 7 of
+  the list below (revision 7, S1 approved). The owner was asked "Do you approve F7
+  slice 1 as written?" and answered yes. What follows is stated above.
+- **Still asked, separately: whether to approve S1b, which is SV-13, now, or to hold it:**
   a hub's server in the list, under D16 and D18, with items 8 to 13 of the list
   below. Approving it fixes what a hub's server is and is not, and lets it be
   designed with or after F4's design. It does not make S1b buildable: that waits for
