@@ -1,8 +1,9 @@
 # 0045: A remote terminal is ended by signals and never written to
 
-- Status: Proposed (2026-11-18), with the F7 S1 design, revision 2
+- Status: Proposed (2026-11-18), with the F7 S1 design, revision 3
   (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 1). Not
-  approved; awaiting a delta review. The number is provisional; cite this ADR by
+  approved; awaiting a re-check of the delta review's one blocking finding,
+  A2-B1, which the "only `end` removes an ending terminal" rule below answers. The number is provisional; cite this ADR by
   its slug.
 - Context:
   - Ending or closing a server pane must write 0 bytes into it and leave no
@@ -21,6 +22,11 @@
     left running with no pane (A-B1), a quit that could skip its wait (A-B2), a
     blocking call on the main thread (A-M1) and a process ADE may not signal
     keeping the terminal for good (A-M6).
+  - The delta review of revision 2 ran one more case (A2-B1): with one remote
+    terminal whose hangup-ignoring stub is a child of a shell that obeys, the
+    monitor took the terminal out of the table when the shell exited, so a
+    quit's wait on the table ended 30 to 58 ms in, 2 s before the kill, with the
+    child alive.
 - Decision:
   - **The invariant.** A remote terminal is in Rust's table only while a pane
     holds its id. The two bounded exceptions: while its `server_connect` has not
@@ -55,6 +61,16 @@
     reader is stopped and joined, and every master handle ADE holds is dropped.
     With no handle left the kernel hangs the terminal up for whatever is still
     attached, whoever owns it. The gate's condition variable is notified.
+  - **Only this last step takes a terminal marked ending out of the table**
+    (revision 3; A2-B1). The monitor never does: when the pane's own process
+    exits during an ending it sends the pane its `exit` and leaves the instance
+    in the table, and the routine goes on to its kill and its last step. A
+    remote terminal leaves the table in exactly four ways: this last step after
+    an ending a webview request started; after one `end_all` started; for an
+    instance inserted already ending; and, fourth, **the monitor's removal
+    after a natural exit**, of a terminal that is not marked ending (the mark
+    is read and the instance removed in one hold of the table lock, and the
+    `exit` is sent after the removal).
   - **The gate.** `ending::Gate`, read and written only under the table lock:
     `closed` (the main window was destroyed, or ADE is exiting), `page` (a count
     of the main webview's page loads), `starting` (client starts between their
@@ -69,7 +85,11 @@
        `server_connect` reads the gate under the table lock before the spawn
        (refusing when closed, counting itself in `starting`) and again at the
        insert; when `closed` is set or `page` changed, the instance is inserted
-       already ending, the routine runs on it, and the command rejects.
+       already ending, its monitor is given "ended by the user" as its first
+       input (so its one `exit` says `by: "ended"`), the routine runs on it, and
+       the command rejects. `starting` is subtracted on **every** way out of
+       the start (a guard), a failed spawn included. The per-pane rule is
+       checked again at the insert.
     3. *The main webview loads a page* (the error screen's Reload):
        `Builder::on_page_load`, `PageLoadEvent::Started`, webview `main`, calls
        `ending::main_page_loaded`, which adds 1 to `page` and ends every remote
@@ -86,7 +106,9 @@
     already ending. With `Wait::Yes` it then blocks **until no remote terminal
     is left in the table and no client start is in progress, or 5 s have
     passed**, whichever comes first; what was already ending when it was called
-    makes no difference. `Wait::No` returns at once. Three callers, and no
+    makes no difference. Waiting on the table is sound because only the
+    routine's last step empties it of an ending terminal (above).
+    `wait_gone(id)` is the same wait for one id. `Wait::No` returns at once. Three callers, and no
     other: `main_closed` (`WindowEvent::Destroyed` of `main`: closes the gate,
     `Wait::No`), `main_page_loaded` (`Wait::No`), `app_exiting`
     (`RunEvent::Exit`: closes the gate, `Wait::Yes`). A static test compares
@@ -104,7 +126,14 @@
     none of the four processes alive, kills sent at 2005 to 2028 ms, 0 bytes;
     with every signal to the pane's own process refused, the routine gave up at
     5 s, and after the last step the stub read end of input and was gone,
-    where with revision 1's reader it stayed alive and attached. **Not run on
+    where with revision 1's reader it stayed alive and attached. Revision 3's
+    run (the review's probe with a monitor, extended; ONE terminal, the stub a
+    hangup-ignoring child, `end_all(No)` then `end_all(Yes)`): with revision
+    2's monitor `end_all(Yes)` returned at 100 ms (zsh) and 56 ms (bash) with
+    the table empty and the stub alive; with the rule above it returned at
+    2091 ms and 2095 ms, the kill sent at 2010 ms and 2012 ms, nothing alive,
+    0 bytes, and the monitor had sent its `exit` at 45 ms with the instance
+    left in the table. **Not run on
     Linux**, and not run with a real process of another user (it needs root).
   - A quit waits only while a remote terminal is in the table: about 0.1 s
     normally, about 2.1 s when a process ignores the hangup, 5 s at most. In the
@@ -133,4 +162,16 @@
     fixing the drop for every terminal inside F7 (a change to existing behaviour
     nobody approved); waiting, in `end_all(Yes)`, for the endings that call
     started (the commonest quit has started them all already, so it would wait
-    for nothing).
+    for nothing); a count of running endings in the gate, waited on in place
+    of the table (a second thing that must agree with the table, and the table
+    would lack an instance whose processes are still being ended).
+  - A stop of the reader can drop output that was in flight (the reader returns
+    end of output when its wake pipe is ready, even if the master is readable
+    in the same `poll`). That happens only at an ending, at a give-up, and
+    after the 1 s wait for a process that holds the terminal open; a natural
+    exit's output arrives whole, which SV-2 AC4's test asserts.
+  - A stated window (A2-m1): a connect the old page sent in the milliseconds
+    before a reload, whose gate check runs after the reload, is inserted with
+    no pane to hold it and stays until the main window closes or ADE quits.
+    Closing it needs the request to carry the page's load count (a sixth
+    command to read it); not built.

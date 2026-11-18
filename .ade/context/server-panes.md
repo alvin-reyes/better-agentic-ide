@@ -1,8 +1,8 @@
 # Server panes: the remote record, the mark, the states, the events
 
 Status: **proposed** with the F7 S1 design
-(`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, revision 2, not
-approved, awaiting a delta review). PRD: `docs/prd.md` F7, SV-2 to SV-6. Companion: `saved-servers.md`.
+(`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, revision 3, not
+approved, awaiting a re-check of finding A2-B1). PRD: `docs/prd.md` F7, SV-2 to SV-6. Companion: `saved-servers.md`.
 ADRs (provisional numbers): 0044, 0045, 0046. F3, F4 and the phone relay read tab
 state: read this before adding a reader of a tab's name, folder or panes.
 
@@ -16,7 +16,8 @@ interface RemoteRecord {
   state: "connecting" | "live" | "ended";
   notice?: "not-handed-over-yet" | "not-handed-over-another-program"; // not saved
   end?: { status: number | null; kind: string | null; by: "process" | "ended" }; // not saved
-  refusal?: { kind: string };                    // a refused Reconnect; not saved
+  refusal?: Kind;                                // a refused Reconnect, the WHOLE kind; not saved
+  origin?: "restored" | "reopened";              // why it is ended with no `end`; not saved
 }
 Pane.remote?: RemoteRecord     // present from creation; a pane never changes side
 Tab.serverNamed?: true         // ADE named the tab after a saved server
@@ -25,6 +26,15 @@ Tab.serverNamed?: true         // ADE named the tab after a saved server
 - **Remote pane:** a pane with `remote`. **Server tab:** `serverNamed === true` or
   any of its panes is remote. Read both from the tab's own record, never from the
   server list (`src/lib/serverTabs.ts`: `paneKind`, `remotePane`, `isServerTab`).
+- `refusal` is the kind as `server_connect` rejected with it, payload included
+  (`fields` with their reasons, `shell`, `cause`, `errno`: `saved-servers.md`,
+  Kinds), so a bar can print what the kind carries. It is cleared by the next
+  resolved Reconnect and replaced by the next refused one.
+- `origin` tells the three ways a pane can be ended: `end` present (its process
+  ended in this run); `origin: "restored"` (it came back from a saved session,
+  set by `loadSession`); `origin: "reopened"` (it came back from Reopen Closed
+  Tab, set by `reopenClosedTab`). Exactly one of `end` and `origin` is present
+  on an ended pane; a resolved Reconnect clears both.
 - In S1 a tab has at most one remote pane, the first pane of its own view.
 - `serverNamed` is cleared by a rename (a commit whose text differs from the
   current name; an equal one changes nothing) and by the close of the remote
@@ -38,7 +48,19 @@ Tab.serverNamed?: true         // ADE named the tab after a saved server
 
 **A remote terminal exists in Rust's table only while a pane holds its id.** The
 two bounded exceptions: while its `server_connect` has not been answered, and
-while the ending routine is running on it (at most 5 s).
+while the ending routine is running on it (at most 5 s). One stated window: a
+connect sent by a page in the milliseconds before it was reloaded can be
+inserted with no pane to hold it (design 1.5, 12).
+
+**How a remote terminal leaves the table: four ways, and no other.** The ending
+routine's last step, after an ending started (1) by a webview request, (2) by
+`end_all`, or (3) for a terminal inserted already ending; and (4) the monitor's
+removal after a natural exit, of a terminal **not** marked ending. **The
+monitor never removes a terminal marked ending**: it sends that terminal's
+`exit` when the pane's own process has gone and leaves the instance to the
+routine, which may still have a child to kill at 2 s. `end_all(Wait::Yes)` and
+`server_terminal_end` wait on the table, so this rule is what makes a quit wait
+for the kill.
 
 It is ended by one routine, `saved_servers::ending::end`, reached by:
 
@@ -50,18 +72,20 @@ It is ended by one routine, `saved_servers::ending::end`, reached by:
 | the main window destroyed | `ending::main_closed`: closes the gate, `end_all(Wait::No)` |
 | the main webview loads a page (a reload) | `ending::main_page_loaded` (Tauri's `on_page_load`, `Started`, webview `main`): `end_all(Wait::No)` and a new page count |
 | ADE exits | `ending::app_exiting`: closes the gate, `end_all(Wait::Yes)` |
-| a start that completes after the gate closed or the page changed | inserted already ending; the command rejects |
+| a start that completes after the gate closed or the page changed, or whose pane got another remote terminal meanwhile | inserted already ending, its `exit` saying `by: "ended"`; the command rejects (`terminal-not-started`, cause `closing` or `pane`) |
 
 `end_all(Wait::Yes)` returns when no remote terminal is left in the table and no
 client start is in progress, or 5 s have passed, whatever was already ending.
 A second `end` on a terminal returns at once. The webview makes one connect
-request per pane at a time.
+request per pane at a time: the in-flight mark is set **at the press**, before
+the list is re-read, and cleared at the answer.
 
 ## Saved in `ade-session`
 
 A remote pane: `{ id, serializedBuffer?, remote: { serverId, destination, summary,
 state } }`. A tab: `serverNamed: true` when set. Restored: `state` becomes
-`"ended"`, no PTY, nothing started. A closed tab's in-memory record keeps
+`"ended"`, `origin: "restored"`, no PTY, nothing started (`notice`, `end`,
+`refusal` and `origin` are never saved). A closed tab's in-memory record keeps
 `{ serverNamed, serverId, destination, summary }` and no state.
 
 ## Events on a remote terminal's channel (`PtyEvent`)
@@ -87,7 +111,17 @@ ended it or when the ending routine gave up on a process it could not end. One
 thread per remote terminal sends `live`, `notice` and `exit`, so their order is:
 zero or one `notice` of each kind, at most one `live`, exactly one `exit`. The
 `exit` is the last event on the channel: the terminal's reader has ended or
-been stopped before it is sent (at most 1 s after the process ended).
+been stopped before it is sent. After a natural exit that is at most 1 s after
+the process ended, and **the terminal is already out of Rust's table when the
+`exit` is sent**, so a Reconnect made from the event is never refused for "this
+pane has a terminal". When the routine gave up (no process ended), the `exit`
+follows the reader's stop at once. A stop can drop output still in flight; a
+natural exit's output arrives whole.
+
+**What Better Terminal draws in a server pane is drawn on the display only.**
+The `[Process exited]` line, and the blank line between the old output and the
+new on a Reconnect, are written to the pane's xterm (`term.write`) by the
+webview. Neither goes through `writePty` or `write_pty`; 0 bytes reach the PTY.
 
 States: `connecting` from a resolved `server_connect`; `live` on `live`; `ended`
 on `exit`. A pane is never shown live without a `live` event. `live`, `notice`

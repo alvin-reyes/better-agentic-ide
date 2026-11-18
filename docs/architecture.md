@@ -18,7 +18,7 @@ designs. The designs themselves stay where this repo keeps them: feature designs
 | F3 Per-view file browser and preview panel, slice S1 (`docs/prd.md` F3) | `docs/superpowers/specs/2026-11-10-per-view-viewer-design.md` (revision 2.1 plus the Q1 change, approved by the owner 2026-11-10; Q1 opener from the source tab yes, Q3 S2 HTML spike plan yes; adds no verification line) | `viewer-state.md` | 0031, 0032 (Accepted 2026-11-10) |
 | Sub-terminals and `ade open` | `docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md` | `terminal-open.md` | `0014-terminals-open-terminals-through-the-hook-endpoint` |
 | Desktop end-to-end tests | `docs/superpowers/specs/2026-11-09-desktop-e2e-design.md` (revision 1, proposed 2026-11-09; not approved; adds no verification line) | `e2e-control-channel.md` (written by its first story) | `0030-desktop-e2e-webdriver-on-linux-and-a-compiled-out-test-channel` (Proposed) |
-| F7 Saved servers (SSH), slice S1 (`docs/prd.md` F7) | `docs/superpowers/specs/2026-11-18-saved-servers-design.md` (revision 2, proposed 2026-11-18; **not approved**; answers the review of revision 1 and awaits a delta review; adds no verification line; proposes one runner prerequisite and a same-commit CI gate for its process stories, below, neither in force) | `saved-servers.md`, `server-panes.md` (both proposed) | `0043-saved-servers-live-in-one-rust-owned-file-outside-the-synced-state`, `0044-a-connection-is-the-users-login-shell-replacing-itself-with-ssh`, `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`, `0046-the-hand-over-is-judged-once-from-the-panes-own-argument-list` (all Proposed; numbers provisional) |
+| F7 Saved servers (SSH), slice S1 (`docs/prd.md` F7) | `docs/superpowers/specs/2026-11-18-saved-servers-design.md` (revision 3, proposed 2026-11-18; **not approved**; fixes the delta review's one blocking finding, A2-B1, and awaits a re-check of it; adds no verification line; proposes one runner prerequisite and a same-commit CI gate for its process stories, below, neither in force) | `saved-servers.md`, `server-panes.md` (both proposed) | `0043-saved-servers-live-in-one-rust-owned-file-outside-the-synced-state`, `0044-a-connection-is-the-users-login-shell-replacing-itself-with-ssh`, `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`, `0046-the-hand-over-is-judged-once-from-the-panes-own-argument-list` (all Proposed; numbers provisional) |
 | Earlier features | `docs/superpowers/specs/`, `_bmad-output/plan-*.md` | `.ade/context/` | `.ade/context/decisions/` |
 
 ## Verification command
@@ -408,11 +408,11 @@ blind spot (design 15.2), which is part of what green means.
 
 ### F7 S1 stories: PROPOSED, NOT in force (2026-11-18; needs the owner's approval)
 
-Proposed with the F7 S1 design, revision 2
+Proposed with the F7 S1 design, revision 3
 (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, sections 2.6 and
 17). **Nothing here is in force.** The command in force above is unchanged and
 stays the gate for every story until the owner approves this. The design is not
-approved and awaits a delta review.
+approved and awaits a re-check of the delta review's blocking finding A2-B1.
 
 - **No line is added.** `cd src-tauri && cargo test` already builds and runs F7's
   Rust tests, its one integration test binary
@@ -435,13 +435,22 @@ approved and awaits a delta review.
   > locally: **a green run of the `CI` workflow's two backend jobs, `Backend
   > (cargo test)` (Linux, `ubuntu-22.04`) and `Backend on macOS (cargo test)`, on
   > the story's final commit**, the same commit the local lines ran on. QA
-  > produces and cites the runs as F1's gate does ("F1 stories" above, items 3
-  > and 4: push the commit to its branch, list the commit's runs, start `ci.yml`
-  > once with `gh workflow run ci.yml --ref <branch>` if none is running, count
-  > every `workflow_dispatch` and `push` run on the commit, and record each
-  > run's URL and the two jobs' results by their display names in the story's
-  > Verification section). A red or cancelled run of either job on that commit
-  > makes the story not Done. F7's process tests are `#[cfg(unix)]`, both jobs
+  > produces and cites the runs by **the procedure of F1's gate, item 4** ("F1
+  > stories" above), **applied to F7's own two jobs** wherever that item says
+  > "the three backend jobs of item 3": push the commit to its branch, list the
+  > commit's runs, start `ci.yml` once with `gh workflow run ci.yml --ref
+  > <branch>` if none is running, count every `workflow_dispatch` and `push`
+  > run on the commit, and record each run's URL and the two jobs' results by
+  > their display names in the story's Verification section. **F1's item 3
+  > does not apply to F7:** not its third (Windows) job, and not its
+  > platform-tests regime (`platform-tests.txt`, the `require_*()` helpers, the
+  > static never-skip test). **Every counted run must be `attempt` 1:** a
+  > re-run of a failed job does not count, and one red or cancelled run of
+  > either job on that commit makes the commit red and the story not Done; a
+  > fix is a new commit. F7's process tests assert no tight wall-clock bound
+  > (design 1.7): only lower bounds that are requirements and upper bounds
+  > that are the routine's own deadlines, so that a slow runner does not cost
+  > a commit. F7's process tests are `#[cfg(unix)]`, both jobs
   > are Unix, and each test fails when `zsh` or `bash` is missing, so neither
   > job can pass by leaving them out.
 
@@ -471,10 +480,11 @@ this list is only ids and what each needs):
 
 | Story | What | Needs |
 |---|---|---|
-| R1 | rules, quoter, grammar, kinds, wire types and their fixtures, the text test | none |
-| R2 | the store, the three list commands, availability | R1 |
-| R3a | the remote terminal and `end` (infra) | R1 |
-| R3b | `end_all`, the gate, the three app handlers (infra) | R3a |
+| C1 | the shared dialog components: `ConfirmDialog` (Esc stack, role, trap, focus return, Enter activates the focused button only) and `useFocusTrap` (skips `tabindex="-1"`, one trap at a time). **Changes existing behaviour for today's three close questions; not sharded until the owner and the product manager answer design decision D-15** | none |
+| R1 | rules with a reason code per failing field, quoter, grammar, kinds, wire types and their fixtures, the text test | none |
+| R2 | the store, the three list commands (rows with `problems` and `fileIndex`), availability | R1 |
+| R3a | the remote terminal, its monitor (which never removes an ending terminal) and `end` (infra) | R1 |
+| R3b | `end_all`, the gate's `admit` and `insert`, the three app handlers; the one-terminal quit tests (infra) | R3a |
 | R4 | the client start | R1, R2, R3b; D1 before its first step |
 | R5 | the hand-over check | R4 |
 | R6 | the session export strip and the outward name | W1, W2 |
@@ -482,9 +492,13 @@ this list is only ids and what each needs):
 | W2 | session save and restore, Reopen | W1 |
 | W3 | connect, events, the remote branch, Reconnect's store side | W1, W2, R1, R3a |
 | W4 | writes, file links, the folder, the close confirm | W1 |
-| W5 | the list overlay and the palette entries | W3, the UX spec |
-| W6 | the marks, Reconnect and the messages | W1, W3, the UX spec |
+| W5 | the list overlay and the palette entries | C1, W3, the UX spec |
+| W6 | the marks, Reconnect and the messages | C1, W1, W3, the UX spec |
 | D1 | DevOps: `zsh` on the Linux Backend CI job | none |
 
-Order: R1, W1 and D1 together; then R2, R3a, W2, W4; then R3b, R6, W3; then R4,
-W5, W6; then R5. There is no tests-only story.
+Order: R1, W1, D1 and C1 together (C1 once D-15 is answered; Done before W5 and
+W6 start); then R2, R3a, W2, W4; then R3b, R6, W3; then R4, W5, W6; then R5.
+There is no tests-only story. W3 is a candidate to split at sharding (design
+section 17 names the cut). Stories W2, R1, R4, W3 and W6 are not sharded
+against the PRD's old sentences for design decisions D-1, D-7, D-9 and D-11,
+which are flagged for the owner and being written into the PRD.

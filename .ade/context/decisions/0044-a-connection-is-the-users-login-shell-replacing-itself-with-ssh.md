@@ -1,8 +1,9 @@
 # 0044: A connection is the user's login shell replacing itself with ssh
 
-- Status: Proposed (2026-11-18), with the F7 S1 design, revision 2
+- Status: Proposed (2026-11-18), with the F7 S1 design, revision 3
   (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 2). Not
-  approved; awaiting a delta review. The number is provisional; cite this ADR by
+  approved; awaiting a re-check of the delta review's finding A2-B1 (ADR
+  `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`). The number is provisional; cite this ADR by
   its slug.
 - Context:
   - The owner chose the machine's own SSH client in an ADE terminal, and the
@@ -47,7 +48,8 @@
     by the home folder. The replacement is made only when the home folder is
     set, valid UTF-8 and absolute, and the expanded path must itself pass the
     identity-file rule. Otherwise the connect is refused before any start with
-    "a saved server failed its checks", field `identityFile`. So no argument
+    "a saved server failed its checks", `{ field: "identityFile", reason:
+    "home-unusable" }`. So no argument
     ADE passes holds a character outside `0x20`-`0x7e` (SV-7 AC3).
   - **The environment.** `client_env(base, remove, macos)` starts from the base it
     is given and nothing else; drops every `ADE_*` name and every name in

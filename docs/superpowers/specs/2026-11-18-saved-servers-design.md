@@ -1,11 +1,12 @@
 # F7 Saved servers (SSH), slice S1: design
 
-- **Status:** revision 2, proposed 2026-11-18. **Not approved.** It answers the
-  adversarial review of revision 1 (blocked: 2 blocking, 7 major, 19 minor) and
-  **awaits a delta review**. Section 19 lists every finding with its answer. The
-  three hard parts the review re-ran and found sound (ending without writing, the
-  client start, the observation rule) are not redesigned; what changed in them is
-  named in section 19.
+- **Status:** revision 3, proposed 2026-11-18. **Not approved. Awaiting a
+  re-check of A2-B1.** Revision 2 answered the adversarial review of revision 1
+  (section 19). Its delta review blocked on one finding, A2-B1, with no majors
+  and fourteen minors; revision 3 fixes A2-B1, answers the minors, and settles
+  the contract points the review of the UX draft put to the design (section 20
+  lists every finding of this round with its answer; section 21 is "Answers to
+  the UX review"). Nothing that held is redesigned.
 - **Covers:** `docs/prd.md` F7, slice **S1** only (SV-1 to SV-9, revision 7, approved
   by the owner 2026-11-18). S1b (SV-13) and S2 (SV-12) are not designed here;
   section 14 says what S1's seams leave for S1b.
@@ -27,6 +28,9 @@
   review" and taken as fact. Revision 2 ran three things anew, each named where
   it is used: `end_all(No)` then `end_all(Yes)` (1.5), the stopped reader and the
   dropped handles as the last step (1.4), and the quoted-alias row (2.1).
+  Revision 3 ran one thing anew: the one-terminal quit with a monitor, under
+  both shells, before and after the fix (1.5). The shared dialog components
+  (section 22) were **read, not run**.
   **Nothing was run on Linux**, by the architect or by the review (no Linux
   machine or container was available); section 16 lists what that leaves
   unverified and section 17 says how the stories find out first. Code references
@@ -83,9 +87,13 @@ and ended only by one routine. Four rules (ADR 0045):
    stayed blocked in `read` on a duplicate nothing could close) and so left a
    process it could not signal with a working terminal for good.
 4. **One routine, `saved_servers::ending::end`, is the only way a remote terminal
-   leaves the table while its process may be alive.** `kill_pty` for a remote
-   terminal's id starts it (1.5), so no webview path, old or new, can forget a
-   remote terminal the way a local one is forgotten.
+   leaves the table while the pane's own process is alive, and the only way a
+   terminal marked ending leaves it at all** (revision 3; review A2-B1, A2-m13).
+   `kill_pty` for a remote terminal's id starts it (1.5), so no webview path, old
+   or new, can forget a remote terminal the way a local one is forgotten. The
+   one other way out of the table is the monitor's own removal after a natural
+   exit, and only of a terminal that is **not** marked ending (3.6); 1.5 lists
+   the four ways out.
 
 *Rejected:* (a) reuse `kill_pty` and patch the writer for every terminal. It fixes
 today's defect for all terminals, which is a change to existing behaviour F7 does
@@ -136,7 +144,7 @@ it waits through `end_all`, not by calling `end`).
 | 2 | Compute the set (1.3). Send each member `SIGHUP`, then `SIGCONT`, by process id, after the start-time check. A signal the system refuses (`EPERM`: a process of another user) is noted and the routine goes on. | A stopped job does not act on a hangup until continued. By id, not `killpg`, so only members of this session are signalled. |
 | 3 | Poll: recompute the set (with the `fg` read in step 1 and the current one). Empty: go to 5. Otherwise sleep 50 ms, **or to the 2 s deadline if that is sooner**. | A hangup handler may have changed the foreground group. Sleeping to the deadline means the kill is sent at 2 s, not at the next poll after it (review A-m6). |
 | 4 | At 2 s from step 1: send `SIGKILL` to every member still alive, once; keep polling every 50 ms. At 5 s: stop polling whatever is left. | SV-2 AC3: an uncatchable kill at 2 s, none alive within 5 s. |
-| 5 | **Last, always:** if members were left at 5 s, tell the monitor `GaveUp` (3.4): the monitor stops the reader and then sends the pane its `exit` (3.6). Take the instance out of the table; stop the reader through the wake pipe and join it (stopping is idempotent: whoever comes second, the routine or the monitor, finds it stopped); drop the instance: the master, the reader's duplicate and (when the writer thread next wakes, which the dropped queue causes) the writer's duplicate are closed. Notify the gate's condition variable. Return `Gone`, or `GaveUp`. | Dropping writes 0 bytes (rule 1). With no handle of ADE's left, the kernel hangs the terminal up for whatever is still attached (rule 3). |
+| 5 | **Last, always, and done by nobody else for a terminal marked ending** (review A2-B1): the monitor never takes such a terminal out of the table, whatever it has seen exit (3.6). If members were left at 5 s, tell the monitor `GaveUp` (3.4): the monitor stops the reader and then sends the pane its `exit` (3.6). Take the instance out of the table; stop the reader through the wake pipe and join it (stopping is idempotent: whoever comes second, the routine or the monitor, finds it stopped); drop the instance: the master, the reader's duplicate and (when the writer thread next wakes, which the dropped queue causes) the writer's duplicate are closed. Notify the gate's condition variable. Return `Gone`, or `GaveUp`. | Dropping writes 0 bytes (rule 1). With no handle of ADE's left, the kernel hangs the terminal up for whatever is still attached (rule 3). |
 
 The pane's exit event comes from the monitor (section 3.6): `by: "ended"` and no
 kind, so an End leaves the pane ended with its output. It is sent once, whether
@@ -202,8 +210,12 @@ pipe's write end was dropped.
 ### 1.5 Who calls it, and the invariant
 
 **The invariant (review A-B1).** A remote terminal exists in Rust's table only
-while a pane holds its id. Exactly, every remote terminal in the table is in one
-of three conditions, and each of the other two is bounded:
+while a pane holds its id. With one stated window (route 3, below: a request
+the old page sent in the milliseconds before a reload; review A2-m1), every
+remote terminal in the table is in one
+of three conditions, and each of the other two is bounded (a terminal whose own
+process has exited by itself is still **held** until the monitor has removed
+it, which is before the pane is told, 3.6):
 
 - **held:** a pane in the main window's store has its id as `ptyId`;
 - **starting:** its `server_connect` has not yet been answered (the webview's
@@ -217,7 +229,9 @@ held the ids is gone or replaced.
 **The gate.** One small state beside the table, `ending::Gate`, read and written
 only while the table lock is held: `closed` (the main window was destroyed, or
 ADE is exiting), `page` (a count of the main webview's page loads) and `starting`
-(client starts between their spawn and their insert). Its condition variable is
+(client starts between their admission and their insert; it is subtracted on
+**every** way out of a start, by a guard, a failed spawn included: review
+A2-m2). Its condition variable is
 used with the table's mutex and is notified whenever a remote terminal leaves the
 table or `starting` drops.
 
@@ -226,11 +240,11 @@ table or `starting` drops.
 | End (SV-2 AC9) | webview `invoke("server_terminal_end", { args: { id } })`; `#[tauri::command(async)]`, so it runs off the UI thread. It calls `end`; on `AlreadyEnding` it calls `wait_gone(id, 5 s)`. It resolves when the terminal has left the table or 5 s have passed |
 | A confirmed close of the pane; a close of the tab | The caller reads "this pane is remote" from the pane's record **before** the store update that removes it, and passes it: `destroyInstance(paneId, storePtyId, remote)` (`src/hooks/useTerminal.ts:158-163`). With `remote` true it sends `server_terminal_end` in place of `kill_pty`, not awaited. `closePane` (`tabStore.ts:523`) and `closeTab` (`tabStore.ts:422-423`) both call it from a lazy import that runs after their `set`, which is why the fact is captured first and not read from the store there (review A-M1) |
 | A resolved connect with no pane to hold it (route 1) | `serverSessions.ts` sends `server_terminal_end` at once |
-| Any other `kill_pty` for a remote terminal's id | `kill` in `pty.rs` (`pty.rs:511-515`) reads the instance's `remote` under the table lock. Remote: it calls `ending::start(id)`, which marks the terminal ending and runs `end`'s remaining steps **on a thread of its own**, and returns at once. `kill_pty` is a sync command and runs on the main thread (`pty.rs:503`, no `async`), so it never blocks there. Not remote: today's `remove`, unchanged |
+| Any other `kill_pty` for a remote terminal's id | `kill` in `pty.rs` (`pty.rs:511-515`) reads the instance's `remote` under the table lock. Remote: it calls `ending::start(id)`, which does step 1 under the lock (the mark, the facts, `EndedByUser` to the monitor) and runs steps 2 to 5 **on a thread of its own**, and returns at once. `kill_pty` is a sync command and runs on the main thread (`pty.rs:503`, no `async`), so it never blocks there. Not remote: today's `remove`, unchanged |
 | The main window is destroyed | `tauri::Builder::on_window_event`: `WindowEvent::Destroyed` for the window labelled `main` calls `ending::main_closed`, which sets `gate.closed` and calls `end_all(.., Wait::No)` |
 | The main webview loads a page (route 3) | `tauri::Builder::on_page_load`: `PageLoadEvent::Started` for the webview labelled `main` calls `ending::main_page_loaded`, which adds 1 to `gate.page` and calls `end_all(.., Wait::No)` |
 | Better Terminal exits | `App::run`'s callback: `RunEvent::Exit` calls `ending::app_exiting`, which sets `gate.closed` and calls `end_all(.., Wait::Yes)` |
-| A client start that completes after the gate moved (route 2) | `server_connect`'s insert (2.5 step 7) puts the instance in the table already marked ending and calls `ending::start` on it |
+| A client start that completes after the gate moved (route 2) | `server_connect`'s insert (2.5 step 7) puts the instance in the table already marked ending, gives its new monitor `EndedByUser` as its first input (so its one `exit` carries `by: "ended"`; review A2-m14), and calls `ending::start` on it, which finds the mark set and runs steps 2 to 5 |
 
 **`end_all(table, gate, wait)`** (review A-B2), the **teardown routine** of SV-2
 AC3's static test:
@@ -245,6 +259,36 @@ AC3's static test:
 
 `wait_gone(id, limit)` is the same wait for one id.
 
+**Waiting on the table is right only because of who may empty it** (revision 3;
+review A2-B1, blocking). A remote terminal leaves the table in exactly four
+ways:
+
+1. `end`'s last step (1.4 step 5), for an ending a webview request started: End,
+   a close, route 1, any other `kill_pty`;
+2. the same last step, for an ending `end_all` started: the main window
+   destroyed, a page load, the exit;
+3. the same last step, for an instance inserted already marked ending (route 2,
+   and route 3's start in flight);
+4. **the monitor's removal after a natural exit** (3.6): the pane's own process
+   ended by itself and the terminal is **not** marked ending. The monitor reads
+   the mark and removes the instance in one hold of the table lock.
+
+**The monitor never removes a terminal marked ending.** When the pane's own
+process exits during an ending, the monitor still sends the pane its `exit`
+(3.6), and leaves the instance where it is; `end` goes on polling the set, kills
+at 2 s what is left, and removes the instance in its last step. So "in the
+table" covers every process of the pane the routine has not yet seen gone, and
+`end_all(Yes)` and `wait_gone` cannot return while one is alive short of 5 s.
+Revision 2 let the monitor remove the instance on the leader's exit; with a
+child that ignores the hangup the table was then empty some tens of
+milliseconds into a quit, `end_all(Yes)` returned, ADE exited and the `end`
+thread died 2 s before its kill. The review ran that (30 to 58 ms, the child
+alive). *Rejected:* a count of running endings kept in the gate, waited on in
+place of the table. It works, but adds a second thing that must agree with the
+table, and leaves the table briefly without an instance whose processes are
+still being ended, which the per-pane rule and `wait_gone` would then each need
+their own answer for.
+
 So the commonest quit, a close of the main window, is: `Destroyed`
 (`end_all(No)`: every remote terminal starts ending, the handler returns), then
 `RunEvent::Exit` (`end_all(Yes)`: nothing new to start, and it waits until the
@@ -256,6 +300,23 @@ process in one terminal and as a child in another, `end_all(No)` then at once
 |---|---|---|---|---|---|---|
 | `zsh` | 0 ms, 2 in the table | 2096 ms | 0 | none of the four | 2005 ms, 2022 ms | 0, 0 |
 | `bash` | 0 ms, 2 in the table | 2096 ms | 0 | none of the four | 2017 ms, 2028 ms | 0, 0 |
+
+**Run in revision 3** (the review's probe with a monitor, extended: ONE remote
+terminal, the stub a hangup-ignoring **child** of a shell that obeys, the
+monitor on its own thread, `end_all(No)` then at once `end_all(Yes)`). "As
+revision 2" is the monitor of revision 2's 3.6; "as revision 3" is the rule
+above:
+
+| Monitor | Shell | Leader seen exited | `end_all(Yes)` returned | In the table then | Alive then (leader, stub) | Kill sent at | Bytes |
+|---|---|---|---|---|---|---|---|
+| as revision 2 | `zsh` | 100 ms | **100 ms** | 0 | no, **yes** | never | 0 |
+| as revision 2 | `bash` | 56 ms | **56 ms** | 0 | no, **yes** | never | 0 |
+| as revision 3 | `zsh` | 45 ms; exit sent, instance left | 2091 ms | 0 | no, no | 2010 ms | 0 |
+| as revision 3 | `bash` | 45 ms; exit sent, instance left | 2095 ms | 0 | no, no | 2012 ms | 0 |
+
+The two-terminal run above could not show the defect: its other terminal, whose
+own process ignores the hangup, stays in the table to 2.07 s and covers for the
+child's. The tests of 1.7 are therefore one terminal each.
 
 In the give-up case (a process that may not be signalled) `end_all(Yes)` returned
 at 5003 ms with the terminal still in the table and the routine's last step 15
@@ -271,15 +332,19 @@ the kernel's hangup is the same one the last step would have caused.
    same step in which it would give it the id**. Not there, or no longer an
    ended remote pane with no PTY: it sends `server_terminal_end` for the new id
    at once, drops the buffered output, and updates nothing. A second Reconnect
-   on a pane while one is in flight makes no request (8.4). Rust backs this up:
-   the request carries the pane (2.5), and a start for a pane that already has a
-   remote terminal that is not ending is refused before any process is started.
+   on a pane while one is in flight makes no request: the in-flight mark is set
+   **at the press**, before the awaited list read (8.4; review A2-m3). Rust
+   backs this up: the request carries the pane (2.5), and a start for a pane
+   that already has a remote terminal that is not ending is refused before any
+   process is started, and checked **again at the insert**, where a second
+   start that got past the first check is inserted already ending.
 2. **The main window is destroyed while a connect is in flight.** `server_connect`
-   reads `gate.closed` and `gate.page` under the table lock before it spawns,
-   refuses if the gate is closed, and counts itself in `gate.starting`. At the
-   insert, under the same lock, it reads them again: if `closed` is set or `page`
-   has changed, the instance is inserted already marked ending and
-   `ending::start` runs on it; the command rejects (2.5). Because the start is
+   calls `ending::admit` before it spawns: under the table lock it reads
+   `gate.closed` and `gate.page`, refuses if the gate is closed, and counts
+   itself in `gate.starting`. At `ending::insert`, under the same lock, they are
+   read again: if `closed` is set or `page` has changed, the instance is
+   inserted already marked ending and `ending::start` runs on it; the command
+   rejects (2.5). Because the start is
    counted, and the late instance is in the table, a quit's `end_all(Yes)` waits
    for it as for any other.
 3. **The main webview loads a page** (`ErrorBoundary.tsx:31`'s Reload button, in
@@ -289,9 +354,29 @@ the kernel's hangup is the same one the last step would have caused.
    now also what Rust holds: nothing. Reconnect therefore starts the only
    connection, not a second one.
 
+   **The window that is left, stated** (review A2-m1). The gate's `page` is
+   first read when a request is admitted. A request the old page sent just
+   before the reload, admitted just after `Started`, reads the new count, finds
+   it unchanged at its insert, and is inserted with no pane to hold it. If it
+   was a Reconnect, the restored pane has the same id, and its own Reconnect is
+   refused (`terminal-not-started`, cause `pane`) until the main window closes
+   or ADE quits, either of which ends the orphan. The window is the few
+   milliseconds between a press and its admission, and needs a reload at that
+   instant: in production the error screen's Reload is pressed by hand, long
+   after; in development a hot reload can hit it. **Accepted, not closed.**
+   Closing it needs the page to tell Rust which load it belongs to: a sixth
+   command returning the count at load, the count carried in `ConnectArgs`, a
+   mismatch refused before the spawn. That is one command and one member, and
+   it can be added without changing anything else here if the owner wants the
+   word "exactly" back.
+
+   **For developers:** a full reload of the dev server's page ends every
+   server connection, by design of this route (review A2-m4).
+
    *How Rust learns of the load.* Tauri's page-load hook: `Builder::on_page_load`
-   (`tauri` 2.10.3 `src/app.rs:1651`) is called with `PageLoadEvent::Started` when
-   the webview commits a navigation (read: `wry` 0.54.4
+   (`tauri` 2.10.2, the version in `src-tauri/Cargo.lock`, `src/app.rs:1651`; the
+   review read it there and found 2.10.3's the same) is called with `PageLoadEvent::Started` when
+   the webview commits a navigation (read: `wry` 0.54.2, the locked version,
    `src/wkwebview/navigation.rs:17-25`, `did_commit_navigation`; on Linux
    `src/webkitgtk/mod.rs:477`). It needs nothing from the page, so it works when
    the old page had crashed. The first load at launch finds an empty table.
@@ -362,16 +447,30 @@ as a defect against this design.
 | the set of 1.3 over a table of rows | Rust, pure | leader, foreground members, other-session and zombie rows; a changed start time is not a member |
 | `end` against fixture programs started directly in a remote terminal (the recording stub as leader; `sh -c` with the stub as a child; each ignoring the hangup; an own-session process) | Rust, Unix, real PTY | 0 bytes recorded; none alive at 5 s; the kill only in the ignoring cases, and not before 2 s; own-session alive; `write_pty` after the call queues nothing; a second `end` returns `AlreadyEnding` at once; exactly one `exit`, with `by: "ended"`, and no event after it |
 | the last step (review A-M6): a stub as leader with every signal to it refused through the routine's signal seam, ending when it reads end of input | Rust, Unix, real PTY | `end` returns `GaveUp` at 5 s; the reader thread has ended; the stub read end of input and is not alive 1 s later; one `exit` with `by: "ended"` was sent; the id is no longer in the table |
-| **`end_all(No)` then at once `end_all(Yes)`** (review A-B2): two remote terminals, a hangup-ignoring stub as leader in one and as a child in the other | Rust, Unix, real PTY | the first call returns in under 100 ms with both still in the table; the second returns no sooner than 2 s and no later than 3 s after the first; the table then holds no remote terminal; none of the four processes is alive; 0 bytes |
-| `end_all(Yes)` with an empty table, and with a start counted in `gate.starting` that inserts 300 ms later | Rust, Unix | returns at once; returns only after the late instance has left |
-| the gate at the insert (routes 2 and 3): `main_closed`, and again `main_page_loaded`, called between a start's spawn and its insert (the test holds the start at a seam) | Rust, Unix, real PTY | the command rejects; the instance is ended by `end` (0 bytes, none alive); the table is empty; with `closed` set a new `server_connect` starts 0 processes |
+| **`end_all(No)` then at once `end_all(Yes)`, the child case** (review A2-B1): ONE remote terminal with its monitor and waiter running, the stub a hangup-ignoring child of an `sh` that obeys the hangup | Rust, Unix, real PTY; story R3b | the first call returns with the terminal still in the table and before the 2 s deadline; the terminal is **still in the table** 500 ms after the first call although its leader is no longer alive; the second call returns **no sooner than 2 s** after the first and before the 5 s stop; the table then holds no remote terminal; neither the shell nor the stub is alive; exactly one `exit`, `by: "ended"`; 0 bytes |
+| **the same, the leader case** (review A-B2; split from the child case so neither covers for the other): ONE remote terminal, a hangup-ignoring stub as the pane's own process | Rust, Unix, real PTY | the same assertions, bar the "leader no longer alive" clause |
+| the monitor's two removals (review A2-B1, A2-m5, A2-m13): (a) a fixture terminal whose process exits by itself; (b) one terminal, the stub a hangup-ignoring child of an `sh` that obeys, ended by `end` | Rust, Unix, real PTY; story R3a | (a) when the `exit` event is received the id is already out of the table, so a start for the same pane made from the event's handler passes the per-pane rule; (b) after the monitor has sent its `exit` the id is still in the table and marked ending |
+| `end_all(Yes)` with an empty table, and with a start counted in `gate.starting` that inserts 300 ms later | Rust, Unix | returns before the 2 s deadline; returns only after the late instance has left |
+| the gate's two functions, on fixture terminals (review A2-m8): `ending::admit(pane)` then `ending::insert(admission, instance)`, with `main_closed`, and again `main_page_loaded`, called between the two | Rust, Unix, real PTY; story R3b, which builds both functions | `insert` returns the `closing` refusal; the instance is in the table marked ending and is ended by `end` (0 bytes, none alive, one `exit` with `by: "ended"`); the table is then empty; with `closed` set, `admit` refuses and `gate.starting` is unchanged |
+| `gate.starting` on every way out (review A2-m2): an admission dropped without an insert (a failed spawn; a monitor thread that could not start) | Rust | `starting` is back to its value before; a waiting `end_all(Yes)` is woken and returns |
+| the same two gate tests through the command, with the stub: a late start, a closed gate | Rust, Unix, `zsh` and `bash`; story R4, which builds `server_connect` | the command rejects with `terminal-not-started`, cause `closing`; 0 stub records are left alive; with `closed` set a new `server_connect` starts 0 processes |
 | `main_page_loaded` with two live remote terminals and one local terminal | Rust, Unix, real PTY | both remote terminals are ended; the local terminal is untouched and still in the table |
-| the per-pane rule (route 1's backstop): a second start for a pane whose remote terminal is not ending | Rust, Unix | refused; 0 stub records for it; the first terminal untouched |
-| `kill` (review A-M1): for a remote id with a hangup-ignoring stub; for a local terminal's id | Rust, Unix, real PTY | remote: `kill` returns in under 100 ms, the terminal is marked ending and still in the table, and is gone by 3 s; local: the instance is out of the table when `kill` returns and its process was sent no signal (alive 300 ms later), as today |
+| the per-pane rule (route 1's backstop), on fixture terminals: `admit` for a pane whose remote terminal is not ending; and two admissions for one pane, both granted before either insert (review A2-m3) | Rust, Unix; story R3b | the first case: refused with cause `pane`, the first terminal untouched; the second: the first insert succeeds, the second is inserted already ending and refused with cause `pane`, and one terminal for the pane is left |
+| `kill` (review A-M1): for a remote id with a hangup-ignoring stub; for a local terminal's id | Rust, Unix, real PTY | remote: `kill` returns before the 2 s deadline with the terminal marked ending and still in the table, and it is gone before the 5 s stop; local: the instance is out of the table when `kill` returns and its process was sent no signal (alive 300 ms later), as today |
 | SV-2 AC3's matrix through a real client start (live; connecting as a child; connecting replaced; each ignoring), ended by `server_terminal_end`, by `kill_pty`, by `main_closed` and by `app_exiting` | Rust, Unix, `zsh` and `bash`; in story R5, which has the client start and the states | the same outcomes |
 | the wiring test of 1.5 | Rust, static | the three `end_all` sites and their three callers |
 | a confirmed close and a tab close each send one `server_terminal_end` for the pane's PTY id, 0 `kill_pty` for it and 0 `write_pty`; a local pane's close still sends `kill_pty` | TypeScript, store | section 8.3 |
 | a Reconnect whose pane was closed before the connect resolved (route 1): by `closePane`, and by `closeTab` | TypeScript, store | exactly one `server_terminal_end`, for the id the connect returned; no pane, tab or session buffer holds that id |
+
+**Wall-clock bounds in these tests** (review A2-m6). They run on shared CI
+runners, where a thread can be held for hundreds of milliseconds. So every
+bound is one of three kinds, and no test asserts "under 100 ms": (a) a **lower**
+bound that is the requirement ("no sooner than 2 s"), which a slow runner
+cannot break; (b) an **upper** bound that is another deadline of the routine
+("before the 2 s deadline" for a call that must not wait; "before the 5 s
+stop" for an ending that must not give up), which leaves seconds of room; (c)
+an order ("still in the table after the monitor's `exit`"). The times the runs
+above report (30 to 120 ms, 2005 to 2028 ms) are evidence, not assertions.
 
 ### 1.8 A note for whoever owns `pty.rs` (not an F7 requirement)
 
@@ -608,25 +707,37 @@ The order inside, each refusal before any process exists:
 2. Load the store: "the server list could not be read".
 3. Find the identifier: "that saved server no longer exists".
 4. `rules::check` on the record (section 6): "a saved server failed its checks",
-   with the field's name.
+   with every failing field and its reason code (the same function and the
+   same list a refused save gets).
 5. `supported_shell`: "shell not supported".
 6. Build the grammar and the instruction (section 6: a record whose identity file
-   cannot be expanded is refused here as step 4's kind, field `identityFile`) and
-   the environment. Then, under the table lock (1.5): if the gate is closed, or
-   `paneId` already has a remote terminal that is not ending, refuse with "could
-   not start a terminal" and no error number; otherwise note `gate.page` and add
-   1 to `gate.starting`. Open the terminal; spawn in the home folder: "could not
-   start a terminal", carrying the error number when the library's error holds
-   one (and when `HOME` is unset, with none).
-7. Under the table lock again: subtract 1 from `gate.starting`; insert the remote
-   instance **with no `/open` request id** and start its reader, writer, waiter
-   and monitor (section 3). **If the gate was closed meanwhile or `gate.page`
-   changed,** the instance is inserted already marked ending, `ending::start`
-   runs on it, and the command rejects with "could not start a terminal" and no
-   error number. That one refusal is not "before any start": a shell was started
-   and is being ended by the routine. Its requester no longer exists (the window
-   is destroyed or the page was replaced), so nobody is shown it; section 7's
-   table says so.
+   cannot be expanded is refused here as step 4's kind, with `{ field:
+   "identityFile", reason: "home-unusable" }`) and the environment. Then
+   **`ending::admit(table, gate, paneId) -> Result<Admission, Kind>`**, under
+   the table lock (1.5): if the gate is closed, refuse with "could not start a
+   terminal", cause `closing`; if `paneId` already has a remote terminal that
+   is not ending, refuse with cause `pane`; otherwise note `gate.page` and add
+   1 to `gate.starting`. The `Admission` it returns holds the noted count and
+   the pane, and **is a guard**: dropped without an insert, on any way out (a
+   spawn error, a monitor thread that could not start, a panic's unwind), it
+   subtracts 1 from `gate.starting` and notifies the gate's condition variable
+   (review A2-m2). Open the terminal; spawn in the home folder: "could not
+   start a terminal", cause `start`, carrying the error number when the
+   library's error holds one (and when `HOME` is unset, with none).
+7. **`ending::insert(table, gate, admission, instance) -> Result<PtyId, Kind>`**,
+   under the table lock again: subtract 1 from `gate.starting` (the guard is
+   consumed); insert the remote instance **with no `/open` request id** and
+   start its reader, writer, waiter and monitor (section 3). **If the gate was
+   closed meanwhile or `gate.page` changed** (cause `closing`), **or the pane
+   has meanwhile got another remote terminal that is not ending** (cause
+   `pane`; the re-check of review A2-m3, for two starts for one pane that were
+   both admitted before either was inserted), the instance is inserted already
+   marked ending, its monitor's first input is `EndedByUser`, `ending::start`
+   runs on it, and the command rejects with "could not start a terminal" and
+   that cause. That refusal is not "before any start": a shell was started and
+   is being ended by the routine. For `closing` its requester no longer exists
+   (the window is destroyed or the page was replaced), so nobody is shown it;
+   section 7's table says so.
 
 **No `/open` can type into it.** `type_line` reaches a terminal only after
 `claim_ok` matched the terminal's request id (`src-tauri/src/terminal_open.rs:242-246`),
@@ -635,10 +746,13 @@ and a remote instance's is always `None`. The story also makes
 property does not rest on the claim alone; a unit test calls it for a remote
 terminal's id and asserts `false` and an empty queue.
 
-"Could not start a terminal" is used for the two refusals of step 6 because the
-fixed list has no closer kind and each is true as worded; neither can be reached
-by a webview that keeps its own rules (a closed gate has no main window to ask;
-8.4 never sends a second request for a pane).
+"Could not start a terminal" is the kind of all of these because the fixed list
+has twelve kinds and no closer one; **the `cause` member tells them apart**
+(section 7; UX review U-M10), so that "could not start your shell" is said only
+for `start`, where it is true. `closing` and `pane` cannot be reached by a
+webview that keeps its own rules (a closed gate has no main window to ask; 8.4
+never sends a second request for a pane). A `paneId` that is not 1 to 64 of the
+allowed characters is refused with cause `pane`.
 
 Reconnect is the same command for the same pane (section 8.4). There is no other
 caller: the wiring test asserts that `client_start::start` has one call site
@@ -716,6 +830,30 @@ start-up file that replaced the shell with ADE's own binary and ADE's own
 arguments would stay "connecting" and get "not handed over yet" at the bound, the
 safe direction.
 
+**It is its own pure step, before the judging** (revision 3; review A2-m9, and
+the product manager's wording of SV-2 AC9 as two pure steps):
+
+```rust
+pub enum Observed<'a> { NotObserved, Observation(&'a [String]) }
+/// Pure. `reading`: what the sampler returned for the pane's own process (None: unreadable).
+/// `own`: Better Terminal's own argument list, read the same way (None: unreadable).
+pub fn observe<'a>(reading: Option<&'a [String]>, own: Option<&[String]>) -> Observed<'a>
+```
+
+| Reading | Better Terminal's own list | Result |
+|---|---|---|
+| could not be made | any | `NotObserved` |
+| empty | any | `NotObserved` |
+| equal to the own list, word for word | readable | `NotObserved` |
+| anything else | readable or not | `Observation(reading)` |
+
+Step one, **whether a reading is an observation**, takes the reading and Better
+Terminal's own list and nothing else. Step two, **the judgement of an
+observation** (3.3), takes the started list, the observed list and the grammar
+and nothing else; it is never called for `NotObserved`. The three rows the
+PRD's table gains (unreadable, empty, equal to Better Terminal's own) are rows
+of `observe`'s test, not of `judge`'s.
+
 **ADE's own argument list is read through the same sampler** (review A-m18):
 `image(std::process::id())`, once per client start, never `std::env::args`. The
 two sides of the comparison then come from one source in one representation
@@ -726,15 +864,18 @@ program", which is wrong for the engineer and safe for the rule (section 12).
 
 **The review checked the rule:** 29,526 samples of a process that replaces
 itself continuously showed whole lists or `[]` only, never a part of a list, and
-one sample of one process took 99 microseconds. The rule adds a third input,
-ADE's own list, to a criterion the owner approved with two. That is Q1 (section
-15): the wording is the product manager's and the owner is told.
+one sample of one process took 99 microseconds. The rule adds a step, with
+Better Terminal's own list as its input, to a criterion the owner approved as
+one function of two lists. That was Q1 (section 15.1): the owner has decided
+it, and the product manager is writing it into SV-2 AC9 as the two steps
+above.
 
 ### 3.3 The judging function
 
 ```rust
 pub enum Judged { StillShell, SshClient, Other }
-/// Pure. `started`: the list ADE started the shell with. `observed`: an observation.
+/// Pure. Step two: the judgement of an observation. Never called for `NotObserved`.
+/// `started`: the list ADE started the shell with. `observed`: an observation (3.2).
 /// `grammar`: the arguments of this client start.
 pub fn judge(started: &[String], observed: &[String], grammar: &[String]) -> Judged
 ```
@@ -777,15 +918,16 @@ pub fn step(state: &mut Monitor, input: Input) -> Vec<Output>
 A-M7), so a remote terminal's `exit` has one sender from the start and no later
 story rewrites the path. Story R3a builds the thread, the waiter, and `step` with
 its **unwatched** state and the three inputs that need no judging (`Exited`,
-`EndedByUser`, `GaveUp`): a remote terminal made by the constructor with no
-watch (R3a's and R3b's fixture terminals) sends exactly its `exit`. Story R5
+`EndedByUser`, `GaveUp`; `EndedByUser` may be the monitor's first input, for
+an instance inserted already ending, 2.5 step 7): a remote terminal made by the
+constructor with no watch (R3a's and R3b's fixture terminals) sends exactly its `exit`. Story R5
 adds the watching states, `Sample` and `Tick`, and the sampling inside the same
 thread's wait; `server_connect` then makes every terminal watched. R5 adds rows
 to `step`; it changes none of R3a's.
 
 | State | Input | Then |
 |---|---|---|
-| watching | a sample that is not an observation, or `StillShell` | watching |
+| watching | a sample for which `observe` gives `NotObserved`, or an observation judged `StillShell` | watching |
 | watching | `SshClient` | **live**; emit `Live` (a showing notice is thereby cleared); stop sampling |
 | watching | `Other` | **judged not**; emit `Notice(AnotherProgram)` at once; stop sampling; never live |
 | watching | `Tick` at or past the bound, no notice yet | emit `Notice(NotYet)`; keep sampling |
@@ -859,15 +1001,43 @@ end of output, not an `error` event. A **waiter** thread blocks in `Child::wait`
 and gives the monitor `Exited(status)`. The monitor then waits for the reader's
 end of output, at most 1 s; if the reader has not ended by then (a background
 process holds the terminal open) it **stops the reader** through the wake pipe
-and joins it; only then does it send the exit through the terminal's sink, and
-take the instance out of the table through the routine's last step (1.4 step 5,
-which is idempotent). So the exit is always the last event on the channel (SV-2
+and waits for it to have ended. What it does next depends on one read of the
+instance's `ending` mark, made under the table lock (revision 3; reviews A2-B1
+and A2-m5):
+
+- **Not ending (a natural exit):** in that same hold of the lock it takes the
+  instance out of the table; it then drops it (the handles close, as in 1.4
+  step 5), notifies the gate's condition variable, and **only then** sends the
+  exit through the terminal's sink. Removing before sending means a Reconnect
+  made the instant the exit arrives never meets the per-pane rule's "has a
+  remote terminal that is not ending". This is the fourth way out of the table
+  (1.5).
+- **Ending:** it sends the exit and **does not touch the table**. The instance
+  stays until `end`'s last step, so the table still stands for whatever
+  processes of the pane the routine is still ending (1.5: the quit's wait
+  depends on this).
+
+Either way the exit is always the last event on the channel (SV-2
 AC4: "the output after the stub's last byte is empty"), and a background process
 holding the terminal open delays it by at most 1 s. That process loses its
 terminal then, as it does when a terminal window is closed. The same order
 holds for the one exit that has no `Exited` before it: on `GaveUp` (1.4 step 5)
 the monitor stops the reader at once, with no 1 s wait, joins it, and only then
 sends the exit. So no `output` event follows an `exit` on any path.
+
+**A stop can drop output that was in flight, stated** (review A2-m7). The
+reader returns end of output as soon as its wake pipe is ready, even when the
+master is readable in the same `poll`, so bytes the terminal held at that
+instant are not delivered. A stop happens in three places only: at an ending
+(the engineer ended the pane; what the program printed while being hung up is
+not wanted), at a give-up, and after the 1 s wait for a process that holds the
+terminal open (what the holder prints after the pane's process is gone).
+**After a natural exit with no holder the reader is never stopped:** it reads
+to the terminal's own end of output, so everything the pane's process wrote
+arrives. SV-2 AC4's test asserts it: the stub writes a marker as its last
+bytes and exits, and the output received before the `exit` event ends with the
+whole marker (and likewise in the holder test, where the marker was written
+1 s before the stop).
 
 Threads per remote terminal: reader (ADE's own, on a wake pipe, 1.2), writer
 (ADE's own duplicate), waiter, monitor. The waiter reaping the leader is also
@@ -879,14 +1049,14 @@ ends; it holds no handle on the terminal.
 
 | Test | Kind |
 |---|---|
-| `judge` over SV-2 AC9's table and 3.3's rows | Rust, pure |
-| the observation rule of 3.2 (empty, unreadable, ADE's own list), with ADE's own list read by `image(getpid())` | Rust, pure, and one test that `image` of the test's own process is not empty |
+| `observe` over 3.2's four rows (unreadable, empty, equal to Better Terminal's own, anything else; and "anything else" when the own list is unreadable) | Rust, pure, and one test that `image` of the test's own process is not empty |
+| `judge` over SV-2 AC9's table and 3.3's rows; the type gives it no way to be called for `NotObserved` | Rust, pure |
 | `step` over every row of 3.4, the notice-then-live sequence, "judged once", and nothing after an `Exit` (the unwatched rows, `EndedByUser` and `GaveUp` in R3a; the rest in R5) | Rust, pure |
 | each event serialised and compared with `src/lib/serverFixtures/events.json` (section 10) | Rust; the TypeScript side parses the same file |
-| a remote terminal whose process exits while a background process holds the terminal open | Rust, Unix, real PTY: the `exit` arrives within 1.5 s and no `output` event follows it |
+| a remote terminal whose process exits while a background process holds the terminal open | Rust, Unix, real PTY: the `exit` arrives after 1 s and before the 5 s stop, no `output` event follows it, and the output before it ends with the stub's whole last marker |
 | SV-2 AC9's eleven fixture cases, bound 2 s | Rust, Unix, `zsh` and `bash` |
 | the shell-wrapper fixture of 3.5: "another program" at once, the stub alive at twice the bound | Rust, Unix, `zsh` and `bash` |
-| SV-2 AC4: stub exits 0 and 255 after live; status reported; nothing alive; no output after the stub's | Rust, Unix |
+| SV-2 AC4: stub exits 0 and 255 after live; status reported; nothing alive; no output after the stub's; **the stub's last bytes (a marker) arrive whole before the `exit`** (review A2-m7) | Rust, Unix |
 | each kind's message, End beside the hand-over message, both gone on live, the status shown | component |
 
 ## 4. Overview
@@ -943,7 +1113,7 @@ which SV-7 AC4's text test reads; the test also fails when a `.rs` file under
 | File | Holds |
 |---|---|
 | `mod.rs` | the five commands, `availability`, the `pub` surface for integration tests |
-| `rules.rs` | `check`, the name key, the destination summary, the list order |
+| `rules.rs` | `check`, the `Failure` enum (the reason codes), the name key, the destination summary, the list order |
 | `grammar.rs` | `arguments(record, home)` |
 | `store.rs` | the file, its version, load, the three mutations |
 | `kinds.rs` | the twelve kinds and their JSON |
@@ -1045,8 +1215,8 @@ erDiagram
 | not JSON; not an object; `version` missing, not an integer, or below 1; `servers` not an array; a row that is not an object; an `id` that is not 32 lowercase hex characters or occurs twice; one of the five members present with the wrong JSON type | "the server list could not be read". **Nothing is written** by any command until it loads |
 | `version` above 1 | the same |
 | a member other than `id` and the five | dropped on load; gone from the file at the next save (SV-1 AC2) |
-| a row whose values fail `rules::check` | loaded, with `problem: <field name>` (the first failing field, in the order name, host, port, user, identity file); listed; Connect refused (section 2.5); Edit and Remove allowed. **No value that failed its field's rule is sent to the webview** (review A-m13): each of the five members is checked by itself, and one that fails is left out of the `ServerRow` (a failing name is sent as the empty string, for which the designer has a fixed text); `summary` is empty unless host, port and user all passed. So an unbounded length, a control character or a bidirectional override in a hand-edited file never reaches the overlay or the palette. Edit opens such a row with those fields empty |
-| two rows whose names have one name key | both loaded. The first in the file's order keeps its name with no problem; each later one gets `problem: "name"`. Its name passed the character rule, so it is sent and shown; Connect is refused for it until it is renamed |
+| a row whose values fail `rules::check` | loaded, with `problems`: every failing field with its reason code (section 6); listed; Connect refused (section 2.5); Edit and Remove allowed. **No value that failed its field's rule is sent to the webview** (review A-m13): each of the five members is checked by itself, and one that fails is left out of the `ServerRow` (a failing name is sent as the empty string, for which the designer has a fixed text); `summary` is empty unless host, port and user all passed. So an unbounded length, a control character or a bidirectional override in a hand-edited file never reaches the overlay or the palette. Edit opens such a row with those fields empty and each one's reason code, and nothing else of the stored value (UX review U-M4). Every row also carries `fileIndex`, its 1-based place in the file, which is how two rows with withheld names are told apart (section 9) |
+| two rows whose names have one name key | both loaded. The first in the file's order keeps its name with no problem; each later one gets `{ field: "name", reason: "taken" }`. Its name passed the character rule, so it is sent and shown; Connect is refused for it until it is renamed |
 | more than 200 rows | loaded; Add refused |
 
 - **Mutations** (`add`, `edit`, `remove`): under one process-wide mutex, load from
@@ -1069,10 +1239,24 @@ the webview a writer of the rows the rules guard.
 
 One implementation, Rust, `rules.rs` and `grammar.rs`. The webview never
 validates, builds a summary or sees an argument: the form sends what was typed and
-shows the field the kind names.
+shows, for each field the kind lists, the words for its reason code.
 
-- `check(input, existing) -> Result<Record, Field>`: SV-1 AC1's table, field by
-  field. Host: the character set and first character, then (a) with a `:`,
+- `check(input, existing) -> Result<Record, Vec<Failure>>`: SV-1 AC1's table,
+  field by field, **every** field checked, so the result lists each failing
+  field once, in the order name, host, port, user, identity file, with the
+  reason code of the first of that field's rules it broke (owner decision,
+  2026-11-18; UX review U-M3). `Failure` is one enum of the 21 `(field,
+  reason)` pairs in `.ade/context/saved-servers.md` ("Why a value was
+  refused"), which is the table of record; an impossible pair cannot be built.
+  It holds no value. The same function, and so the same list, is used at a
+  save, at a client start (2.5 step 4), and for a row on load (section 5).
+  Host's order of rules is fixed so that each of SV-1 AC1's refused examples
+  has one code: `@` anywhere is `holds-user`; exactly one `:` followed by 1 to
+  5 digits to the end is `holds-port` (`db1.example.com:2222`: "the message
+  says to use Port"); any other value with a `:` that is not an accepted IPv6
+  address is `not-ipv6` (`[2001:db8::7]`, `fe80::1%en0`, `a:b:c`, `::`); then
+  `first-character`, `characters`, `not-ipv4`, `leading-0x`. The rules
+  themselves: Host: the character set and first character, then (a) with a `:`,
   `std::net::Ipv6Addr::from_str` must accept it and it must not be `::`; (b) only
   digits and dots: four decimal parts 0 to 255 with no leading zero; (c) no
   dot-separated part starting `0x` or `0X`. Name: trimmed, 1 to 64 code points,
@@ -1090,9 +1274,10 @@ shows the field the kind names.
   like a typed value** (review A-m4): the replacement is made only when `home` is
   present, is valid UTF-8 and is absolute, and the **expanded** path must itself
   pass the identity-file rule (1 to 1024 characters, each in `0x20`-`0x7e`, no
-  `%`, no `${`). Otherwise the result is the field `identityFile`, and the
-  connect is refused with "a saved server failed its checks" before anything is
-  started. So SV-7 AC3's "no argument holds a character outside `0x20`-`0x7e`"
+  `%`, no `${`). Otherwise the result is the failure `{ identityFile,
+  home-unusable }`, the one reason code that can arise only at a client start,
+  and the connect is refused with "a saved server failed its checks" before
+  anything is started. So SV-7 AC3's "no argument holds a character outside `0x20`-`0x7e`"
   holds for the argument ADE passes, not only for the value saved. A record with
   no identity file, or an absolute one, does not need `home` for its grammar.
   What this costs: on a machine whose home folder has a character outside that
@@ -1108,7 +1293,12 @@ shows the field the kind names.
   without opening the file, so a key that is a link to a regular file gives no
   warning, and it still returns for a FIFO (review A-m3; revision 1's
   `symlink_metadata` warned for every linked key). Returned by `servers_save`
-  beside the saved row; never a refusal (SV-1 AC5).
+  beside the saved row; never a refusal (SV-1 AC5). **`servers_list` returns no
+  warning** (UX review U-m2): the list is re-read on every Connect and
+  Reconnect press (8.4), and a `metadata` call on a path under an unreachable
+  network mount can block for as long as the mount takes to fail, up to 200
+  times. One call at a save, on the engineer's own action, is the whole of it;
+  at a connect the SSH client itself says when a key is missing.
 - The hostile fixture (SV-7 AC2) is `src-tauri/src/saved_servers/hostile.json`: at
   least 40 values per field. The pure half (refused, or accepted with every
   character in the field's set) runs in `rules.rs`; the half that goes through a
@@ -1123,18 +1313,25 @@ base name under 2.2's rule.
 
 | Id | Payload | Before any start |
 |---|---|---|
-| `server-failed-checks` | `field`: one of `name`, `host`, `port`, `user`, `identityFile` | yes |
+| `server-failed-checks` | `fields`: 1 to 5 entries `{ field, reason }`, one per failing field, in field order; `reason` from the closed list of section 6 | yes |
 | `list-unreadable` | none | yes |
-| `list-not-saved` | `errno`: integer or absent | n/a |
+| `list-not-saved` | `errno`: integer, or absent when the failure carries no system error number | n/a |
 | `list-full` | none | n/a |
 | `server-gone` | none | yes |
 | `shell-not-supported` | `shell`: the base name, or absent | yes |
 | `not-in-engagement` | none | yes |
-| `terminal-not-started` | `errno`: integer or absent | yes (no process exists), with one exception: a start that completed after the main window was destroyed or its page replaced is rejected with this kind while `end` ends the shell it started (2.5 step 7); no requester is left to be shown it |
+| `terminal-not-started` | `cause`: `start`, `closing` or `pane` (always present); `errno`: integer, only with `start`, absent when the library's error holds none | yes (no process exists) for `start` and for the refusals of `admit`; **no** for the refusals of `insert`: a start that completed after the main window was destroyed or its page replaced (`closing`), or whose pane had got another terminal (`pane`), is rejected with this kind while `end` ends the shell it started (2.5 step 7) |
 | `no-ssh-client` | `status`: 127 | no (an exit) |
-| `ended-before-ssh` | `status`: integer or absent | no (an exit) |
+| `ended-before-ssh` | `status`: integer, or absent when a signal ended the process (the exit event's `status` is then null) | no (an exit) |
 | `not-handed-over-another-program` | none | no (a notice) |
 | `not-handed-over-yet` | none | no (a notice) |
+
+**An optional member is absent, never null**, and each message needs a form
+without it (UX review U-M10): "could not be saved" with no error number, "could
+not start a terminal" with none, "ended before ssh was seen to start" with no
+status. `cause` is a member of an existing kind, not a thirteenth kind; the
+PRD's "may carry" cell for that row, and for "failed its checks", changes
+(section 15.3, D-13 and D-14).
 
 The webview mirrors the ids in `src/lib/serverKinds.ts` as a union type. The one
 checked-in list of both sides is the fixture
@@ -1182,7 +1379,8 @@ interface RemoteRecord {
   state: "connecting" | "live" | "ended";
   notice?: "not-handed-over-yet" | "not-handed-over-another-program"; // never saved
   end?: { status: number | null; kind: KindId | null; by: "process" | "ended" }; // never saved
-  refusal?: Kind;                        // a refused Reconnect; never saved
+  refusal?: Kind;                        // a refused Reconnect: the WHOLE kind, payload included; never saved
+  origin?: "restored" | "reopened";      // ended with no `end`: why; never saved
 }
 interface Pane { /* today's fields */ remote?: RemoteRecord }
 interface Tab  { /* today's fields */ serverNamed?: true }
@@ -1194,6 +1392,14 @@ null; `isServerTab(tab)` is `tab.serverNamed === true || remotePane(tab) !== nul
 `outwardName(facts)` (8.9); `sameDestination(a, b)` (8.4). A pane is remote from
 creation and never becomes local; a local pane never becomes remote.
 
+`refusal` is the rejection as it arrived, so a bar can print `fields` with
+their reasons, `shell`, `cause` and `errno` (UX review, mismatch 7; revision
+2's context file typed it `{ kind }`, which dropped them). `origin` tells a
+restored pane from a reopened one (mismatch 8): `loadSession` sets
+`"restored"`, `reopenClosedTab` sets `"reopened"`, a pane whose process ended
+in this run has `end` and no `origin`, and a resolved Reconnect clears all
+three of `end`, `refusal` and `origin`.
+
 ### 8.2 Connect
 
 `src/lib/serverInvoke.ts` is the only file that calls the five commands
@@ -1203,9 +1409,10 @@ and no hook, so `useTerminal`'s `destroyInstance` and the stores can both use it
 without a cycle. `src/lib/serverSessions.ts` holds the logic below and calls it.
 
 1. **Before anything is sent** `requestConnect({ serverId, paneId?, shown,
-   confirmed? })` asks `availability` (section 11) and runs the pre-send check
-   of 8.4: it reloads the list and compares. It sends nothing when the check
-   says no.
+   confirmed? })` sets the pane's in-flight mark (a Reconnect; 8.4), asks
+   `availability` (section 11) and runs the pre-send check of 8.4: it reloads
+   the list and compares. When the check says no it sends nothing, clears the
+   mark, and answers `{ outcome: "held", check }` (8.4).
 2. It then makes a `Channel` and a **session object** for this call, and invokes
    `server_connect` with `{ args: { serverId, paneId, rows: 24, cols: 80 },
    onEvent }` and nothing else of the server. `paneId` is the ended pane's id for
@@ -1266,8 +1473,8 @@ folder), and call `create_pty` (SV-3 AC5).
 - `closeTab`: for a server tab the `ClosedTab` entry gains
   `server?: { serverNamed: boolean; serverId; destination; summary }` and its
   `cwd` is null. `reopenClosedTab` then opens a tab with that name and mark whose
-  first pane has `remote` with `state: "ended"` and no PTY: no `create_pty`, no
-  connect request (SV-4 AC3). A server-named tab with **no** remote pane (only a
+  first pane has `remote` with `state: "ended"`, `origin: "reopened"` and no PTY:
+  no `create_pty`, no connect request (SV-4 AC3). A server-named tab with **no** remote pane (only a
   session not written by this build can hold one) has no remote record to bring
   back, and reopening it as it was would put a local shell under a server's
   name. So its `ClosedTab` entry is remembered as a local tab named "Terminal"
@@ -1300,7 +1507,7 @@ The ended pane's control reads the current list (the store of section 9):
 |---|---|
 | unreadable, or not loaded | the list's message; no Reconnect |
 | no row with `serverId` | "the saved server no longer exists"; no Reconnect |
-| the row has a `problem` | the failed-checks message with the field; no Reconnect |
+| the row has `problems` | the failed-checks message with each field and its reason; no Reconnect |
 | the row's destination equals the pane's | Reconnect, with the summary |
 | it differs | both destinations, "the destination changed", Reconnect, and a second, separate confirmation |
 
@@ -1315,17 +1522,43 @@ announced. So **on the press itself**, before anything is sent, `requestConnect`
    destination the pressed control was showing as the current one (for
    Reconnect, the row the control rendered; for Connect in the overlay, the
    pressed row; for a palette entry, the row its label was built from);
-3. sends the connect request **only if** the row exists, has no `problem`,
+3. sends the connect request **only if** the row exists, has no `problems`,
    equals `shown`, and either equals the pane's own destination (always true
    for a Connect, which has no earlier one) or equals `confirmed`: the
    destination the engineer gave the second confirmation for;
-4. otherwise sends nothing. The control now renders from the fresh list, which
-   by the table above shows both destinations and asks for the second
-   confirmation (or shows the removed, unreadable or failed-checks message). For
-   a Connect whose row changed under the open overlay or palette, the overlay
-   shows the row with what it showed before and what it holds now, and Connect
-   needs the same second confirmation; a palette entry opens the overlay on
-   that row to do so.
+4. otherwise sends nothing, and **holds the press** (UX review U-M5: revision 2
+   said "the designer draws it" without saying from what). `requestConnect`
+   answers `{ outcome: "held", check }` and puts the same `check` in
+   `serverListStore.held`, keyed by the pane id for a Reconnect and by the
+   server id for a Connect:
+
+   ```ts
+   type Shown = { name: string; destination: Destination; summary: string };
+   type ConnectCheck = {
+     serverId: string;
+     paneId?: string;             // a Reconnect
+     why: "changed" | "gone" | "problem" | "unreadable";
+     shown: Shown;                // what the pressed control was showing
+     pane?: Shown;                // a Reconnect: what the pane last connected to
+     now?: ServerRow;             // the row as just read; absent for "gone", "unreadable"
+     differs?: ("host" | "port" | "user" | "identityFile")[]; // now against shown
+   };
+   ```
+
+   So the webview holds exactly: what the control showed (`shown`), what the
+   row holds now (`now`), for a Reconnect what the pane last connected to
+   (`pane`), and which members differ. All are values Rust returned; a `now`
+   with `problems` has its failing members withheld as in any row. The
+   designer draws the held press from that: for `changed`, the earlier and the
+   current destination and a second, separate confirmation; for the other
+   three, the message of the table above. The confirming press is
+   `requestConnect({ serverId, paneId?, shown: now, confirmed: now.destination })`,
+   which reads the list again; a cancel, a confirmed send, or a later press
+   that finds nothing to hold removes the entry. A palette entry whose press
+   was held opens the overlay on that row, which shows the held check. Nothing
+   was sent, so there is no tab and no state change on a pane: what a held
+   Reconnect looks like (the control turning into the changed-destination
+   form, the words, the announcement) is the designer's, from this record.
 
 A confirmation is for one destination: if the list changes again before the
 confirmed press, step 3 fails and the control asks again. No thirteenth kind is
@@ -1344,14 +1577,23 @@ end a connection of its own accord, which SV-2 AC9 rules out, and the client
 has by then already been started toward the other host.
 
 **Reconnect's request and its answer.** `requestConnect` with the pane's id. **One
-request per pane at a time:** while a request for a pane is in flight a second
-press makes none (a per-pane in-flight mark in `serverSessions.ts`, cleared on
-the answer; Rust's per-pane rule, 2.5 step 6, is the backstop).
+request per pane at a time:** a per-pane in-flight mark in `serverSessions.ts`
+is set **at the press**, synchronously, before the awaited `servers_list` of
+step 1, and cleared when the press is held or the connect is answered (review
+A2-m3: read as "from the `server_connect` call", two fast presses would both
+pass the list read). While it is set a second press makes no request and no
+list read. Rust's per-pane rule, at `admit` and again at `insert` (2.5), is the
+backstop.
 
 - **Resolved, and the pane is still an ended remote pane with no PTY:** one `set`
   gives the pane the new `ptyId`, `destination`, `summary`, the state the session
   object holds, and clears `end` and `refusal`; a new xterm takes the saved
-  scrollback's place as in 8.2 step 5.
+  scrollback's place as in 8.2 step 5. **What Better Terminal draws between
+  the old output and the new** (a blank line; UX review U-m10) is written to
+  that xterm with `term.write`, as today's `[Process exited]` line is: it is a
+  write into the pane's display only. It does not go through `writePty`, is
+  not in `ptyWriters.sites.json`, and sends 0 bytes to the PTY; the Reconnect
+  store test asserts 0 `write_pty` calls across a Reconnect.
 - **Resolved, and the pane is gone or is no longer that** (its tab or the pane
   was closed while the request was in flight; route 1 of 1.5): the same step
   that would have set the id instead sends `server_terminal_end` for it, drops
@@ -1374,8 +1616,8 @@ the answer; Rust's per-pane rule, 2.5 step 6, is the backstop).
   `scripts/bmadTextFixture.test.ts`). Rust's strip test (8.9) reads that same
   file. So "Rust looks where the store writes" is a test, not prose, and a
   change to either side's shape fails the other's test.
-- `loadSession`: a pane with `remote` comes back with `state: "ended"`, `ptyId:
-  null`, no `initialCwd`. Mounting it takes the remote branch (8.2, step 7).
+- `loadSession`: a pane with `remote` comes back with `state: "ended"`,
+  `origin: "restored"`, `ptyId: null`, no `initialCwd`. Mounting it takes the remote branch (8.2, step 7).
 - **An older build** (PRD F7.9). It ignores the two new members: it opens the pane
   as a local shell under its scrollback, exports the tab's real name, and its next
   save drops both members for good. The format cannot prevent that: an older
@@ -1534,23 +1776,35 @@ else; the relay's payload, when phone-watch ticket 8 builds it, calls
 The designer draws both (branch `ux-f7`). What they stand on:
 
 - `src/stores/serverListStore.ts` (zustand, not persisted): `{ status: "idle" |
-  "ok" | "unreadable", servers: ServerRow[] }`, `load()`, reloaded on
+  "ok" | "unreadable", servers: ServerRow[], held: Record<string, ConnectCheck> }`,
+  `load()`, reloaded on
   `servers-changed`, when the overlay or the palette opens, and **on every
   Connect or Reconnect press, before the request** (8.4).
-  `ServerRow = { id, name, host?, port?, user?, identityFile?, summary, problem? }`;
-  a row with a `problem` may lack the members that failed and has an empty
-  `name` or `summary` when those could not be shown safely (section 5).
+  `ServerRow = { id, fileIndex, name, host?, port?, user?, identityFile?, summary,
+  problems? }`; a row with `problems` lacks the members that failed and has an
+  empty `name` or `summary` when those could not be shown safely (section 5).
+  **A row that fails its checks** (UX review U-M4; the UX moves): the designer
+  draws an empty destination and the fixed text for a withheld name; `problems`
+  says which fields failed and why; `fileIndex` (1-based, the row's place in
+  the file, stable across ADE's own saves except after a remove before it)
+  tells two such rows apart in the list, in Remove's question and in the
+  palette; rows with a withheld name are ordered last, by `fileIndex`. The
+  Edit form gets nothing for a failing field but its reason code.
 - Overlay actions: `servers_save` (add when `id` is absent, edit otherwise),
   `servers_remove`, `requestConnect({ serverId, shown })` with the pressed row
   as `shown`. When the pre-send check finds the row changed, the overlay shows
   the row's earlier and current destination and Connect needs the second
-  confirmation (8.4); the designer draws it. A refused save names the field; a saved row may
-  come with an identity-file warning.
+  confirmation, from `held[serverId]` (8.4). A refused save lists every failing
+  field with its reason code; a saved row may come with an identity-file
+  warning, which is the only place a warning comes from (section 6). The "could
+  not be read" message may name the file: the constant `saved-servers.json`
+  (`SERVER_LIST_FILE_NAME`), "in Better Terminal's data folder"; no command
+  gives the folder's path (UX review U-m3).
 - Palette (`CommandPalette.tsx:73-178`): after every entry it has today, one entry
   "open the server list" and one per `ServerRow`, with `label` holding the name
   and the summary (the wording is the designer's), `category` the designer's, no
   shortcut, `action: () => requestConnect({ serverId: row.id, shown: row })`. A
-  row with a `problem` still has its entry (SV-9 AC2: one per saved server); its
+  row with `problems` still has its entry (SV-9 AC2: one per saved server); its
   label uses the designer's fixed text for a withheld name, and running it gives
   the failed-checks message. The match rule, the selection and the
   order of today's entries are not touched. With `availability` false, or the list
@@ -1581,8 +1835,8 @@ outward name each had a shared table and nothing else did. Now, under
 
 | File | Holds | Rust test | TypeScript test | Made by |
 |---|---|---|---|---|
-| `kinds.json` | each of the twelve kinds with every payload form (with and without `errno`, `shell`, `status`; each `field`) | each `Kind` serialised equals its row; a thirteenth variant fails | each row parses as the `Kind` union; an id in the file and not in the union, or the reverse, fails | R1 |
-| `commands.json` | the arguments of each of the five commands as the webview sends them; `ServerRow` (whole, minimal, with a `problem` and a withheld member); `SaveResult` with and without a warning; `Connected` | every arguments row deserialises into its `wire.rs` struct and an extra member is refused; every result value built in the test serialises equal to its row | `serverInvoke.ts`'s wrappers, run against a stubbed `invoke`, send exactly the arguments rows; each result row parses into its type | R1 (the types and the file); R2 and R4 assert their commands return those types |
+| `kinds.json` | each of the twelve kinds with every payload form (with and without `errno`, `shell`, `status`; each `cause`; **each of the 21 `{ field, reason }` pairs, and one refusal listing five fields**) | each `Kind` serialised equals its row; a thirteenth variant fails | each row parses as the `Kind` union; an id in the file and not in the union, or the reverse, fails | R1 |
+| `commands.json` | the arguments of each of the five commands as the webview sends them; `ServerRow` (whole, minimal, with `problems` and withheld members, two with withheld names and different `fileIndex`); `SaveResult` with and without a warning; `Connected` | every arguments row deserialises into its `wire.rs` struct and an extra member is refused; every result value built in the test serialises equal to its row | `serverInvoke.ts`'s wrappers, run against a stubbed `invoke`, send exactly the arguments rows; each result row parses into its type | R1 (the types and the file); R2 and R4 assert their commands return those types |
 | `events.json` | every event: `output`; `live`; both `notice` kinds; `exit` with a status of 0, 255 and null, with each kind, with `by` as `process` and as `ended`, and the gave-up form; a local terminal's `exit`; `error` | each `PtyEvent` serialised equals its row | each row, fed to the session object of 8.2, gives the state the row names beside it | R3a |
 | `session.json` | a session as `saveSession` writes it (8.5) | the export strip over it (8.9) | `saveSession`'s output **equals** it | W2; R6 reads it |
 
@@ -1634,7 +1888,14 @@ named (SV-7 AC4's text test asserts it).
 | `$SHELL` is unsupported, or missing | refused before any start; `terminal-not-started` when the path does not exist |
 | the start-up files never hand over | the pane stays connecting; the notice at once or at 30 s; End; ADE ends nothing itself |
 | the process's arguments cannot be read | no observation; stays connecting; the notice at 30 s |
-| the monitor thread cannot start | the spawn is undone through `end`, and `terminal-not-started` is returned |
+| the monitor thread cannot start | the spawn is undone through `end`, the admission's guard subtracts `gate.starting`, and `terminal-not-started` (cause `start`) is returned |
+| the spawn fails | the guard subtracts `gate.starting` and wakes a waiting quit; `terminal-not-started`, cause `start` |
+| the pane's own process exits during an ending while a child ignores the hangup | the monitor sends the pane its `exit` and leaves the terminal in the table; the routine kills the child at 2 s and removes it; a quit waits for that (1.5) |
+| **the web content process dies** (review A2-m4) | `wry` 0.54.2 has a hook for it (`on_web_content_process_terminate_handler`) and `tauri-runtime-wry` 2.10.0 never sets it (read by the review), so no code of ADE's runs and nothing reloads. Remote terminals stay in the table, connected, with no page to show them, until the engineer closes the main window or quits, either of which ends them. Not detected in S1 |
+| a connect the old page sent in the milliseconds before a reload is admitted after it | inserted with no pane to hold it; a Reconnect of the restored pane is refused (cause `pane`) until the main window closes or ADE quits (1.5, the stated window) |
+| a development reload of the page | every server connection is ended (route 3, by design) |
+| the identity file's path is on a mount that does not answer | `servers_save`'s warning check waits for it, on the command's own thread; no list load and no connect waits (section 6) |
+| the reader is stopped while output is in flight | that output is dropped; only at an ending, a give-up, or after the 1 s holder wait (3.6) |
 | a process ignores the hangup | killed at 2 s |
 | a process of the pane may not be signalled (another user's: `sudo` at a password prompt in a start-up file) | 1.4: the processes ADE may signal are ended; at 5 s the routine gives up, stops the reader and closes every handle, so the kernel hangs the terminal up; the pane gets its `exit` and is ended. Left alive, stated: a process that also ignores the kernel's hangup |
 | a process survives the kill for 5 s (kernel-level) | the same last step; the routine returns `GaveUp`; the pane is ended; stated, not hidden |
@@ -1681,46 +1942,29 @@ needs them anyway:
 
 Revision 1 listed seven questions. The review found one of them answered wrongly
 (Q4), one avoidable (Q5), and four decisions taken without being listed. This
-section now has one open question, the notes, and every decision the design
-takes where the PRD is silent or says otherwise.
+section has the one question revision 2 asked, now decided by the owner (15.1),
+the notes, and every decision the design takes where the PRD is silent or says
+otherwise. Revision 3 adds D-13 to D-18; D-15 needs an answer from the product
+manager and the owner before story C1 is sharded.
 
-### 15.1 The one question: Q1, the observation rule
+### 15.1 Q1, the observation rule: decided
 
-**To the product manager for the wording of SV-2 AC9; flagged for the owner,
-because it adds an input to a criterion the owner approved.**
+Revision 2 asked this as the one open question. **The owner decided it on
+2026-11-18**, and the product manager is writing it into SV-2 AC9 as **two pure
+steps**: whether a reading is an observation, from the reading and Better
+Terminal's own list; then the judgement of an observation, from the started
+list, the observed list and the grammar. The design's functions are those two
+steps, with those inputs and no others (review A2-m9): `observe`, whose result
+for an unreadable reading, an empty one, or one equal to Better Terminal's own
+list is `NotObserved` (3.2), and `judge`, which is called only for an
+observation (3.3). Revision 2's proposed sentence ("one pure function of three
+argument lists") is withdrawn: it did not match the code, which never gave
+`judge` the third list.
 
-SV-2 AC9 says "the first image ADE observes that is not that shell is judged,
-once", and that the rule is "one pure function of two argument lists: the one
-ADE started the shell with, and the one observed". **Run:** in the first tens of
-milliseconds after a start, a reading of the new process's argument list is
-often empty, and in 11 of 37 starts it was the argument list of the process
-that started it (section 3.2). Read literally, most Connects would show "another
-program is running". The design does not judge those readings. The review
-tested the rule (29,526 samples of a process replacing itself continuously:
-whole lists or `[]` only, never a part of one) and found it safe: it only ever
-delays a judgement, and no excluded reading can make a pane live.
-
-It is still a change to approved text: a third input, Better Terminal's own
-argument list. **The sentence proposed for SV-2 AC9**, after "The first image
-ADE observes that is not that shell is judged, once.":
-
-> **What counts as observing an image.** A reading of the process's argument
-> list that cannot be made, that is empty, or that is equal to the argument list
-> of the running Better Terminal process itself, read the same way, is not an
-> observation: nothing is judged from it and the pane stays connecting. (Such
-> readings occur in the first moments after a start, before the process has
-> become the shell.)
-
-and, in the paragraph that follows the rule, "one pure function of two argument
-lists: the one ADE started the shell with, and the one observed" becomes:
-
-> one pure function of three argument lists: the one ADE started the shell with,
-> the one observed, and Better Terminal's own.
-
-The pure test's table gains three rows (unreadable, empty, equal to Better
-Terminal's own: each "not judged"). The default built is the rule as proposed.
-If the owner prefers the literal text, the alternative is a fixed delay before
-the first reading, which ADR 0046 rejects as a guess a slow machine breaks.
+The evidence is unchanged: in the first tens of milliseconds after a start a
+reading is often empty, and in 11 of 37 starts it was the starting process's
+own list (run); the review's 29,526 samples showed whole lists or `[]` only.
+An excluded reading only delays a judgement; none can make a pane live.
 
 ### 15.2 Notes (no answer needed)
 
@@ -1737,20 +1981,34 @@ the first reading, which ADR 0046 rejects as a guess a slow machine breaks.
 
 Each is built as stated. "PRD" says whether the PRD's text agrees.
 
+**Flagged for the owner, not only the product manager** (review A2-m10): D-1,
+D-7, D-9 and D-11 each depart from, or correct, a sentence in a criterion the
+owner approved. The product manager is writing them into the PRD now (owner's
+instruction of 2026-11-18). **Until that text is in the PRD, the stories that
+build them are not sharded against the old sentence:** W2 (D-1), R1 and R4
+(D-7), W3 and W6 (D-9), R4 (D-11). D-13 to D-15 are this revision's and are
+flagged the same way.
+
 | # | Decision | PRD | For |
 |---|---|---|---|
-| D-1 | **Reopen of a server-named tab that holds no remote pane** opens a local tab named "Terminal" with no mark (8.3). | **Departs.** SV-4 AC3 says the Reopen rule holds for that tab and keeps "the name and mark it had". The design's choice agrees with SV-3 AC9 and SV-2 AC6 and never puts a local shell under a server's name. | the product manager: change AC3's sentence, or say the mark is kept |
+| D-1 | **Reopen of a server-named tab that holds no remote pane** opens a local tab named "Terminal" with no mark (8.3). | **Departs.** SV-4 AC3 says the Reopen rule holds for that tab and keeps "the name and mark it had". The design's choice agrees with SV-3 AC9 and SV-2 AC6 and never puts a local shell under a server's name. | **the owner** (flagged) and the product manager: change AC3's sentence, or say the mark is kept |
 | D-2 | **The exit event carries `status`, `kind` and `by` for every terminal**; a local terminal's `status` is always null (3.6). | Asked for (F7.11: "a shared contract"). It amends `terminal-open.md` line 202 and ADR 0014's "out of v1: exit codes", recorded in ADR 0046. | the record; story R3a edits both files |
 | D-3 | **A new crate, `unicode-normalization`**, for the name key (section 6). | Silent. | the record; ADR 0043 |
 | D-4 | **The connect request carries the pane** (2.5), as F7.1 defines it. Revision 1 left it out. Rust uses it for the per-pane rule only. | Agrees. | the record |
 | D-5 | **Three teardown call sites, not two**: the page-load hook is added to the exit and window-destroyed handlers (1.5). | SV-2 AC3's static test names two; the checked-in list holds those two and one more. | the product manager, to add the third to AC3's sentence |
-| D-6 | **"Could not start a terminal" is also the refusal** for a closed gate, for a second start for one pane, and for a start that completed after the main window or its page was gone (2.5). None is reachable by a webview that keeps its rules; the last is the one refusal after a start. | The fixed list has no closer kind; the PRD's "when" column for this kind says "the shell could not be started". | the product manager, to widen that cell or accept |
-| D-7 | **A home folder that is unset or has a character outside `0x20`-`0x7e` refuses a `~/` identity file** at the client start, as "a saved server failed its checks", field `identityFile` (section 6). | SV-7 AC3 requires the range for every argument; SV-2 AC1 says `~/` is replaced by the home folder and does not say what happens when that breaks the range. | the product manager, for the message's wording and the guide |
+| D-6 | **"Could not start a terminal" is also the refusal** for a closed gate, for a second start for one pane, and for a start that completed after the main window or its page was gone (2.5). None is reachable by a webview that keeps its rules. Revision 3 tells them apart with `cause` (D-13). | The fixed list has no closer kind; the PRD's "when" column for this kind says "the shell could not be started". | the product manager, to widen that cell (see D-13) |
+| D-7 | **A home folder that is unset or has a character outside `0x20`-`0x7e` refuses a `~/` identity file** at the client start, as "a saved server failed its checks", field `identityFile` (section 6). | SV-7 AC3 requires the range for every argument; SV-2 AC1 says `~/` is replaced by the home folder and does not say what happens when that breaks the range. The reason code is `home-unusable`. | **the owner** (flagged) and the product manager, for the message's wording and the guide |
 | D-8 | **A value that failed its field's rule is not sent to the webview** (section 5); a second row with one name key is the one marked. | Silent. | the designer (a fixed text for a withheld name) |
-| D-9 | **"The destination changed" compares all four members**, the identity file included (8.4), not the summary. | Agrees with F7.1's definition; SV-3 AC4's component test says "shows both summaries", which are equal when only the key changed. | the product manager and the designer: what the control shows then |
+| D-9 | **"The destination changed" compares all four members**, the identity file included (8.4), not the summary. | Agrees with F7.1's definition; SV-3 AC4's component test says "shows both summaries", which are equal when only the key changed. | **the owner** (flagged), the product manager and the designer: what the control shows then |
 | D-10 | **A background process that holds the terminal open after the pane's process ended loses the terminal after 1 s** (3.6), and a background job of the session loses it at an ending (1.3). ADE signals neither. | Agrees with "as when any terminal is closed" in the sense of a closed terminal window; today's ADE never closes the master (1.1). | the record |
-| D-11 | **The global-alias claim is corrected** (2.1): a `zsh` global alias whose name includes the quotes still applies. Outcome (ii), never live. | **The PRD repeats the false claim** (SV-2 AC2: "quoted, neither applies"; "there is no stub record with any other arguments"). | the product manager: both sentences, and a row for the table |
+| D-11 | **The global-alias claim is corrected** (2.1): a `zsh` global alias whose name includes the quotes still applies. Outcome (ii), never live. | **The PRD repeats the false claim** (SV-2 AC2: "quoted, neither applies"; "there is no stub record with any other arguments"). | **the owner** (flagged) and the product manager: both sentences, and a row for the table |
 | D-12 | **`SIGTERM` is a limit** like a crash (1.6). | F7.9 names a crash and a forced quit only. | the product manager, to add it |
+| D-13 | **`terminal-not-started` carries `cause`**: `start`, `closing` or `pane` (section 7; UX review U-M10). No thirteenth kind. | **Changes a cell.** SV-5 AC4's row says the kind may carry "the operating system's error number" only, and "when: the shell could not be started". | **the product manager** (the "may carry" and "when" cells), flagged for the owner. If refused: `closing` and `pane` need a thirteenth kind, or the message stays untrue for them |
+| D-14 | **A refusal for failed checks lists every failing field with a reason code** from a closed list of 14 words in 21 pairs (section 6; `saved-servers.md`); `home-unusable` arises only at a client start. | **Owner decision, 2026-11-18;** the product manager is amending SV-5 AC4's row and SV-1. The closed list is derived from SV-1 AC1's rules; Host's order of rules is this design's. | the product manager: the list and the order go into SV-1 as the table of record, or the PRD points at the context file |
+| D-15 | **`ConfirmDialog`'s Enter no longer confirms from anywhere** (section 22): Enter activates the focused button, and focus opens on Cancel, so Enter straight after the question appears cancels. This is for every caller: today's three close questions (a pane, a tab, a view with something running), where Cmd+W then Enter closes today and will cancel. | **Changes existing behaviour** outside F7. F7 needs it: Enter is the list's activation key, and the close of a running connection is asked so that one key does not end it (UX review U-M1, U-M2 b). | **the product manager and the owner**: accept for every caller, or keep today's Enter for the three close questions through a prop and take the safe default only for F7's questions |
+| D-16 | **`servers_list` carries no identity-file warning**; only a save returns one (section 6). | Agrees: SV-1 AC5 allows a look at the entry "to warn"; it does not say where. | the designer (the UX warns after a save only) |
+| D-17 | **The reload window is accepted, not closed** (1.5, route 3): a connect sent in the milliseconds before a page reload can be left with no pane until the window closes. | Silent. SV-2 AC3 does not cover a reload at all; route 3 is this design's addition. | the owner, one line: closing it costs a sixth command and a member in the connect request |
+| D-18 | **A remote record has `origin`** (`restored`, `reopened`), not saved (8.1). | Silent. | the designer (two bars can be told apart) |
 
 No S1 criterion was found unbuildable.
 
@@ -1792,8 +2050,20 @@ Elsewhere:
 - The folder readers marked "not read beyond the call" in 8.8.
 - That `portable-pty`'s spawn error holds an operating-system error number that
   can be recovered for `terminal-not-started` (the kind may carry none).
-- The designer's UX (branch `ux-f7`) was not read; sections 8 and 9 give it
-  contracts and take no position on layout or words. Not reviewed by the review
+- **The shared dialog components (section 22): read, not run.** The three
+  files and their callers were read on this branch; the review of the UX draft
+  read them too. No test exists for `ConfirmDialog` today, so nothing pins its
+  present behaviour; story C1's first test does. That WKWebView's Enter on a
+  focused button activates it on key-down, auto-repeat included, as Chrome's
+  does, is taken from the platform, not run.
+- **The one-terminal quit (1.5) was run with a probe's monitor**, a thread that
+  does what 3.6 says; the real monitor does not exist yet. The Rust test of
+  1.7 is the proof for the code.
+- That `tauri-runtime-wry` never sets the web-content-terminate hook (section
+  12): read by the review, not by the architect.
+- The designer's UX (branch `ux-f7`) was read only where its review points:
+  the refusal table of its 4.5, and 4.3. Sections 8 and 9 give it contracts and
+  take no position on layout or words. Not reviewed by the review
   either: `keyring`'s source, the sync import path, F1's engagement signal,
   prompt history and Fleet as holders of tab names or sent text.
 
@@ -1807,22 +2077,34 @@ nothing.
 
 | # | Story | Kind | Needs | Real shell or PTY |
 |---|---|---|---|---|
-| R1 | Rules, `Word` and `shell_quote` with the shared table, grammar (with the home-folder rule), summary, order, the kinds enum, the `wire.rs` types with `kinds.json` and `commands.json`, the hostile fixture's pure half; **SV-7 AC4's text test and the `sources.list` check** (it fails when a file under `saved_servers/` is not listed, so every later story adds its files in its own commit), the no-panic-words scan and the redacting `Debug` test; the new crate and the lock file | infra (Rust, pure): nothing else can be checked without it | none | no |
-| R2 | The store and `servers_list`, `servers_save`, `servers_remove`; `availability` (Rust); the identity-file warning; no failing value in a `ServerRow`; **SV-5 AC4's Rust log test for the kinds it adds a way to reach** (failed checks at a save, list unreadable, not saved, full, not in an engagement), with the test's log helper; `vault-index.json` byte-identical after add, edit, remove and a load | vertical for the list's data | R1 | no |
-| R3a | **The remote terminal and `end`:** the constructor with ADE's own writer and stoppable reader; the instance's `remote` member; the exit event's three fields for every terminal, `events.json`, and the edits to `terminal-open.md` and ADR 0014; the waiter; the monitor with `step`'s unwatched rows, `EndedByUser` and `GaveUp` (so a remote terminal's `exit` has its final sender here, 3.4); `ending::end`, `start`, `wait_gone`; `server_terminal_end`; the delegation in `kill` and the local terminal's unchanged `kill`; the check in `write_to` and the refusal in `type_line`; the input-queue wiring test; the stub example and the fixture module. **First step: the Linux findings (below)** | infra (Rust): the primitive every later Rust story starts processes with | R1 (the kind type in the event) | PTY; `sh` |
-| R3b | **`end_all` and the app's handlers:** the gate (`closed`, `page`, `starting`) and its checks in the insert; `end_all` with both waits; `main_closed`, `main_page_loaded`, `app_exiting`; the three handlers in `lib.rs` (the change to `.build(..)` and `.run(..)`); the teardown wiring test; the `No` then `Yes` test; the gate-at-insert, page-load and per-pane tests; the manual check of 1.6 in its notes | infra (Rust) | R3a | PTY; `sh` |
-| R4 | The client start: `client_env`, `secret_names`, `supported_shell`, the instruction, `server_connect` up to "started" (through R3b's insert); SV-2 AC2's table on stub records, the quoted-alias rows included; **the keychain test binary; SV-7 AC2's and AC3's client-start halves; SV-7 AC1's `.ssh` test; `vault-index.json` byte-identical after a connect and a second one**; SV-5 AC4's log test for the kinds it adds a way to reach (server gone, shell not supported, could not start a terminal, failed checks at a connect). **First step: SV-2 AC2's table under the CI image's `bash` 5 and `zsh`** | vertical in Rust | R1, R2, R3b | `zsh`, `bash` |
+| C1 | **The shared dialog components** (section 22): `ConfirmDialog` joins `useEscapeToClose`'s stack, gains its role, label, description, a focus trap and focus return, and loses its window-level Enter; `useFocusTrap` skips `tabindex="-1"` controls and only the trap mounted last acts. Its own tests, and the existing `SwitchConfirm`, `MethodologyPrompt`, `useEscapeToClose` and `useGuardedClose` tests green unchanged. **Not sharded until the owner and the product manager have answered D-15** | vertical (component); changes existing behaviour for every caller | none | no |
+| R1 | Rules **returning every failing field with its reason code (the `Failure` enum, 21 pairs)**, `Word` and `shell_quote` with the shared table, grammar (with the home-folder rule), summary, order, the kinds enum, the `wire.rs` types with `kinds.json` and `commands.json`, the hostile fixture's pure half; **SV-7 AC4's text test and the `sources.list` check** (it fails when a file under `saved_servers/` is not listed, so every later story adds its files in its own commit), the no-panic-words scan and the redacting `Debug` test; the new crate and the lock file | infra (Rust, pure): nothing else can be checked without it | none | no |
+| R2 | The store and `servers_list`, `servers_save`, `servers_remove`; `availability` (Rust); the identity-file warning, from a save only; no failing value in a `ServerRow`, **`problems` with reason codes and `fileIndex`, rows with a withheld name ordered last; a refused save lists every failing field**; **SV-5 AC4's Rust log test for the kinds it adds a way to reach** (failed checks at a save, list unreadable, not saved, full, not in an engagement), with the test's log helper; `vault-index.json` byte-identical after add, edit, remove and a load | vertical for the list's data | R1 | no |
+| R3a | **The remote terminal and `end`:** the constructor with ADE's own writer and stoppable reader; the instance's `remote` member; the exit event's three fields for every terminal, `events.json`, and the edits to `terminal-open.md` and ADR 0014; the waiter; the monitor with `step`'s unwatched rows, `EndedByUser` and `GaveUp` (so a remote terminal's `exit` has its final sender here, 3.4); **the monitor's two removals, with their test** (after a natural exit it removes, then sends; it never removes a terminal marked ending: review A2-B1, A2-m5); `ending::end`, `start`, `wait_gone`; `server_terminal_end`; the delegation in `kill` and the local terminal's unchanged `kill`; the check in `write_to` and the refusal in `type_line`; the input-queue wiring test; the stub example and the fixture module. **First step: the Linux findings (below)** | infra (Rust): the primitive every later Rust story starts processes with | R1 (the kind type in the event) | PTY; `sh` |
+| R3b | **`end_all` and the app's handlers:** the gate (`closed`, `page`, `starting`) and its checks in the insert; `end_all` with both waits; `main_closed`, `main_page_loaded`, `app_exiting`; the three handlers in `lib.rs` (the change to `.build(..)` and `.run(..)`); the teardown wiring test; **the two one-terminal `No` then `Yes` tests (child, leader)** (review A2-B1); `ending::admit` and `ending::insert` with their tests on fixture terminals, the guard on `gate.starting`, the page-load and per-pane tests; the manual check of 1.6 in its notes | infra (Rust) | R3a | PTY; `sh` |
+| R4 | The client start: `client_env`, `secret_names`, `supported_shell`, the instruction, `server_connect` up to "started" (through R3b's insert); **the reason codes at a connect, `home-unusable` included; `cause` on each `terminal-not-started`; the gate's two tests repeated through the command**; SV-2 AC2's table on stub records, the quoted-alias rows included; **the keychain test binary; SV-7 AC2's and AC3's client-start halves; SV-7 AC1's `.ssh` test; `vault-index.json` byte-identical after a connect and a second one**; SV-5 AC4's log test for the kinds it adds a way to reach (server gone, shell not supported, could not start a terminal, failed checks at a connect). **First step: SV-2 AC2's table under the CI image's `bash` 5 and `zsh`** | vertical in Rust | R1, R2, R3b | `zsh`, `bash` |
 | R5 | The hand-over check: `judge`, `step`'s watching rows, the sampling, `live` and `notice`; SV-2 AC9's cases; AC2's "live" clauses, never live for the quoted-alias rows; AC3's matrix through a client start; AC4; SV-8 AC2; SV-5 AC4's log test for the four kinds it adds (no SSH client, ended before ssh, the two notices). **First step: the Linux findings (below)** | vertical in Rust | R4 | `zsh`, `bash` |
 | R6 | The session export strip and `outward_name` with its table, over the hand-built tabs and over `session.json` | vertical (Rust) | W1 (the table), W2 (the fixture) | no |
 | W1 | `Pane.remote`, `Tab.serverNamed`, `serverTabs.ts` (with `sameDestination`), `outwardName` and its table, the rename rule, `closePane`'s single update, the detach refusal, `tabSetEntries` | infra-leaning (store, pure) | the contract | no |
 | W2 | Session save and restore with `session.json`; `ClosedTab` and Reopen (the record; decision D-1) | vertical (store) | W1 | no |
 | W3 | `serverInvoke.ts`, `serverKinds.ts` and its mirror test, `serverAvailability.ts`, `serverListStore` (the store, no component), `serverSessions.ts` (`requestConnect` with the check before every request, the session object, events to states), `openServerTab`, the remote branch of `useTerminal` and the xterm at the resolve, the remote fact passed to `destroyInstance` by `closePane` and `closeTab`, Reconnect's store side (one request per pane, the pane gone at the resolve, the second confirmation), splits stay local; **SV-4 AC2's "after every mount" test and SV-4 AC3's Reconnect-after-Reopen row** (they need this story's remote branch and Reconnect; review A-m11); `rejectionMessage` extracted from `main.tsx`, and SV-5 AC4's TypeScript log test for `server_connect` | vertical (store, hook) | W1, W2, R1 (`kinds.json`, `commands.json`), R3a (`events.json`) | no |
 | W4 | The `writePty` rule and its site list, the scratchpad's image case, file links, the folder's three facts and two changed readers, `FileBrowser`'s state, the close confirm, SV-5 AC5 | vertical | W1 | no |
-| W5 | The list overlay, its form, the changed-row confirmation on Connect, the palette entries; SV-5 AC4's TypeScript log test for the three list commands | vertical (component) | W3, the UX spec | no |
-| W6 | The marks (tab bar, tab switcher, pane), the Reconnect control and the changed-destination confirmation, the hand-over message and End, the kind messages, the tab menu, the tab set's left-out count | vertical (component) | W1, W3, the UX spec | no |
+| W5 | The list overlay, its form **with one message per failing field from its reason code**, rows that fail their checks, Remove's question (on C1's `ConfirmDialog`, rendered inside the overlay), the held press on Connect, the palette entries; SV-5 AC4's TypeScript log test for the three list commands | vertical (component) | **C1**, W3, the UX spec | no |
+| W6 | The marks (tab bar, tab switcher, pane), the Reconnect control and the held press, the hand-over message and End, the kind messages with and without their optional numbers and for each `cause`, the restored and reopened bars from `origin`, the tab menu, the tab set's left-out count; the close question for a running connection (on C1) | vertical (component) | **C1**, W1, W3, the UX spec | no |
 | D1 | DevOps: `zsh` on the Linux Backend CI job | CI | none; **before R4's first step** | n/a |
 
-**Order.** R1, W1 and D1 start together. Then R2, R3a, W2, W4. Then R3b, R6, W3.
+**W3 is a candidate to split at sharding** (review A2-m12; it is now the largest
+story, and R3 was split for less). The cut that keeps both halves testable
+alone: **W3a**, the leaves and the list (`serverInvoke.ts`, `serverKinds.ts`
+with its mirror test, `serverAvailability.ts`, `serverListStore` with `held`,
+`rejectionMessage` and the log test; needs W1 and R1); **W3b**, the sessions
+and the hook (`serverSessions.ts`, `openServerTab`, the remote branch of
+`useTerminal`, the remote fact to `destroyInstance`, Reconnect's store side,
+the two moved tests; needs W3a, W2 and R3a). W5 and W6 would then need W3b.
+The scrum-master decides; the list above keeps W3 whole until then.
+
+**Order.** R1, W1, D1 and C1 start together (C1 once D-15 is answered; it must
+be Done before W5 and W6 start). Then R2, R3a, W2, W4. Then R3b, R6, W3.
 Then R4, W5, W6. Then R5. A webview story tests against a stubbed `invoke` and
 needs a Rust story only where it reads a fixture that story makes (W3: R1 and
 R3a), not that story's code.
@@ -1867,13 +2149,22 @@ evidence. Proposed:
 > locally: **a green run of the `CI` workflow's two backend jobs, `Backend
 > (cargo test)` (Linux, `ubuntu-22.04`) and `Backend on macOS (cargo test)`, on
 > the story's final commit**, the same commit the local lines ran on. QA
-> produces and cites the runs as F1's gate does (`docs/architecture.md`, "F1
-> stories", items 3 and 4: push the commit to its branch, list the commit's
-> runs, start `ci.yml` once with `gh workflow run ci.yml --ref <branch>` if none
-> is running, count every `workflow_dispatch` and `push` run on the commit, and
-> record each run's URL and the two jobs' results by their display names in the
-> story's Verification section). A red or cancelled run of either job on that
-> commit makes the story not Done. F7's process tests are `#[cfg(unix)]`, both
+> produces and cites the runs by **the procedure of F1's gate, item 4**
+> (`docs/architecture.md`, "F1 stories"), **applied to F7's own two jobs**
+> wherever that item says "the three backend jobs of item 3": push the commit
+> to its branch, list the commit's runs, start `ci.yml` once with `gh workflow
+> run ci.yml --ref <branch>` if none is running, count every
+> `workflow_dispatch` and `push` run on the commit, and record each run's URL
+> and the two jobs' results by their display names in the story's Verification
+> section. **F1's item 3 does not apply to F7:** not its third (Windows) job,
+> and not its platform-tests regime (`platform-tests.txt`, the `require_*()`
+> helpers, the static never-skip test). **Every counted run must be `attempt`
+> 1:** a re-run of a failed job does not count, and one red or cancelled run
+> of either job on that commit makes the commit red and the story not Done; a
+> fix is a new commit. F7's process tests assert no tight wall-clock bound
+> (design 1.7): only lower bounds that are requirements and upper bounds that
+> are the routine's own deadlines, so that a slow runner does not cost a
+> commit. F7's process tests are `#[cfg(unix)]`, both
 > jobs are Unix, and each test fails when `zsh` or `bash` is missing, so neither
 > job can pass by leaving them out.
 
@@ -1884,27 +2175,27 @@ that a green story means anything on Linux.
 
 | Criterion | Rust | TypeScript (pure, store) | Component | Story |
 |---|---|---|---|---|
-| SV-1 AC1 | table per field | | | R1 |
+| SV-1 AC1 | table per field, each refused example with its reason code; a value failing in three fields lists three | | one message per listed field | R1, W5 |
 | SV-1 AC2 | extra members; grammar; one save | | | R1, R2 |
-| SV-1 AC3 | add, edit, remove; refused save byte-identical | | Remove's confirmation | R2, W5 |
+| SV-1 AC3 | add, edit, remove; refused save byte-identical | | Remove's confirmation, over the list: Esc closes the question only, Enter on Cancel cancels | R2, W5 (on C1) |
 | SV-1 AC4 | corrupt, newer, read-only folder; 201st add | | | R2 |
 | SV-1 AC5 | FIFO, mode 000 and a link to a regular file: save, warning, client start return | | | R2, R4 |
 | SV-2 AC1 | table of records; at most 8, ends `--`, host; the home-folder rule | | | R1 |
 | SV-2 AC2 | the fixture table, both shells, with the two quoted-alias rows | | | R4 (records), R5 (live, never live) |
-| SV-2 AC3 | `end` and `kill`; `end_all` with `No` then `Yes`; the gate; the wiring test; the matrix through a client start | writers driven once: 0 `write_pty`; one end request per close, 0 `kill_pty`; the pane gone at the resolve | | R3a, R3b, R5, W3, W4 |
-| SV-2 AC4 | exit 0 and 255 after live; a background holder: exit within 1.5 s and last | | | R3a, R5 |
+| SV-2 AC3 | `end` and `kill`; `end_all` with `No` then `Yes`, one terminal, the child case and the leader case; the monitor never removing an ending terminal; the gate's two functions; the wiring test; the matrix through a client start | writers driven once: 0 `write_pty`; one end request per close, 0 `kill_pty`; the pane gone at the resolve | | R3a, R3b, R5, W3, W4 |
+| SV-2 AC4 | exit 0 and 255 after live, the stub's last bytes whole; a background holder: exit after 1 s, last | | | R3a, R5 |
 | SV-2 AC5 | edited record: 0 stub records, the kind | Connect: tab count; Reconnect: stays ended | | R4, W3 |
 | SV-2 AC6 | | the six rows; no mark without a remote pane | `TabBar` menu | W1, W2, W3, W6 |
 | SV-2 AC7 | | one new active server tab; each refusal: count unchanged | | W3 |
 | SV-2 AC8 | the builder; the process-only variable through a child run of the test executable; the index missing and damaged; the keychain binary | | | R4 |
-| SV-2 AC9 | `judge` table; `step`; the eleven cases; the observation rule | | messages, End | R3a (`step`'s exit rows), R5, W6 |
+| SV-2 AC9 | `observe`'s table, then `judge`'s; `step`; the eleven cases | | messages, End | R3a (`step`'s exit rows), R5, W6 |
 | SV-2 AC10 | the `SHELL` table | refused Connect: count | the message, with and without a name | R4, W3, W6 |
 | SV-3 AC1 | export after the sequence | rename unchanged and changed | both rename boxes | W1, W6, R6 |
 | SV-3 AC2 | | `paneKind` four results; tab and split | marks, accessible names | W1, W6 |
 | SV-3 AC3 | | exit: remote and ended, tab open; events before and after the resolve | Reconnect, End only with the message | W3, W6 |
 | SV-3 AC4 | a start after an edit has the edited values | unchanged: one request; changed, also when only the key changed, and changed by a rewrite the list store had not seen: none until confirmed, then one; removed: none | both destinations | R4, W3, W6 |
 | SV-3 AC5 | | a split: `create_pty`, local | | W3 |
-| SV-3 AC6 | | `useGuardedClose` three cases | | W4 |
+| SV-3 AC6 | | `useGuardedClose` three cases | the question: Enter straight after it opens does not close | W4, W6 (on C1) |
 | SV-3 AC7 | | rename and remove of the server | | W1 |
 | SV-3 AC8 | | `detachTabToWindow` | menu | W1, W6 |
 | SV-3 AC9 | export after the sequence | the sequence; a subscriber sees no half state; markers | | W1, W2, R6 |
@@ -1914,7 +2205,7 @@ that a green story means anything on Linux.
 | SV-5 AC1 | markers absent from the export | | | R2, R6 |
 | SV-5 AC2 | the five tabs; the sequence; `session.json` | `saveSession` equals `session.json` | | R6, W2 |
 | SV-5 AC3 | | `tabSetEntries`; after the sequence | the left-out count | W1, W6 |
-| SV-5 AC4 | the twelve kinds, markers, the log, each in the story that adds its reach; the redacting `Debug` | unhandled rejections through `rejectionMessage`; the message holds the name, the kind does not | | R1, R2, R4, R5, W3, W5 |
+| SV-5 AC4 | the twelve kinds, markers, the log, each in the story that adds its reach; the 21 pairs, none holding a typed value; the redacting `Debug` | unhandled rejections through `rejectionMessage`; the message holds the name, the kind does not | | R1, R2, R4, R5, W3, W5 |
 | SV-5 AC5 | | folder-keyed keys byte-identical | | W4 |
 | SV-5 AC7 | `outward_name` against the table | `outwardName` against the table | | R6, W1; the payload test by whichever merges second |
 | SV-5 AC8 | a connect with the input set: refused, 0 starts | `serversAvailable`; palette entries with the input set | | R2, R4, W3, W5; the instance test by whichever merges second |
@@ -1933,6 +2224,7 @@ that a green story means anything on Linux.
 | SV-9 AC1 | summary and order tables | | keyboard reach | R1, W5 |
 | SV-9 AC2 | | the palette's entries, match, order, one request | | W5 |
 | SV-9 AC3 | | | the empty list | W5 |
+| (no F7 criterion: existing shared components) | | `useFocusTrap`: a `tabindex="-1"` control is not a stop; only the top trap acts | `ConfirmDialog`: Esc over a panel, role and labels, the trap, Enter on each button and on neither, focus return; the existing callers' tests unchanged | C1 |
 
 **Tests that need `zsh`, `bash` and a real terminal** (so `zsh` on the Linux
 Backend job, D1): SV-2 AC2, AC3 (matrix), AC4, AC5, AC8, AC9, AC10; SV-3 AC4
@@ -1991,3 +2283,135 @@ is used. S-1 is a defect found while answering, not one of the review's.
 | **Q4, Q5** | Withdrawn (A-M2, A-m6) | 15.2 |
 | **Decisions not listed** | Listed: D-1 to D-4 are the review's four; D-5 to D-12 are the ones revision 2 itself takes | 15.3 |
 | **S-1** (found in revision 2) "the destination changed" compared summaries, which leave out the identity file | It compares the four members of the destination | 8.4, 15.3 (D-9) |
+
+## 20. Findings of this round, and their answers
+
+Two reviews. The delta review of revision 2 (`A2-`): blocked on A2-B1, no
+majors, fourteen minors. The review of the UX draft (`U-`), which put nine
+contract points to the design; section 21 says which side moves on each.
+"Where" names sections of this file unless a file is named.
+
+| Finding | Answer | Where |
+|---|---|---|
+| **A2-B1** (blocking) the quit skips its wait when the pane's own process dies and a child ignores the hangup | **The monitor never takes a terminal marked ending out of the table**; only `end`'s last step does. The monitor still sends the `exit`. `end_all(Yes)` and `wait_gone` go on waiting on the table, which is now emptied of an ending terminal by the routine alone. The count-in-the-gate alternative is rejected with reasons. Two Rust tests with ONE terminal each (child, leader), `No` then `Yes`, returning no sooner than 2 s with nothing alive; a test of the monitor's two removals. **Run:** one terminal, child ignoring the hangup, with a monitor: as revision 2 worded it, `end_all(Yes)` returned at 100 ms (zsh) and 56 ms (bash) with the stub alive; as fixed, at 2091 ms and 2095 ms with nothing alive and 0 bytes | 1.2 rule 4, 1.4 step 5, 1.5, 1.7, 3.6, 12; ADR 0045; `server-panes.md` |
+| **A2-m1** a connect sent by the old page inserted after a reload | The window is stated and accepted, with its consequence, its recovery, and what closing it would cost; "exactly" is gone from the invariant | 1.5 (route 3), 12, 15.3 (D-17); ADR 0045; `server-panes.md` |
+| **A2-m2** `gate.starting` not subtracted on a failed start | `admit` returns a guard that subtracts and notifies on every way out; a test | 1.5, 1.7, 2.5 step 6, 12; ADR 0045 |
+| **A2-m3** two starts for one pane both between admit and insert; when the in-flight mark is set | The per-pane rule is checked again at the insert (the second is inserted ending, cause `pane`); the mark is set at the press, before the list read | 1.5 (route 1), 1.7, 2.5 step 7, 8.2, 8.4; `server-panes.md` |
+| **A2-m4** the web content process dies; a dev reload | A row each in the failure modes; the dev note under route 3 | 1.5, 12 |
+| **A2-m5** `exit` sent before the removal after a natural exit | The monitor removes, then sends; a test reconnects from the event | 3.6, 1.7; `server-panes.md` |
+| **A2-m6** the gate's reference to F1; attempt 1; tight bounds | The gate cites item 4's procedure with F7's own two jobs and says item 3 does not apply; every counted run is attempt 1; no test asserts "under 100 ms": bounds are lower bounds or the routine's own deadlines | 1.7, 17; `docs/architecture.md` |
+| **A2-m7** the evidence for A-M6; output in flight at a stop | The review's account of the four "keep" runs is taken as fact (knowledge file). The drop is stated, with the three places a stop happens; SV-2 AC4's test, and the holder test, assert the stub's last bytes arrive whole | 3.6, 3.7, 12; ADR 0045 |
+| **A2-m8** R3b's tests named what R4 builds | The gate is two named functions, `ending::admit` and `ending::insert`, tested in R3b on fixture terminals; R4 repeats them through the command | 1.7, 2.5, 17 |
+| **A2-m9** Q1's sentence against the function | Two pure steps, as the owner decided and the product manager is writing: `observe` (reading, own list) with a `NotObserved` result, then `judge` (started, observed, grammar). The three-lists sentence is withdrawn | 3.2, 3.3, 3.4, 3.7, 15.1; ADR 0046 |
+| **A2-m10** routing of D-1, D-7, D-9, D-11 | Flagged for the owner; the stories that build them are not sharded against the old sentences | 15.3 |
+| **A2-m11** version cites | `tauri` 2.10.2 and `wry` 0.54.2, the locked versions | 1.5 |
+| **A2-m12** W3 the largest story | A candidate to split at sharding, with the cut named | 17 |
+| **A2-m13** the monitor's removal missing from rule 4 and the invariant | Stated as the fourth way a terminal leaves the table | 1.2 rule 4, 1.5; ADR 0045; `server-panes.md` |
+| **A2-m14** who tells the monitor for an instance born ending | The insert gives the new monitor `EndedByUser` as its first input | 1.5, 2.5 step 7, 3.4; ADR 0045 |
+| **UX 1** (U-M3) refusals carry the first field only | Every failing field with a reason code from a closed list (owner decision): 14 words, 21 pairs, one Rust implementation at save, connect and load | 6, 7, 10; `saved-servers.md` |
+| **UX 2** (U-M4) a row that fails its checks | The contract stays (failing members withheld). Added: `problems` with reasons, `fileIndex`, withheld-name rows ordered last; Edit gets nothing for a failing field but its reason | 5, 9; `saved-servers.md` |
+| **UX 3** (U-m2) the identity-file warning on list rows | No: only a save returns one, with the reason | 6, 9, 12, 15.3 (D-16); `saved-servers.md` |
+| **UX 4** (U-M5) the row changed since it was shown | `requestConnect` answers `held` with a `ConnectCheck` (`shown`, `pane`, `now`, `differs`, `why`), kept in `serverListStore.held` | 8.2, 8.4, 9; `saved-servers.md` |
+| **UX 5** (U-M10) optional payloads; `terminal-not-started` for a closed gate and a second start | Optional members are absent, never null, and when is stated; `terminal-not-started` gains `cause` (`start`, `closing`, `pane`); no thirteenth kind | 2.5, 7, 15.3 (D-13); `saved-servers.md` |
+| **UX 6** (mismatch 7) `refusal: { kind }` | The whole kind; the context file's type is corrected | 8.1; `server-panes.md` |
+| **UX 7** (mismatch 8) restored against reopened | A member, `origin`, not saved | 8.1, 8.3, 8.5, 15.3 (D-18); `server-panes.md` |
+| **UX 8** (U-M1) `ConfirmDialog`, `useFocusTrap` | Designed, as a story of its own (C1) before W5 and W6; the Enter change is flagged (D-15) | 22, 17, 15.3 (D-15) |
+| **UX 9** (U-m3, U-m10) the file's name; the blank line on Reconnect | The constant `saved-servers.json`; the blank line is a write to the pane's display only, 0 bytes to the PTY, asserted | 8.4, 9; both context files |
+
+## 21. Answers to the UX review
+
+For each point the review of the UX draft put to the design: what is decided,
+and which side moves. The numbers are the review's table "UX against the
+architect's design".
+
+| # | Point | Decided | Side that moves |
+|---|---|---|---|
+| 1 | Refusals: every failing field with a reason code (U-M3, A1) | Yes. `fields: [{ field, reason }]`, the closed list in `saved-servers.md`. The UX's refusal table maps onto it row for row, with these differences for the designer: Host "first character" comes after the colon rules; Host has no separate "brackets" code (`not-ipv6` covers them); Identity file gains `home-unusable`, which a save never gives; User has no "empty" (empty means none) | **the design** (done); the PRD's row (product manager) |
+| 2 | The webview has the raw values of a failing row (U-M4, A8) | No. Failing members stay withheld. The UX gets `problems` and `fileIndex` | **the UX**: an empty destination, "Unnamed server", a label form for an empty summary, the Edit form with an empty failed field and its reason's words; no "cleaned value" anywhere |
+| 3 | A warning call on blur and for every row (U-m2, A3) | No. Only `servers_save`'s result | **the UX**: warn after a save |
+| 4 | A row that changed between showing and pressing (U-M5) | Kept. The webview holds a `ConnectCheck` (8.4) | **the UX** draws the held press, for Connect and for Reconnect (the control that turns into the changed form needs words and an announcement) |
+| 5 | A refusal bar keeps Reconnect | The design stands: a row with `problems`, a removed row and an unreadable list give no Reconnect (8.4's table) | **the UX**: its 5.6 and 8 agree with that table |
+| 6 | Numbers always present in three kinds (U-M10) | They are optional, and when is stated (section 7) | **the UX**: a form of each message without the number. The design adds `cause` so "could not start your shell" is said only when true |
+| 7 | Bars print the field and the shell from a stored refusal | `refusal` is the whole kind | **the design** (done) |
+| 8 | Separate "restored" and "reopened" bars | `origin` | **the design** (done); the UX may keep two bars |
+| 9 | Shared components fixed (U-M1, A7) | Section 22, story C1 | **the design**, and a decision for the product manager and owner (D-15) |
+| 10 | Exit carries status; `notice` and `live`; Rust times the bound | Unchanged | none |
+| 11 | Palette text for a withheld name | Unchanged; `fileIndex` is there if the text needs it | the UX (the empty summary's label) |
+| U-m3 | The file a "could not be read" message can name | `saved-servers.json`, "in Better Terminal's data folder"; no path | the UX (the words) |
+| U-m10 | The blank line on Reconnect | The webview writes it to the pane's display (`term.write`); 0 bytes to the PTY; a test | the UX: square its "writes nothing into a server pane's output" with this and with today's `[Process exited]` line |
+| | The connecting state's word, "ssh not confirmed" (owner, 2026-11-18) | A designer matter. The contracts' state name `connecting` is never shown to the user; no contract changes | none |
+
+Not the design's to answer (the designer's, the product manager's or the
+owner's): U-B1, U-B2, U-M2 a and c, U-M6 to U-M9, the other minors. U-M2 b is
+D-15.
+
+## 22. The shared dialog components (story C1)
+
+**Read, not run.** `src/components/ConfirmDialog.tsx`, `useEscapeToClose.ts` and
+`useFocusTrap.ts` were read on this branch; the review of the UX draft read
+the same lines.
+
+**Today.**
+
+- `ConfirmDialog` adds a `keydown` listener on `window` in the bubble phase.
+  Esc calls `onCancel`. **Enter calls `onConfirm` wherever focus is**, on
+  Cancel too. It has no role, no label, no focus trap, and does not give focus
+  back. No test covers it.
+- `useEscapeToClose` listens in the capture phase and stops the event, for the
+  panel opened last. `ConfirmDialog` is not in its stack, so with a panel that
+  uses it underneath, Esc closes the panel and the question stays.
+- `useFocusTrap`'s selector has `button:not([disabled])`, which matches a
+  button with `tabindex="-1"`. In a grid with one roving tab stop, the trap's
+  "last stop" is then a button Tab never reaches, and Tab from the real last
+  stop leaves the dialog. Every mounted trap handles Tab; none knows of another.
+
+**Callers today.**
+
+| Component | Callers |
+|---|---|
+| `ConfirmDialog` | one render site, `App.tsx:449`, fed by `useGuardedClose`: the three close questions (a pane, a tab or "Close all", a view, with something running) |
+| `useFocusTrap` | `SwitchConfirm.tsx`, `MethodologyPrompt.tsx` |
+| `useEscapeToClose` | `ContractsPanel`, `IntegrationsPanel`, `MethodologyPrompt`, `NewTabDialog`, `ShortcutsOverlay`, `SwitchConfirm`, `TabSwitcher`, `TokensPanel` (not changed; listed because `ConfirmDialog` joins them) |
+
+**The change.**
+
+| # | Change | For every caller? |
+|---|---|---|
+| 1 | `ConfirmDialog` calls `useEscapeToClose(onCancel)` and drops its own Esc handling. It is then the top of the stack while it is open: Esc closes the question and nothing under it | Yes. Alone on the screen it behaves as today |
+| 2 | Its panel gets `role="alertdialog"`, `aria-modal="true"`, `aria-labelledby` (the title) and `aria-describedby` (the message), ids from `useId`, and `tabIndex={-1}` | Yes. Additive |
+| 3 | It calls `useFocusTrap` on its panel, and on closing gives focus back to the element that had it when it opened, if that element is still in the document and focus is not already somewhere else | Yes. Today focus is left wherever the browser puts it |
+| 4 | **Enter activates the focused button only.** The window-level Enter handler is removed; a button's own activation is all there is. Focus still opens on Cancel. So Enter straight after the question appears **cancels**; confirming is Tab then Enter, or a click | **Yes, and it changes today's behaviour:** Cmd+W then Enter closes a busy pane today and will not. Decision D-15, for the product manager and the owner |
+| 5 | `useFocusTrap`: every selector entry excludes `[tabindex="-1"]` | Yes. `SwitchConfirm` and `MethodologyPrompt` have no such control today (their tests pin it) |
+| 6 | `useFocusTrap`: a module-level stack, as `useEscapeToClose` has; only the trap mounted last handles Tab | Yes. One trap at a time behaves as today |
+
+*Why "the focused button only" and not "Cancel is the default for destructive
+questions".* A default button keeps a window-level Enter, which is the defect:
+the key acts wherever focus is, and the visible focus ring then lies about what
+Enter will do. With no window-level handler there is one rule, the platform's,
+and the ring is true. Both give the same first key (Cancel), since focus opens
+there. A held or doubled Enter (the list's activation key, then the question)
+lands on Cancel.
+
+*Where the question is rendered over the list.* W5 renders Remove's
+`ConfirmDialog` as a child of the overlay's dialog element, so it is inside the
+subtree the overlay's `aria-modal` leaves active. Change 6 is what lets it sit
+there: the overlay's trap stands down while the question's is mounted.
+
+**If D-15 is refused for today's callers,** change 4 becomes a prop,
+`enterConfirms` (default false), which `App.tsx` sets for the three close
+questions with no remote pane; F7's questions never set it. The other five
+changes stand.
+
+**C1's tests** (component, `@testing-library/react`; written first):
+
+| Test | Asserts |
+|---|---|
+| Esc over a panel that uses `useEscapeToClose` | the question's `onCancel` once, the panel's `onClose` not at all; a second Esc closes the panel |
+| role and names | `alertdialog`, labelled by the title, described by the message |
+| Tab and Shift+Tab | cycle between Cancel and the confirm button; the same when the question is rendered inside a panel that has its own trap |
+| Enter | with focus on Cancel: `onCancel` once, `onConfirm` never; on the confirm button: `onConfirm` once; with focus on neither: neither |
+| focus | opens on Cancel; on closing returns to the opener when it is still in the document |
+| `useFocusTrap`: a grid with one roving stop | Tab from the real last stop goes to the first; a `tabindex="-1"` button is never a stop |
+| `useFocusTrap`: two traps | only the one mounted last moves focus; after it unmounts the first acts again |
+| the existing tests of `SwitchConfirm`, `MethodologyPrompt`, `useEscapeToClose`, `useGuardedClose` | green, unchanged |
+| the close question through `App`'s wiring | Enter straight after it opens leaves the tab open (pins change 4) |

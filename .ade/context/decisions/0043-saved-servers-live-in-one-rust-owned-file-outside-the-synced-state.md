@@ -1,8 +1,9 @@
 # 0043: Saved servers live in one Rust-owned file outside the synced state
 
-- Status: Proposed (2026-11-18), with the F7 S1 design, revision 2
+- Status: Proposed (2026-11-18), with the F7 S1 design, revision 3
   (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, sections 5 and
-  6). Not approved; awaiting a delta review. The number is
+  6). Not approved; awaiting a re-check of the delta review's finding A2-B1
+  (ADR `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`). The number is
   provisional: numbers to 0042 are taken across open design branches; cite this
   ADR by its slug.
 - Context:
@@ -28,14 +29,17 @@
   - A row keeps exactly an identifier and the five fields. Any other member is
     dropped on load.
   - **A value that failed its field's rule never reaches the webview.** A row
-    whose values fail the rules is loaded and listed with `problem: <field>`
-    and is never connected to. Each of its five members is checked by itself,
+    whose values fail the rules is loaded and listed with `problems`
+    (every failing field with a reason code from a closed list, never a value:
+    owner decision, 2026-11-18; `.ade/context/saved-servers.md` holds the 21
+    pairs) and is never connected to. One Rust function, `rules::check`,
+    produces the list at a save, at a client start and on load. Each of its five members is checked by itself,
     and one that fails is left out of the `ServerRow` (a failing name is sent
     as the empty string; the summary is empty unless host, port and user all
     passed). So an unbounded length, a control character or a bidirectional
     override in a hand-edited file is not shown in the overlay or the palette.
     Of two rows with one name key, the first in the file keeps its name and
-    each later one gets `problem: "name"`; its name passed the character rule
+    each later one gets `{ field: "name", reason: "taken" }`; its name passed the character rule
     and is still sent.
   - **One new crate, `unicode-normalization`,** a direct dependency for the
     name key (NFC, then lowercase). `Cargo.lock` does not hold it today
@@ -58,8 +62,13 @@
     and the start is the stated residual risk: the start goes to the new
     destination unconfirmed, and the pane shows it (design 8.4, note N-Q4, for
     the owner).
-  - Edit opens a row that failed its checks with the failing fields empty; the
-    designer has a fixed text for a withheld name.
+  - Edit opens a row that failed its checks with the failing fields empty and
+    each one's reason code; the stored value is never shown. The designer has a
+    fixed text for a withheld name; every row carries `fileIndex` (its 1-based
+    place in the file), which tells two rows with withheld names apart.
+  - `servers_list` returns no identity-file warning: only a save looks at the
+    path (`metadata`, never an open). The list is re-read on every Connect and
+    Reconnect press and must not wait on a path the user typed.
   - Rejected: a persisted key in the webview's storage. It would be snapshotted,
     would be one line away from `SHARED_KEYS`, and would give the rules two
     writers.

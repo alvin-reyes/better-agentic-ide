@@ -1,8 +1,9 @@
 # 0046: The hand-over is judged once, from the pane's own argument list
 
-- Status: Proposed (2026-11-18), with the F7 S1 design, revision 2
+- Status: Proposed (2026-11-18), with the F7 S1 design, revision 3
   (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 3). Not
-  approved; awaiting a delta review. The number is provisional; cite this ADR by
+  approved; awaiting a re-check of the delta review's finding A2-B1 (ADR
+  `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`). The number is provisional; cite this ADR by
   its slug.
   - **Amends, when story R3a lands,** ADR
     `0014-terminals-open-terminals-through-the-hook-endpoint` ("Out of v1: exit
@@ -27,19 +28,22 @@
   - **Observed with `sysinfo`**, refreshed for the one process id ADE started,
     arguments only: `sysctl(KERN_PROCARGS2)` on macOS, `/proc/<pid>/cmdline` on
     Linux. Never the foreground group.
-  - **The observation rule, an addition to the PRD's wording.** A sample is an
-    observation unless it is unreadable, empty, or equal to the argument list of
-    the ADE process itself. Other samples are not judged and the pane stays
-    connecting. This adds a third input to a criterion the owner approved with
-    two, so it is the design's one open question (Q1, design 15.1): the
-    sentence proposed for SV-2 AC9 is there, the wording is the product
-    manager's, and the owner is told. Built as proposed unless the owner says
-    otherwise.
+  - **Two pure steps** (owner decision, 2026-11-18; the product manager is
+    writing them into SV-2 AC9). **Step one, whether a reading is an
+    observation:** `observe(reading, own)`, from the reading and Better
+    Terminal's own argument list and nothing else. A reading that could not be
+    made, is empty, or equals Better Terminal's own list is `NotObserved`:
+    nothing is judged and the pane stays connecting. Anything else is an
+    observation. **Step two, the judgement of an observation:** `judge`, below,
+    from the started list, the observed list and the grammar and nothing else;
+    it is never called for `NotObserved`. (Revision 2 described this as one
+    function of three lists, which matched neither the code nor the rule.)
   - **ADE's own argument list is read through the same sampler**
     (`image(std::process::id())`, once per client start), never
     `std::env::args`, so the two sides of that comparison come from one source
     in one representation. If it cannot be read, that clause excludes nothing.
-  - **`judge(started, observed, grammar)`** is pure. Equal to `started`: still the
+  - **`judge(started, observed, grammar)`** is pure, and takes an observation.
+    Equal to `started`: still the
     shell. `[P, G]`, `[I, P, G]` or `[E, I, P, G]`, with `P`'s base name `ssh`,
     `I`'s one of `sh`, `bash`, `zsh`, `dash`, `ksh`, `E`'s `env`, and `G` exactly
     the grammar: the SSH client. Everything else: another program.
@@ -64,6 +68,17 @@
     event on the channel. When the ending routine gives up on a process it
     cannot end, the monitor still sends one `exit`, with no status (ADR
     `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`).
+  - **The monitor and the table.** After a natural exit, of a terminal not
+    marked ending, the monitor takes the instance out of the table and only
+    then sends the `exit`, so a Reconnect made from the event is not refused
+    for the pane still having a terminal. It **never** takes out a terminal
+    marked ending: it sends that terminal's `exit` and leaves the instance to
+    the ending routine (ADR 0045; the quit's wait depends on it). A monitor
+    made for an instance inserted already ending gets "ended by the user" as
+    its first input.
+  - A stop of the reader can drop output in flight; after a natural exit with
+    nothing holding the terminal the reader is never stopped, so the process's
+    last bytes arrive whole (a test asserts it).
   - **The exit event carries `status`, `kind` and `by` for every terminal**
     (`.ade/context/server-panes.md`). A local terminal sends `status: null,
     kind: null, by: "process"`: its exit still comes from its reader, which has

@@ -80,3 +80,13 @@
   - Tauri `tao` 0.34.5 `applicationWillTerminate` -> `RunEvent::Exit` (read by the reviewer, not run); no signal handler, so `SIGTERM` runs none of ADE's code. `generate_handler!` accepts `#[cfg]` on an entry.
   - `sysinfo` `start_time` has one-second resolution. `unicode-normalization` is not in `Cargo.lock`; CI builds `--locked`.
   - A gate that names CI jobs must be marked "proposed, not in force" in `docs/architecture.md` until the owner approves; F1's items 3 and 4 are the wording to cite (display names `Backend (cargo test)`, `Backend on macOS (cargo test)`). Still nothing of F7 run on Linux.
+- 2026-11-18: F7 S1 design revision 3 (fixes A2-B1 of the delta review; answers the UX review's contract points).
+  - A probe of an ending routine with no monitor proves nothing about a quit: `end2.rs` had none, and its two-terminal case let one terminal cover for the other. Model every thread that can touch the table, and test one terminal per case. The monitor probe is `mon3.rs` in the session scratchpad's `f7-arch/probe` (`mon3 mon <shell> asis|fixed`); the review's is `mon.rs` in `f7-arch-review2`.
+  - Rule that came out of it: whoever waits on "the table is empty" must be the only one who empties it of what they wait for. The monitor removes only after a natural exit; an ending terminal is removed by `end`'s last step alone.
+  - Two of end2.log's four "reader=keep" runs whose stub ended anyway came from an earlier probe build that dropped the wake pipe's write end (which stops the reader); the current source forgets it. The other two are the child case, where the leader's exit takes the terminal whatever the reader does.
+  - `ConfirmDialog` has one render site (`App.tsx:449`, fed by `useGuardedClose`) and no test; its Enter confirms from anywhere via a `window` listener. `useFocusTrap` callers: `SwitchConfirm`, `MethodologyPrompt`. `useEscapeToClose` has eight callers and a module-level stack.
+  - Locked versions to cite: `tauri` 2.10.2, `wry` 0.54.2, `tauri-runtime-wry` 2.10.0 (which never sets wry's web-content-terminate hook).
+  - A kind's optional member must say when it is absent, and a kind reused for a second cause needs a discriminating member, or the UX writes a message that is untrue for it.
+  - When a review says "the designer draws it", state the record the webview holds first; a contract with no data is not one.
+  - Editing a 2,000-line design by scripted exact-string replacement with a count assertion per edit catches drift; do the blocking fix and its context files first and save before the rest.
+
