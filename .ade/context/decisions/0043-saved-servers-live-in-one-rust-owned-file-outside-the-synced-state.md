@@ -1,7 +1,8 @@
 # 0043: Saved servers live in one Rust-owned file outside the synced state
 
-- Status: Proposed (2026-11-18), with the F7 S1 design
-  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`). The number is
+- Status: Proposed (2026-11-18), with the F7 S1 design, revision 2
+  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, sections 5 and
+  6). Not approved; awaiting a delta review. The number is
   provisional: numbers to 0042 are taken across open design branches; cite this
   ADR by its slug.
 - Context:
@@ -26,8 +27,26 @@
     file is an empty list.
   - A row keeps exactly an identifier and the five fields. Any other member is
     dropped on load.
+  - **A value that failed its field's rule never reaches the webview.** A row
+    whose values fail the rules is loaded and listed with `problem: <field>`
+    and is never connected to. Each of its five members is checked by itself,
+    and one that fails is left out of the `ServerRow` (a failing name is sent
+    as the empty string; the summary is empty unless host, port and user all
+    passed). So an unbounded length, a control character or a bidirectional
+    override in a hand-edited file is not shown in the overlay or the palette.
+    Of two rows with one name key, the first in the file keeps its name and
+    each later one gets `problem: "name"`; its name passed the character rule
+    and is still sent.
+  - **One new crate, `unicode-normalization`,** a direct dependency for the
+    name key (NFC, then lowercase). `Cargo.lock` does not hold it today
+    (`icu_normalizer` is there only through another crate's internals). Story
+    R1 adds it to `Cargo.toml` and commits the lock file in the same change,
+    because CI builds with `--locked`.
   - The webview holds the last `servers_list` result in memory and reloads it on
-    the `servers-changed` event.
+    the `servers-changed` event, when the overlay or the palette opens, and
+    **on every Connect or Reconnect press, before the request**: another
+    program's rewrite of the file is announced by no event, and that reload is
+    what catches it (SV-3 AC4).
 - Consequences:
   - The list cannot reach sync or a snapshot by a list edit elsewhere: it is not a
     key of that store at all. It also has no snapshot to restore from; a damaged
@@ -35,6 +54,12 @@
   - The webview cannot write a row the rules did not pass.
   - One small file read per action, which 200 rows makes negligible.
   - Two ADE processes on one profile: the later whole write wins.
+  - A store rewritten in the few milliseconds between the reload on the press
+    and the start is the stated residual risk: the start goes to the new
+    destination unconfirmed, and the pane shows it (design 8.4, note N-Q4, for
+    the owner).
+  - Edit opens a row that failed its checks with the failing fields empty; the
+    designer has a fixed text for a withheld name.
   - Rejected: a persisted key in the webview's storage. It would be snapshotted,
     would be one line away from `SHARED_KEYS`, and would give the rules two
     writers.

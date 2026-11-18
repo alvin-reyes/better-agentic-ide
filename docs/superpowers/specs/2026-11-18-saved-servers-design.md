@@ -136,7 +136,7 @@ it waits through `end_all`, not by calling `end`).
 | 2 | Compute the set (1.3). Send each member `SIGHUP`, then `SIGCONT`, by process id, after the start-time check. A signal the system refuses (`EPERM`: a process of another user) is noted and the routine goes on. | A stopped job does not act on a hangup until continued. By id, not `killpg`, so only members of this session are signalled. |
 | 3 | Poll: recompute the set (with the `fg` read in step 1 and the current one). Empty: go to 5. Otherwise sleep 50 ms, **or to the 2 s deadline if that is sooner**. | A hangup handler may have changed the foreground group. Sleeping to the deadline means the kill is sent at 2 s, not at the next poll after it (review A-m6). |
 | 4 | At 2 s from step 1: send `SIGKILL` to every member still alive, once; keep polling every 50 ms. At 5 s: stop polling whatever is left. | SV-2 AC3: an uncatchable kill at 2 s, none alive within 5 s. |
-| 5 | **Last, always:** if members were left at 5 s, tell the monitor `GaveUp` (3.4), so the pane gets its `exit`. Take the instance out of the table; stop the reader through the wake pipe and join it; drop the instance: the master, the reader's duplicate and (when the writer thread next wakes, which the dropped queue causes) the writer's duplicate are closed. Notify the gate's condition variable. Return `Gone`, or `GaveUp`. | Dropping writes 0 bytes (rule 1). With no handle of ADE's left, the kernel hangs the terminal up for whatever is still attached (rule 3). |
+| 5 | **Last, always:** if members were left at 5 s, tell the monitor `GaveUp` (3.4): the monitor stops the reader and then sends the pane its `exit` (3.6). Take the instance out of the table; stop the reader through the wake pipe and join it (stopping is idempotent: whoever comes second, the routine or the monitor, finds it stopped); drop the instance: the master, the reader's duplicate and (when the writer thread next wakes, which the dropped queue causes) the writer's duplicate are closed. Notify the gate's condition variable. Return `Gone`, or `GaveUp`. | Dropping writes 0 bytes (rule 1). With no handle of ADE's left, the kernel hangs the terminal up for whatever is still attached (rule 3). |
 
 The pane's exit event comes from the monitor (section 3.6): `by: "ended"` and no
 kind, so an End leaves the pane ended with its output. It is sent once, whether
@@ -864,7 +864,10 @@ take the instance out of the table through the routine's last step (1.4 step 5,
 which is idempotent). So the exit is always the last event on the channel (SV-2
 AC4: "the output after the stub's last byte is empty"), and a background process
 holding the terminal open delays it by at most 1 s. That process loses its
-terminal then, as it does when a terminal window is closed.
+terminal then, as it does when a terminal window is closed. The same order
+holds for the one exit that has no `Exited` before it: on `GaveUp` (1.4 step 5)
+the monitor stops the reader at once, with no 1 s wait, joins it, and only then
+sends the exit. So no `output` event follows an `exit` on any path.
 
 Threads per remote terminal: reader (ADE's own, on a wake pipe, 1.2), writer
 (ADE's own duplicate), waiter, monitor. The waiter reaping the leader is also
@@ -1372,7 +1375,7 @@ the answer; Rust's per-pane rule, 2.5 step 6, is the backstop).
   file. So "Rust looks where the store writes" is a test, not prose, and a
   change to either side's shape fails the other's test.
 - `loadSession`: a pane with `remote` comes back with `state: "ended"`, `ptyId:
-  null`, no `initialCwd`. Mounting it takes the remote branch (8.2, step 4).
+  null`, no `initialCwd`. Mounting it takes the remote branch (8.2, step 7).
 - **An older build** (PRD F7.9). It ignores the two new members: it opens the pane
   as a local shell under its scrollback, exports the tab's real name, and its next
   save drops both members for good. The format cannot prevent that: an older
@@ -1864,14 +1867,15 @@ evidence. Proposed:
 > locally: **a green run of the `CI` workflow's two backend jobs, `Backend
 > (cargo test)` (Linux, `ubuntu-22.04`) and `Backend on macOS (cargo test)`, on
 > the story's final commit**, the same commit the local lines ran on. QA
-> produces and cites the runs as F1's gate does (`docs/architecture.md`, F1
-> stories, item 4: push the commit to its branch, list the commit's runs, start
-> `ci.yml` once with `gh workflow run ci.yml --ref <branch>` if none is running,
-> count every run on the commit, and record each run's URL and the two jobs'
-> results by their display names in the story's Verification section). A red or
-> cancelled run of either job on that commit makes the story not Done. F7's
-> process tests are `#[cfg(unix)]`, both jobs are Unix, and each test fails when
-> `zsh` or `bash` is missing, so neither job can pass by leaving them out.
+> produces and cites the runs as F1's gate does (`docs/architecture.md`, "F1
+> stories", items 3 and 4: push the commit to its branch, list the commit's
+> runs, start `ci.yml` once with `gh workflow run ci.yml --ref <branch>` if none
+> is running, count every `workflow_dispatch` and `push` run on the commit, and
+> record each run's URL and the two jobs' results by their display names in the
+> story's Verification section). A red or cancelled run of either job on that
+> commit makes the story not Done. F7's process tests are `#[cfg(unix)]`, both
+> jobs are Unix, and each test fails when `zsh` or `bash` is missing, so neither
+> job can pass by leaving them out.
 
 Until the owner approves this, it gates nothing, and this design does not claim
 that a green story means anything on Linux.

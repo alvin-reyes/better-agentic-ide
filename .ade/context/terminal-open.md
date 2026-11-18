@@ -200,6 +200,11 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
   it disabled, with a title saying why. No other busy check exists, and nothing else calls
   `hasActiveProcess`.
 - No exit code in v1: `PtyEvent::Exit` is unchanged.
+  **Proposed (F7 S1 design, not built):** the exit event gains `status`, `kind`
+  and `by` for every terminal; a terminal opened here still reports no exit
+  code (`status: null, kind: null, by: "process"`). See `server-panes.md` and
+  ADR `0046-the-hand-over-is-judged-once-from-the-panes-own-argument-list`.
+  F7 S1's story R3a rewrites this line when it changes the event.
 
 ```ts
 type OpenMessage =
