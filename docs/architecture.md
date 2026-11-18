@@ -499,6 +499,7 @@ this list is only ids and what each needs):
 Order: R1, W1, D1 and C1 together (C1 once D-15 is answered; Done before W5 and
 W6 start); then R2, R3a, W2, W4; then R3b, R6, W3; then R4, W5, W6; then R5.
 There is no tests-only story. W3 is a candidate to split at sharding (design
-section 17 names the cut). Stories W2, R1, R4, W3 and W6 are not sharded
-against the PRD's old sentences for design decisions D-1, D-7, D-9 and D-11,
-which are flagged for the owner and being written into the PRD.
+section 17 names the cut). The stories are sharded against PRD revision 8,
+which holds design decisions D-1, D-7, D-9 and D-11; the design follows it
+(the reasons are SV-1 AC1's 23; the home folder that replaces `~/` is passed
+as it is).

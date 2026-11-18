@@ -89,4 +89,6 @@
   - A kind's optional member must say when it is absent, and a kind reused for a second cause needs a discriminating member, or the UX writes a message that is untrue for it.
   - When a review says "the designer draws it", state the record the webview holds first; a contract with no data is not one.
   - Editing a 2,000-line design by scripted exact-string replacement with a count assertion per edit catches drift; do the blocking fix and its context files first and save before the rest.
+  - PRD revision 8 (on `origin/main`, not on this branch: read it with `git show origin/main:docs/prd.md`) fixed the reasons at 23 in SV-1 AC1's own order and says the home folder replacing `~/` is passed as it is. When the owner decides a closed list, wait for the PRD's table before spelling codes: my first 21 had to be redone.
+  - ADR 0008's quoter (runs single-quoted, `'` and `\` escaped outside quotes) is byte-safe for any home path under `zsh -c` and `bash -c`, non-UTF-8 and zsh's meta bytes `0x83`/`0x9b` included (probe `f7-arch/home3/q.py` in the session scratchpad; 28 runs).
 

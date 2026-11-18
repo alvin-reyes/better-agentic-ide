@@ -31,7 +31,7 @@
   - **A value that failed its field's rule never reaches the webview.** A row
     whose values fail the rules is loaded and listed with `problems`
     (every failing field with a reason code from a closed list, never a value:
-    owner decision, 2026-11-18; `.ade/context/saved-servers.md` holds the 21
+    owner decision, 2026-11-18; `.ade/context/saved-servers.md` holds the 23
     pairs) and is never connected to. One Rust function, `rules::check`,
     produces the list at a save, at a client start and on load. Each of its five members is checked by itself,
     and one that fails is left out of the `ServerRow` (a failing name is sent

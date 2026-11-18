@@ -40,17 +40,20 @@
     rule. It and `src/lib/shellQuote.ts` are pinned to one checked-in table,
     `src/lib/shellQuote.cases.json`, read by both sides' tests. It is not a second
     rule; it is the second implementation of one rule, and it is used only for
-    this instruction. It takes a `quote::Word`, not a string: `Word::new` is
-    the only way to make one and gives nothing for an input with a character
-    outside `0x20`-`0x7e`.
-  - **The home folder is checked like a typed value.** The one argument that is
-    not a saved value is the identity file after its leading `~/` was replaced
-    by the home folder. The replacement is made only when the home folder is
-    set, valid UTF-8 and absolute, and the expanded path must itself pass the
-    identity-file rule. Otherwise the connect is refused before any start with
-    "a saved server failed its checks", `{ field: "identityFile", reason:
-    "home-unusable" }`. So no argument
-    ADE passes holds a character outside `0x20`-`0x7e` (SV-7 AC3).
+    this instruction. It works on bytes and takes a `quote::Word`, not a string.
+    `Word::saved` gives nothing for an input with a character outside
+    `0x20`-`0x7e` and makes every word but one; `Word::under_home` makes the
+    identity file expanded from `~/`.
+  - **The home folder is passed as it is** (PRD revision 8, SV-2 AC1 and SV-7
+    AC3; revision 2 of this ADR refused a home folder with a character outside
+    `0x20`-`0x7e`). The one argument that is not only a saved value is the
+    identity file after its leading `~/` was replaced by the home folder: the
+    home folder's bytes, then the saved text, quoted as one word. Only an unset
+    or empty home refuses the connect, before any start, with "a saved server
+    failed its checks", `{ field: "identityFile", reason: "home-unknown" }`.
+    Run under zsh 5.9 and bash 3.2.57, `LANG` UTF-8 and C: home folders with a
+    space and non-ASCII, a quote, a newline, shell metacharacters, bytes that
+    are not UTF-8, and `%h${HOME}` each arrived as one argument, byte for byte.
   - **The environment.** `client_env(base, remove, macos)` starts from the base it
     is given and nothing else; drops every `ADE_*` name and every name in
     `remove` (the vault's names, from `vault::secret_names`, a plain-file read);
@@ -84,9 +87,9 @@
     SV-2 AC2's table under the Linux CI image's `bash` 5.1 and `zsh` before the
     client start is built further; a row with another outcome there goes to the
     product manager.
-  - On a machine whose home folder has a character outside `0x20`-`0x7e` (a
-    non-ASCII user name), a `~/` identity file cannot be used from a saved
-    server; the key goes in `~/.ssh/config` under an alias.
+  - A `%` or `${` in the home folder's path reaches the SSH client, which
+    expands them (the PRD's stated limit). A home folder that is set but not
+    absolute is passed as it is.
   - A function named `exec` or `command` (zsh), or `exec` (bash), still runs in
     place of the word. Nothing prevents that; the hand-over check is the backstop.
   - `portable-pty` sets `SHELL` itself when it builds the command, so `SHELL` is

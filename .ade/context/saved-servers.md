@@ -25,40 +25,44 @@ code (below).
 Owner decision, 2026-11-18: a refusal carries a fixed reason code for **every**
 failing field, never a typed value. `rules::check` is the one implementation:
 it returns `Vec<Failure>`, used at a save, at every client start, and when a
-row is loaded. `Failure` is one Rust enum of **21** `(field, reason)` pairs,
+row is loaded. `Failure` is one Rust enum of **23** `(field, reason)` pairs,
 serialised `{ "field": "...", "reason": "..." }`; a pair not in this table
 cannot be built. One entry per failing field (its **first** matching row, top
 to bottom), fields in the order name, host, port, user, identityFile.
 
-| Field | Reason | When (first match wins) |
-|---|---|---|
-| `name` | `empty` | nothing left after trimming |
-| `name` | `too-long` | more than 64 code points |
-| `name` | `characters` | a character `name_char_ok` refuses (control, format, line or paragraph separator) |
-| `name` | `taken` | another record has the same name key |
-| `host` | `empty` | empty |
-| `host` | `too-long` | more than 253 characters |
-| `host` | `holds-user` | contains `@` |
-| `host` | `holds-port` | exactly one `:`, something before it, and 1 to 5 digits after it to the end |
-| `host` | `not-ipv6` | any other value that contains `:` and is not an accepted IPv6 address (brackets, a `%` zone, `::`, a bad group) |
-| `host` | `first-character` | the first character is not a letter or a digit |
-| `host` | `characters` | a character outside `A-Z a-z 0-9 . - _` |
-| `host` | `not-ipv4` | only digits and dots, and not four parts 0 to 255 with no leading zero |
-| `host` | `leading-0x` | a dot-separated part starts `0x` or `0X` |
-| `port` | `not-a-port` | not 1 to 5 digits with no leading zero and no sign, or not 1 to 65535 |
-| `user` | `too-long` | more than 64 characters |
-| `user` | `characters` | a character outside the set, or a leading `-` |
-| `identityFile` | `not-a-path` | neither absolute nor starting `~/` |
-| `identityFile` | `too-long` | more than 1024 characters |
-| `identityFile` | `characters` | a character outside `0x20`-`0x7e` |
-| `identityFile` | `expands` | holds `%` or `${` |
-| `identityFile` | `home-unusable` | **at a client start only:** it starts `~/` and the home folder is unset, not absolute, or makes the expanded path fail one of the three rows above |
+| Field | Reason (PRD's words) | Code | When |
+|---|---|---|---|
+| `name` | empty | `empty` | nothing left after trimming |
+| `name` | too long | `too-long` | more than 64 code points |
+| `name` | a character that is not allowed | `characters` | a character `name_char_ok` refuses (control, format, line or paragraph separator) |
+| `name` | already used | `taken` | another record has the same name key |
+| `host` | empty | `empty` | no value |
+| `host` | too long | `too-long` | more than 253 characters |
+| `host` | a character that is not allowed | `characters` | a character outside `A-Z a-z 0-9 . - _ :` (a space, `@`, `;`, a bracket, `%`) |
+| `host` | first character | `first-character` | the first character is not a letter, a digit or `:` |
+| `host` | written with a port | `holds-port` | exactly one `:`, with only digits after it |
+| `host` | not an IPv6 address | `not-ipv6` | it holds `:` and `Ipv6Addr::from_str` refuses it |
+| `host` | the unspecified address | `unspecified` | it is `::` |
+| `host` | not an IPv4 address | `not-ipv4` | only digits and dots, and not four decimal numbers 0 to 255 with no leading zero |
+| `host` | a part written in hexadecimal | `leading-0x` | a dot-separated part starts `0x` or `0X` |
+| `port` | not a port number | `not-a-port` | after trimming, not 1 to 5 digits; or a sign; or a zero followed by another digit |
+| `port` | out of range | `out-of-range` | a value outside 1 to 65535 (`0`, `65536`) |
+| `user` | too long | `too-long` | more than 64 characters |
+| `user` | a character that is not allowed | `characters` | a character outside `A-Z a-z 0-9 . _ - @` |
+| `user` | first character | `first-character` | the first character is `-` |
+| `identityFile` | not a path | `not-a-path` | neither absolute nor starting `~/` |
+| `identityFile` | too long | `too-long` | more than 1024 characters |
+| `identityFile` | a character that is not allowed | `characters` | a character outside `0x20`-`0x7e` |
+| `identityFile` | a token the SSH client expands | `expands` | it holds `%` or `${` |
+| `identityFile` | home folder not known | `home-unknown` | **at a client start only:** it starts `~/` and the home folder is unset or empty |
 
-The 14 reason words (`empty`, `too-long`, `characters`, `taken`, `holds-user`,
-`holds-port`, `not-ipv6`, `first-character`, `not-ipv4`, `leading-0x`,
-`not-a-port`, `not-a-path`, `expands`, `home-unusable`) are the closed list; a
-fifteenth, or a twenty-second pair, is a change to this file, to `kinds.json`
-and to the PRD's table. Nothing the user typed is in a `Failure`, in the log or
+The list is SV-1 AC1's (PRD revision 8), row for row and in its order; only the
+spelling of the codes is the design's. Fifteen code words (`empty`, `too-long`,
+`characters`, `taken`, `first-character`, `holds-port`, `not-ipv6`,
+`unspecified`, `not-ipv4`, `leading-0x`, `not-a-port`, `out-of-range`,
+`not-a-path`, `expands`, `home-unknown`) in 23 pairs: Name 4, Host 9, Port 2,
+User 3, Identity file 5. A reason is added only by a change to SV-1 AC1, and
+then to this file and `kinds.json`. Nothing the user typed is in a `Failure`, in the log or
 in a message: the webview composes a message from the field's label and the
 code.
 
@@ -98,10 +102,16 @@ code.
 
 - Arguments of the SSH client: `[-p PORT] [-l USER] [-i IDENTITY_FILE] -- HOST`; a
   leading `~/` of the identity file is replaced by the home folder. Nothing else,
-  ever. The expanded identity file must itself pass the identity-file rule: when
-  the home folder is unset, not absolute, or has a character outside
-  `0x20`-`0x7e`, a record with a `~/` identity file is refused at the client
-  start (`server-failed-checks`, field `identityFile`).
+  ever. **The home folder's path is passed as it is** (PRD revision 8, SV-2
+  AC1): its bytes, spaces and non-ASCII included, are not held to the
+  identity-file rule, which is about the saved value. When the home folder is
+  unset or empty, a record with a `~/` identity file is refused at the client
+  start (`server-failed-checks`, `{ field: "identityFile", reason:
+  "home-unknown" }`); a record with no identity file or an absolute one is not.
+  A `%` or `${` in the home folder's path reaches the SSH client, which
+  expands them (the PRD's stated limit). The expanded path goes only into the
+  argument: `destination.identityFile`, the row and every message keep the
+  saved `~/` form, so the home folder's path never crosses to the webview.
 - Destination summary: `[USER@]HOST[:PORT]`, an IPv6 host in brackets when a port
   follows. The webview shows the string Rust returns. **"The destination
   changed" is decided on the four members** (host, port, user, identity file),
@@ -240,8 +250,13 @@ second, connects it (`f7-merges-second.md`, written at sharding).
 Rust quotes the instruction's words by ADR 0008's rule
 (`saved_servers::quote::shell_quote`). It and `src/lib/shellQuote.ts` are pinned
 by one table, `src/lib/shellQuote.cases.json`, which both sides' tests read.
-The Rust quoter takes a `Word`, which cannot hold a character outside
-`0x20`-`0x7e`.
+The table has rows with a space and with non-ASCII characters (PRD revision 8:
+the home folder that replaces `~/` is quoted with the rest). The Rust quoter
+works on bytes and takes a `Word`, which has two makers: `Word::saved`, which
+gives nothing for a character outside `0x20`-`0x7e`, for every saved value;
+and `Word::under_home`, for the one identity file expanded from `~/`, whose
+home part may hold any byte. `grammar::arguments` is the only caller of the
+second.
 
 Quoting every word defeats an alias named for the bare word. It does not defeat
 a `zsh` global alias whose name includes the quotes (`alias -g

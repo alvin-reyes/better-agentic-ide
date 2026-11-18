@@ -7,8 +7,11 @@
   the contract points the review of the UX draft put to the design (section 20
   lists every finding of this round with its answer; section 21 is "Answers to
   the UX review"). Nothing that held is redesigned.
-- **Covers:** `docs/prd.md` F7, slice **S1** only (SV-1 to SV-9, revision 7, approved
-  by the owner 2026-11-18). S1b (SV-13) and S2 (SV-12) are not designed here;
+- **Covers:** `docs/prd.md` F7, slice **S1** only (SV-1 to SV-9). Written
+  against revision 7 (approved by the owner 2026-11-18) and brought into line
+  with **revision 8** (on `origin/main`; not yet merged into this branch) on
+  the home folder, the reasons, the two-step observation rule and the
+  quoted-alias rows. S1b (SV-13) and S2 (SV-12) are not designed here;
   section 14 says what S1's seams leave for S1b.
 - **Contracts:** `.ade/context/saved-servers.md`, `.ade/context/server-panes.md`.
 - **ADRs (Proposed, numbers provisional):** 0043 (the store), 0044 (the client
@@ -579,7 +582,9 @@ must quote. ADR 0008's quoter is a rule with one TypeScript implementation
 
 - `src/lib/shellQuote.cases.json` is a checked-in table of `[input, output]` pairs
   (the empty string, plain words, every character of `0x20`-`0x7e`, runs of `'` and
-  `\`, a leading and a trailing quote).
+  `\`, a leading and a trailing quote; and, with PRD revision 8, **rows with a
+  space and with non-ASCII characters**: `/Users/Zoë Q/.ssh/id`, a CJK and an
+  emoji path, a path with `'` beside a non-ASCII letter).
 - `shellQuote.test.ts` asserts the TypeScript quoter against it; a Rust test
   asserts `saved_servers::quote::shell_quote` against the same file
   (`include_str!`). A case added for one side is a test on both.
@@ -588,17 +593,61 @@ must quote. ADR 0008's quoter is a rule with one TypeScript implementation
   `shell_quote` is the only function in `src-tauri/src/saved_servers/` that emits
   a quote character into an instruction.
 
-**Nothing outside `0x20`-`0x7e` reaches the quoter, by type** (review A-m4).
-Validation (section 6) refuses every character outside that range in a saved
-value, but one argument is not a saved value: the identity file after its
-leading `~/` was replaced by the home folder. So `shell_quote` does not take a
-string. It takes a `quote::Word`, and `Word::new(&str)` is the only way to make
-one: it returns nothing when the input holds a character outside
-`0x20`-`0x7e`. `grammar::arguments` returns `Word`s, and it refuses a record
-whose expanded identity file cannot be one (section 6). The shared table holds
-only in-range inputs, because no other input can exist on the Rust side; a
-Rust-only test asserts that `Word::new` refuses a control character, DEL, and a
-non-ASCII letter.
+**The quoter carries the home folder's bytes; a saved value still cannot hold
+one outside `0x20`-`0x7e`, by type** (revision 3, following PRD revision 8's
+SV-2 AC1 and SV-7 AC3; it replaces revision 2's answer to review A-m4, which
+refused such a home folder). Validation (section 6) refuses every character
+outside that range in a saved value. One argument is not only a saved value:
+the identity file after its leading `~/` was replaced by the home folder,
+which the PRD now says is passed as it is. So:
+
+- `shell_quote(&Word) -> OsString` works on **bytes**: maximal runs without
+  `'` (`0x27`) or `\` (`0x5c`) are single-quoted, and each of those two bytes
+  is escaped outside quotes. That is ADR 0008's rule unchanged; for a string of
+  characters in `0x20`-`0x7e` it gives what it gave before.
+- `quote::Word` has exactly two makers. `Word::saved(&str)` returns nothing
+  when the input holds a character outside `0x20`-`0x7e`; every word of the
+  grammar and the instruction is made with it. `Word::under_home(home: &OsStr,
+  rest: &str)` joins the home folder's bytes and the saved value's text after
+  `~` (`rest` checked as `saved` checks); it returns nothing only when `home`
+  is empty. `grammar::arguments` is its one caller (the wiring test counts
+  the call sites).
+- The instruction and the argument list are `OsString`s end to end
+  (`CommandBuilder::arg` takes one), so a home folder that is not valid UTF-8
+  is passed byte for byte too.
+
+**Is that safe? Run** (macOS 26, `zsh` 5.9 and `bash` 3.2.57, each with
+`LANG=en_US.UTF-8` and with `LANG=C`; the instruction's words quoted by the
+rule above, with `printf '%s\0'` in the stub's place; 28 runs). Seven home
+folders: `/Users/Zoë Q`; one with `'`; one with a newline and a tab; one with
+`` $HOME`id`\*?[x]!~;&|<>#``; one with bytes that are not UTF-8 (`0xff 0xfe
+0x83 0x9b`, the last two being bytes `zsh` uses internally as markers); a CJK
+and emoji one; one with `%h${HOME}`. **In every run the identity file arrived
+as one argument, byte-identical, and the words after it were unchanged.**
+Inside single quotes neither shell gives any byte a meaning, and the two bytes
+the rule escapes cannot be part of a multi-byte UTF-8 character. What the run
+does not cover: the shells as `-l -i` with real start-up files (the stories'
+fixture does, SV-7 AC3's new test), Linux, and a locale whose multi-byte
+encoding has `0x5c` as a trailing byte (Shift-JIS, Big5: not a locale macOS or
+the CI image offers `zsh` or `bash` users by default; stated in section 16).
+`-c` means no line editor sees the text, so ADR 0008's caution about control
+characters does not apply here.
+
+**So no question is raised: the PRD's text is built.** The limits, stated:
+
+- A `%` or `${` in the home folder's path reaches the SSH client, which expands
+  them in an identity file (the PRD's stated limit, F7.9).
+- A home folder that is set but not absolute is passed as it is; the SSH
+  client then reads the path against the folder the shell started in, which is
+  that same home folder if it exists. Only an unset or empty home refuses.
+- A global alias named for the quoted home path is the class of 2.1's
+  quoted-alias rows: outcome (ii), never live.
+
+The shared table holds valid strings only (it is JSON, read by both sides); a
+Rust-only test covers what TypeScript cannot hold: `Word::saved` refuses a
+control character, DEL and a non-ASCII letter, and `shell_quote` of a
+`Word::under_home` whose home has non-UTF-8 bytes and a `'` equals the expected
+bytes.
 
 ### 2.4 The environment (SV-2 AC8)
 
@@ -712,7 +761,7 @@ The order inside, each refusal before any process exists:
 5. `supported_shell`: "shell not supported".
 6. Build the grammar and the instruction (section 6: a record whose identity file
    cannot be expanded is refused here as step 4's kind, with `{ field:
-   "identityFile", reason: "home-unusable" }`) and the environment. Then
+   "identityFile", reason: "home-unknown" }`) and the environment. Then
    **`ending::admit(table, gate, paneId) -> Result<Admission, Kind>`**, under
    the table lock (1.5): if the gate is closed, refuse with "could not start a
    terminal", cause `closing`; if `paneId` already has a remote terminal that
@@ -867,8 +916,7 @@ itself continuously showed whole lists or `[]` only, never a part of a list, and
 one sample of one process took 99 microseconds. The rule adds a step, with
 Better Terminal's own list as its input, to a criterion the owner approved as
 one function of two lists. That was Q1 (section 15.1): the owner has decided
-it, and the product manager is writing it into SV-2 AC9 as the two steps
-above.
+it, and SV-2 AC9 (PRD revision 8) has it as the two steps above.
 
 ### 3.3 The judging function
 
@@ -1245,17 +1293,20 @@ shows, for each field the kind lists, the words for its reason code.
   field by field, **every** field checked, so the result lists each failing
   field once, in the order name, host, port, user, identity file, with the
   reason code of the first of that field's rules it broke (owner decision,
-  2026-11-18; UX review U-M3). `Failure` is one enum of the 21 `(field,
+  2026-11-18; UX review U-M3). `Failure` is one enum of the 23 `(field,
   reason)` pairs in `.ade/context/saved-servers.md` ("Why a value was
   refused"), which is the table of record; an impossible pair cannot be built.
   It holds no value. The same function, and so the same list, is used at a
   save, at a client start (2.5 step 4), and for a row on load (section 5).
-  Host's order of rules is fixed so that each of SV-1 AC1's refused examples
-  has one code: `@` anywhere is `holds-user`; exactly one `:` followed by 1 to
-  5 digits to the end is `holds-port` (`db1.example.com:2222`: "the message
-  says to use Port"); any other value with a `:` that is not an accepted IPv6
-  address is `not-ipv6` (`[2001:db8::7]`, `fe80::1%en0`, `a:b:c`, `::`); then
-  `first-character`, `characters`, `not-ipv4`, `leading-0x`. The rules
+  **The list and its order are SV-1 AC1's** (PRD revision 8: 23 reasons; Name
+  4, Host 9, Port 2, User 3, Identity file 5); the codes' spelling is the
+  design's. Host, in the PRD's order: `empty`, `too-long`, `characters` (so
+  `deploy@db1.example.com`, `[2001:db8::7]`, `fe80::1%en0`, `host name` and
+  `-oProxyCommand=x` are all `characters`), `first-character`, `holds-port`
+  (`db1.example.com:2222`), `not-ipv6` (`a:b:c`, `1::2::3`,
+  `2001:db8::12345`), `unspecified` (`::`), `not-ipv4`, `leading-0x`. Port:
+  `not-a-port` (`22x`, `022`, `+22`), then `out-of-range` (`0`, `65536`). User:
+  `too-long`, `characters`, `first-character` (`-l`). The rules
   themselves: Host: the character set and first character, then (a) with a `:`,
   `std::net::Ipv6Addr::from_str` must accept it and it must not be `::`; (b) only
   digits and dots: four decimal parts 0 to 255 with no leading zero; (c) no
@@ -1268,23 +1319,24 @@ shows, for each field the kind lists, the words for its reason code.
   A-m19: the lock file does not hold it today). Story R1 adds it to `Cargo.toml`
   and commits the lock file, with whatever the crate itself depends on, in the
   same change, because CI builds with `--locked`; ADR 0043 records it.
-- `arguments(record, home) -> Result<Vec<Word>, Field>`: `[-p PORT] [-l USER] [-i
+- `arguments(record, home) -> Result<Vec<Word>, Failure>`: `[-p PORT] [-l USER] [-i
   FILE] -- HOST`; at most 8 words. A leading `~/` in the identity file is replaced
-  by `home` (from `crate::env_home`, `lib.rs:66`). **The home folder is checked
-  like a typed value** (review A-m4): the replacement is made only when `home` is
-  present, is valid UTF-8 and is absolute, and the **expanded** path must itself
-  pass the identity-file rule (1 to 1024 characters, each in `0x20`-`0x7e`, no
-  `%`, no `${`). Otherwise the result is the failure `{ identityFile,
-  home-unusable }`, the one reason code that can arise only at a client start,
-  and the connect is refused with "a saved server failed its checks" before
-  anything is started. So SV-7 AC3's "no argument holds a character outside `0x20`-`0x7e`"
-  holds for the argument ADE passes, not only for the value saved. A record with
-  no identity file, or an absolute one, does not need `home` for its grammar.
-  What this costs: on a machine whose home folder has a character outside that
-  range (a non-ASCII user name), a `~/` identity file cannot be used from a
-  saved server; the key goes in `~/.ssh/config` under an alias, the PRD's
-  stated way out for values the rules do not take. Listed for the product
-  manager (section 15).
+  by `home` (from `crate::env_home`, `lib.rs:66`, taken as an `OsString`).
+  **The home folder's path is passed as it is** (PRD revision 8, SV-2 AC1;
+  revision 2 refused one with a character outside `0x20`-`0x7e`, and the PRD
+  decided otherwise): the argument is `Word::under_home(home, rest)` (2.3),
+  the home folder's bytes followed by the saved value after `~`. The
+  identity-file rule is about the saved value and is not applied to the
+  expanded path. **When `home` is unset or empty** and the identity file
+  starts `~/`, the result is the failure `{ identityFile, home-unknown }`, the
+  one reason that can arise only at a client start, and the connect is
+  refused with "a saved server failed its checks" before anything is started.
+  A record with no identity file, or an absolute one, does not need `home`.
+  The expanded path exists only in the argument list: `Connected.destination`
+  and every row keep the saved `~/` form. The pure test has the PRD's rows:
+  home `/Users/Zoë Q` and `~/.ssh/id` give the one argument `/Users/Zoë
+  Q/.ssh/id`; no home gives the failure; no home with an absolute identity
+  file gives its list.
 - `summary(record) -> String`: `[USER@]HOST[:PORT]`, an IPv6 host in brackets when
   a port follows. `servers_list` returns it with each row, and returns the rows
   **in order** (name key, then code points), so the webview sorts nothing.
@@ -1835,7 +1887,7 @@ outward name each had a shared table and nothing else did. Now, under
 
 | File | Holds | Rust test | TypeScript test | Made by |
 |---|---|---|---|---|
-| `kinds.json` | each of the twelve kinds with every payload form (with and without `errno`, `shell`, `status`; each `cause`; **each of the 21 `{ field, reason }` pairs, and one refusal listing five fields**) | each `Kind` serialised equals its row; a thirteenth variant fails | each row parses as the `Kind` union; an id in the file and not in the union, or the reverse, fails | R1 |
+| `kinds.json` | each of the twelve kinds with every payload form (with and without `errno`, `shell`, `status`; each `cause`; **each of the 23 `{ field, reason }` pairs, and one refusal listing five fields**) | each `Kind` serialised equals its row; a thirteenth variant fails | each row parses as the `Kind` union; an id in the file and not in the union, or the reverse, fails | R1 |
 | `commands.json` | the arguments of each of the five commands as the webview sends them; `ServerRow` (whole, minimal, with `problems` and withheld members, two with withheld names and different `fileIndex`); `SaveResult` with and without a warning; `Connected` | every arguments row deserialises into its `wire.rs` struct and an extra member is refused; every result value built in the test serialises equal to its row | `serverInvoke.ts`'s wrappers, run against a stubbed `invoke`, send exactly the arguments rows; each result row parses into its type | R1 (the types and the file); R2 and R4 assert their commands return those types |
 | `events.json` | every event: `output`; `live`; both `notice` kinds; `exit` with a status of 0, 255 and null, with each kind, with `by` as `process` and as `ended`, and the gave-up form; a local terminal's `exit`; `error` | each `PtyEvent` serialised equals its row | each row, fed to the session object of 8.2, gives the state the row names beside it | R3a |
 | `session.json` | a session as `saveSession` writes it (8.5) | the export strip over it (8.9) | `saveSession`'s output **equals** it | W2; R6 reads it |
@@ -1905,7 +1957,9 @@ named (SV-7 AC4's text test asserts it).
 | a second Reconnect is pressed before the first is answered | no second request (8.4); Rust would refuse it (2.5 step 6) |
 | the store is rewritten by another program after the list was shown | caught on the press by the reload and compare (8.4); a rewrite in the milliseconds after that is the stated residual risk |
 | ADE's own argument list cannot be read | the "ADE's own list" exclusion of 3.2 does nothing; an early sample may be judged "another program"; never a wrong live |
-| the home folder is unset, or has a character outside `0x20`-`0x7e`, and the identity file starts `~/` | refused before any start, field `identityFile` (section 6) |
+| the home folder is unset or empty, and the identity file starts `~/` | refused before any start: `identityFile`, `home-unknown` (section 6) |
+| the home folder's path has a space, a quote, a non-ASCII character or bytes that are not UTF-8 | passed as it is, as one quoted argument (2.3; run) |
+| the home folder's path holds `%` or `${` | it reaches the SSH client, which expands it: the PRD's stated limit |
 | ADE is sent `SIGTERM` | as a crash: none of ADE's code runs (1.6) |
 | a process holds the terminal open after the pane's process ended | the exit is sent after 1 s without it |
 | the webview is gone when an event is sent | the sink keeps output as for any terminal (`ptysink.rs`); the terminal is ended by the window-destroyed handler or the page-load hook |
@@ -1950,7 +2004,7 @@ manager and the owner before story C1 is sharded.
 ### 15.1 Q1, the observation rule: decided
 
 Revision 2 asked this as the one open question. **The owner decided it on
-2026-11-18**, and the product manager is writing it into SV-2 AC9 as **two pure
+2026-11-18**, and PRD revision 8 has it in SV-2 AC9 as **two pure
 steps**: whether a reading is an observation, from the reading and Better
 Terminal's own list; then the judgement of an observation, from the started
 list, the observed list and the grammar. The design's functions are those two
@@ -1983,11 +2037,13 @@ Each is built as stated. "PRD" says whether the PRD's text agrees.
 
 **Flagged for the owner, not only the product manager** (review A2-m10): D-1,
 D-7, D-9 and D-11 each depart from, or correct, a sentence in a criterion the
-owner approved. The product manager is writing them into the PRD now (owner's
+owner approved. The product manager wrote them into PRD revision 8 (owner's
 instruction of 2026-11-18). **Until that text is in the PRD, the stories that
-build them are not sharded against the old sentence:** W2 (D-1), R1 and R4
-(D-7), W3 and W6 (D-9), R4 (D-11). D-13 to D-15 are this revision's and are
-flagged the same way.
+build them are not sharded against the old sentence.** PRD revision 8 (on
+`origin/main`) now holds D-1, D-7, D-9 and D-11, the two-step observation rule
+and the two quoted-alias rows, and this design follows it; the stories are
+sharded against revision 8. What is still open with the product manager: the
+widening of SV-3 AC4 to palette entries (D-9), D-13, D-15 and D-17.
 
 | # | Decision | PRD | For |
 |---|---|---|---|
@@ -1997,14 +2053,14 @@ flagged the same way.
 | D-4 | **The connect request carries the pane** (2.5), as F7.1 defines it. Revision 1 left it out. Rust uses it for the per-pane rule only. | Agrees. | the record |
 | D-5 | **Three teardown call sites, not two**: the page-load hook is added to the exit and window-destroyed handlers (1.5). | SV-2 AC3's static test names two; the checked-in list holds those two and one more. | the product manager, to add the third to AC3's sentence |
 | D-6 | **"Could not start a terminal" is also the refusal** for a closed gate, for a second start for one pane, and for a start that completed after the main window or its page was gone (2.5). None is reachable by a webview that keeps its rules. Revision 3 tells them apart with `cause` (D-13). | The fixed list has no closer kind; the PRD's "when" column for this kind says "the shell could not be started". | the product manager, to widen that cell (see D-13) |
-| D-7 | **A home folder that is unset or has a character outside `0x20`-`0x7e` refuses a `~/` identity file** at the client start, as "a saved server failed its checks", field `identityFile` (section 6). | SV-7 AC3 requires the range for every argument; SV-2 AC1 says `~/` is replaced by the home folder and does not say what happens when that breaks the range. The reason code is `home-unusable`. | **the owner** (flagged) and the product manager, for the message's wording and the guide |
+| D-7 | **The home folder that replaces `~/`: the design follows PRD revision 8.** The home folder's path is passed as it is, quoted with the rest; only an unset or empty home refuses, with `identityFile`, `home-unknown` (2.3, section 6). Revision 2 refused a home with a character outside `0x20`-`0x7e`; that is withdrawn. The quoter was run with seven hostile home folders under both shells and found safe, so no question is raised. | **Agrees** (SV-2 AC1, SV-7 AC3, revision 8). For the product manager, two things the text does not say: a home folder that is set but not absolute is passed as it is; and the expanded path never reaches the webview (the pane's record keeps `~/`). | the record |
 | D-8 | **A value that failed its field's rule is not sent to the webview** (section 5); a second row with one name key is the one marked. | Silent. | the designer (a fixed text for a withheld name) |
-| D-9 | **"The destination changed" compares all four members**, the identity file included (8.4), not the summary. | Agrees with F7.1's definition; SV-3 AC4's component test says "shows both summaries", which are equal when only the key changed. | **the owner** (flagged), the product manager and the designer: what the control shows then |
+| D-9 | **"The destination changed" compares all four members**, the identity file included (8.4), **and the check is made before every connect request: Reconnect, Connect from the open list, and a palette entry's Connect.** | SV-3 AC4 (revision 8) words the check for Reconnect and for Connect from an open list. **The design is the stricter and is kept:** a palette entry's label was built from a row too, and its press is checked against that row in the same way. | **the product manager, to widen the sentence** to every connect request, palette entries included. Also for the product manager, outside this design's scope: a hub's Connect (S1b, SV-13 AC4) **refuses** a changed destination where a saved server's now asks a second confirmation; the two should be squared or the difference stated |
 | D-10 | **A background process that holds the terminal open after the pane's process ended loses the terminal after 1 s** (3.6), and a background job of the session loses it at an ending (1.3). ADE signals neither. | Agrees with "as when any terminal is closed" in the sense of a closed terminal window; today's ADE never closes the master (1.1). | the record |
 | D-11 | **The global-alias claim is corrected** (2.1): a `zsh` global alias whose name includes the quotes still applies. Outcome (ii), never live. | **The PRD repeats the false claim** (SV-2 AC2: "quoted, neither applies"; "there is no stub record with any other arguments"). | **the owner** (flagged) and the product manager: both sentences, and a row for the table |
 | D-12 | **`SIGTERM` is a limit** like a crash (1.6). | F7.9 names a crash and a forced quit only. | the product manager, to add it |
 | D-13 | **`terminal-not-started` carries `cause`**: `start`, `closing` or `pane` (section 7; UX review U-M10). No thirteenth kind. | **Changes a cell.** SV-5 AC4's row says the kind may carry "the operating system's error number" only, and "when: the shell could not be started". | **the product manager** (the "may carry" and "when" cells), flagged for the owner. If refused: `closing` and `pane` need a thirteenth kind, or the message stays untrue for them |
-| D-14 | **A refusal for failed checks lists every failing field with a reason code** from a closed list of 14 words in 21 pairs (section 6; `saved-servers.md`); `home-unusable` arises only at a client start. | **Owner decision, 2026-11-18;** the product manager is amending SV-5 AC4's row and SV-1. The closed list is derived from SV-1 AC1's rules; Host's order of rules is this design's. | the product manager: the list and the order go into SV-1 as the table of record, or the PRD points at the context file |
+| D-14 | **A refusal for failed checks lists every failing field with a reason code**: SV-1 AC1's closed list of 23, in its order; the design spells them as 15 code words (section 6; `saved-servers.md`). | **Agrees** (revision 8). Revision 3's first draft had 21 pairs in an order of its own; it now matches the PRD exactly. | the record |
 | D-15 | **`ConfirmDialog`'s Enter no longer confirms from anywhere** (section 22): Enter activates the focused button, and focus opens on Cancel, so Enter straight after the question appears cancels. This is for every caller: today's three close questions (a pane, a tab, a view with something running), where Cmd+W then Enter closes today and will cancel. | **Changes existing behaviour** outside F7. F7 needs it: Enter is the list's activation key, and the close of a running connection is asked so that one key does not end it (UX review U-M1, U-M2 b). | **the product manager and the owner**: accept for every caller, or keep today's Enter for the three close questions through a prop and take the safe default only for F7's questions |
 | D-16 | **`servers_list` carries no identity-file warning**; only a save returns one (section 6). | Agrees: SV-1 AC5 allows a look at the entry "to warn"; it does not say where. | the designer (the UX warns after a save only) |
 | D-17 | **The reload window is accepted, not closed** (1.5, route 3): a connect sent in the milliseconds before a page reload can be left with no pane until the window closes. | Silent. SV-2 AC3 does not cover a reload at all; route 3 is this design's addition. | the owner, one line: closing it costs a sixth command and a member in the connect request |
@@ -2045,6 +2101,13 @@ Elsewhere:
 - A real process of another user in a pane (needs root): the probe refused the
   signals instead (1.4).
 - That other `zsh` versions treat a global alias named with quotes as 5.9 does.
+- **The home folder's bytes (2.3):** run through `zsh -f -c` and `bash --norc
+  -c` only, not through `-l -i` with start-up files, and not on Linux. Not
+  run: a locale whose encoding has `0x5c` as a trailing byte (Shift-JIS, Big5).
+  That the sampler returns a non-UTF-8 argument byte for byte, so that such a
+  pane is judged live: if it does not, the pane stays connecting with the
+  notice, the safe side. `sysinfo` 0.33's `cmd()` is taken to return
+  `OsString`s; `judge` compares lists as such.
 - That Tauri's bundler ships only the main binary, so that an example target can
   never be bundled (examples are not built by a release build at all: run).
 - The folder readers marked "not read beyond the call" in 8.8.
@@ -2078,11 +2141,11 @@ nothing.
 | # | Story | Kind | Needs | Real shell or PTY |
 |---|---|---|---|---|
 | C1 | **The shared dialog components** (section 22): `ConfirmDialog` joins `useEscapeToClose`'s stack, gains its role, label, description, a focus trap and focus return, and loses its window-level Enter; `useFocusTrap` skips `tabindex="-1"` controls and only the trap mounted last acts. Its own tests, and the existing `SwitchConfirm`, `MethodologyPrompt`, `useEscapeToClose` and `useGuardedClose` tests green unchanged. **Not sharded until the owner and the product manager have answered D-15** | vertical (component); changes existing behaviour for every caller | none | no |
-| R1 | Rules **returning every failing field with its reason code (the `Failure` enum, 21 pairs)**, `Word` and `shell_quote` with the shared table, grammar (with the home-folder rule), summary, order, the kinds enum, the `wire.rs` types with `kinds.json` and `commands.json`, the hostile fixture's pure half; **SV-7 AC4's text test and the `sources.list` check** (it fails when a file under `saved_servers/` is not listed, so every later story adds its files in its own commit), the no-panic-words scan and the redacting `Debug` test; the new crate and the lock file | infra (Rust, pure): nothing else can be checked without it | none | no |
+| R1 | Rules **returning every failing field with its reason code (the `Failure` enum, 23 pairs, SV-1 AC1's list)**, `Word` (its two makers) and byte-wise `shell_quote` with the shared table and its space and non-ASCII rows, grammar (with the home-folder rule), summary, order, the kinds enum, the `wire.rs` types with `kinds.json` and `commands.json`, the hostile fixture's pure half; **SV-7 AC4's text test and the `sources.list` check** (it fails when a file under `saved_servers/` is not listed, so every later story adds its files in its own commit), the no-panic-words scan and the redacting `Debug` test; the new crate and the lock file | infra (Rust, pure): nothing else can be checked without it | none | no |
 | R2 | The store and `servers_list`, `servers_save`, `servers_remove`; `availability` (Rust); the identity-file warning, from a save only; no failing value in a `ServerRow`, **`problems` with reason codes and `fileIndex`, rows with a withheld name ordered last; a refused save lists every failing field**; **SV-5 AC4's Rust log test for the kinds it adds a way to reach** (failed checks at a save, list unreadable, not saved, full, not in an engagement), with the test's log helper; `vault-index.json` byte-identical after add, edit, remove and a load | vertical for the list's data | R1 | no |
 | R3a | **The remote terminal and `end`:** the constructor with ADE's own writer and stoppable reader; the instance's `remote` member; the exit event's three fields for every terminal, `events.json`, and the edits to `terminal-open.md` and ADR 0014; the waiter; the monitor with `step`'s unwatched rows, `EndedByUser` and `GaveUp` (so a remote terminal's `exit` has its final sender here, 3.4); **the monitor's two removals, with their test** (after a natural exit it removes, then sends; it never removes a terminal marked ending: review A2-B1, A2-m5); `ending::end`, `start`, `wait_gone`; `server_terminal_end`; the delegation in `kill` and the local terminal's unchanged `kill`; the check in `write_to` and the refusal in `type_line`; the input-queue wiring test; the stub example and the fixture module. **First step: the Linux findings (below)** | infra (Rust): the primitive every later Rust story starts processes with | R1 (the kind type in the event) | PTY; `sh` |
 | R3b | **`end_all` and the app's handlers:** the gate (`closed`, `page`, `starting`) and its checks in the insert; `end_all` with both waits; `main_closed`, `main_page_loaded`, `app_exiting`; the three handlers in `lib.rs` (the change to `.build(..)` and `.run(..)`); the teardown wiring test; **the two one-terminal `No` then `Yes` tests (child, leader)** (review A2-B1); `ending::admit` and `ending::insert` with their tests on fixture terminals, the guard on `gate.starting`, the page-load and per-pane tests; the manual check of 1.6 in its notes | infra (Rust) | R3a | PTY; `sh` |
-| R4 | The client start: `client_env`, `secret_names`, `supported_shell`, the instruction, `server_connect` up to "started" (through R3b's insert); **the reason codes at a connect, `home-unusable` included; `cause` on each `terminal-not-started`; the gate's two tests repeated through the command**; SV-2 AC2's table on stub records, the quoted-alias rows included; **the keychain test binary; SV-7 AC2's and AC3's client-start halves; SV-7 AC1's `.ssh` test; `vault-index.json` byte-identical after a connect and a second one**; SV-5 AC4's log test for the kinds it adds a way to reach (server gone, shell not supported, could not start a terminal, failed checks at a connect). **First step: SV-2 AC2's table under the CI image's `bash` 5 and `zsh`** | vertical in Rust | R1, R2, R3b | `zsh`, `bash` |
+| R4 | The client start: `client_env`, `secret_names`, `supported_shell`, the instruction, `server_connect` up to "started" (through R3b's insert); **the reason codes at a connect, `home-unknown` included; `cause` on each `terminal-not-started`; the gate's two tests repeated through the command**; SV-2 AC2's table on stub records, the quoted-alias rows included; **the keychain test binary; SV-7 AC2's and AC3's client-start halves; SV-7 AC1's `.ssh` test; `vault-index.json` byte-identical after a connect and a second one**; SV-5 AC4's log test for the kinds it adds a way to reach (server gone, shell not supported, could not start a terminal, failed checks at a connect). **First step: SV-2 AC2's table under the CI image's `bash` 5 and `zsh`** | vertical in Rust | R1, R2, R3b | `zsh`, `bash` |
 | R5 | The hand-over check: `judge`, `step`'s watching rows, the sampling, `live` and `notice`; SV-2 AC9's cases; AC2's "live" clauses, never live for the quoted-alias rows; AC3's matrix through a client start; AC4; SV-8 AC2; SV-5 AC4's log test for the four kinds it adds (no SSH client, ended before ssh, the two notices). **First step: the Linux findings (below)** | vertical in Rust | R4 | `zsh`, `bash` |
 | R6 | The session export strip and `outward_name` with its table, over the hand-built tabs and over `session.json` | vertical (Rust) | W1 (the table), W2 (the fixture) | no |
 | W1 | `Pane.remote`, `Tab.serverNamed`, `serverTabs.ts` (with `sameDestination`), `outwardName` and its table, the rename rule, `closePane`'s single update, the detach refusal, `tabSetEntries` | infra-leaning (store, pure) | the contract | no |
@@ -2205,7 +2268,7 @@ that a green story means anything on Linux.
 | SV-5 AC1 | markers absent from the export | | | R2, R6 |
 | SV-5 AC2 | the five tabs; the sequence; `session.json` | `saveSession` equals `session.json` | | R6, W2 |
 | SV-5 AC3 | | `tabSetEntries`; after the sequence | the left-out count | W1, W6 |
-| SV-5 AC4 | the twelve kinds, markers, the log, each in the story that adds its reach; the 21 pairs, none holding a typed value; the redacting `Debug` | unhandled rejections through `rejectionMessage`; the message holds the name, the kind does not | | R1, R2, R4, R5, W3, W5 |
+| SV-5 AC4 | the twelve kinds, markers, the log, each in the story that adds its reach; the 23 pairs, none holding a typed value; the redacting `Debug` | unhandled rejections through `rejectionMessage`; the message holds the name, the kind does not | | R1, R2, R4, R5, W3, W5 |
 | SV-5 AC5 | | folder-keyed keys byte-identical | | W4 |
 | SV-5 AC7 | `outward_name` against the table | `outwardName` against the table | | R6, W1; the payload test by whichever merges second |
 | SV-5 AC8 | a connect with the input set: refused, 0 starts | `serversAvailable`; palette entries with the input set | | R2, R4, W3, W5; the instance test by whichever merges second |
@@ -2215,7 +2278,7 @@ that a green story means anything on Linux.
 | SV-6 AC4 | the input-queue list | named sends write; image case; the site list | refused callers' message | R3a, W4 |
 | SV-7 AC1 | no `-o` in any grammar; `.ssh` byte-identical | | | R1, R4 |
 | SV-7 AC2 | the hostile fixture: the pure half; through a client start | | | R1, R4 |
-| SV-7 AC3 | the quoter's table and `Word`; accepted values through both shells; history untouched | the same table for the TypeScript quoter | | R1, R4 |
+| SV-7 AC3 | the quoter's table and `Word`; accepted values through both shells; history untouched; a fixture home with a space and a non-ASCII character: the stub gets the `~/` identity file as one argument, byte for byte, and (R5) the pane goes live | the same table for the TypeScript quoter | | R1, R4 |
 | SV-7 AC4 | the text test and `sources.list`; `vault-index.json` byte-identical; the keychain binary | | | R1, R2, R4 |
 | SV-7 AC5 | by the tests it names | | | |
 | SV-8 AC1 | by SV-2 AC2, AC9, SV-7 AC4 | | | |
@@ -2262,7 +2325,7 @@ is used. S-1 is a defect found while answering, not one of the review's.
 | **A-m1** quoting and global aliases | The sentence is corrected: an alias whose name includes the quotes still applies; outcome (ii), never live. Two fixture rows added. Run again in revision 2. Listed for the product manager, since the PRD repeats the claim | 2.1, 15.3 (D-11); ADR 0044 |
 | **A-m2** the exit event's shape against its contract | Recorded as an amendment of `terminal-open.md` line 202 and ADR 0014 in ADR 0046 and `server-panes.md`; a marked proposed note is at that line; R3a edits both files | 3.6, 15.3 (D-2); ADR 0046; `terminal-open.md` |
 | **A-m3** `symlink_metadata` | `metadata` | 6 |
-| **A-m4** the home folder reaching the quoter | `shell_quote` takes a `Word`, which cannot hold a character outside `0x20`-`0x7e`; the expanded identity file must pass the identity-file rule; an unset or out-of-range home refuses a `~/` identity file before any start | 2.3, 6, 12, 15.3 (D-7) |
+| **A-m4** the home folder reaching the quoter | *Superseded in revision 3 by PRD revision 8: the home folder is passed as it is (2.3).* Revision 2's answer: `shell_quote` takes a `Word`, which cannot hold a character outside `0x20`-`0x7e`; the expanded identity file must pass the identity-file rule; an unset or out-of-range home refuses a `~/` identity file before any start | 2.3, 6, 12, 15.3 (D-7) |
 | **A-m5** the `ADE_ONLY_IN_PROCESS` row | The test re-runs its own test executable as a child with the variable set; no `set_var` | 2.4 |
 | **A-m6** Q5 avoidable | The routine sleeps to the 2 s deadline. Run: kills at 2005 to 2028 ms. Q5 withdrawn | 1.4 step 3, 15.2 (N-Q5) |
 | **A-m7** start-time resolution | Stated: one second; it narrows reuse and does not close it; the session test is the stronger guard | 1.3 |
@@ -2302,13 +2365,13 @@ contract points to the design; section 21 says which side moves on each.
 | **A2-m6** the gate's reference to F1; attempt 1; tight bounds | The gate cites item 4's procedure with F7's own two jobs and says item 3 does not apply; every counted run is attempt 1; no test asserts "under 100 ms": bounds are lower bounds or the routine's own deadlines | 1.7, 17; `docs/architecture.md` |
 | **A2-m7** the evidence for A-M6; output in flight at a stop | The review's account of the four "keep" runs is taken as fact (knowledge file). The drop is stated, with the three places a stop happens; SV-2 AC4's test, and the holder test, assert the stub's last bytes arrive whole | 3.6, 3.7, 12; ADR 0045 |
 | **A2-m8** R3b's tests named what R4 builds | The gate is two named functions, `ending::admit` and `ending::insert`, tested in R3b on fixture terminals; R4 repeats them through the command | 1.7, 2.5, 17 |
-| **A2-m9** Q1's sentence against the function | Two pure steps, as the owner decided and the product manager is writing: `observe` (reading, own list) with a `NotObserved` result, then `judge` (started, observed, grammar). The three-lists sentence is withdrawn | 3.2, 3.3, 3.4, 3.7, 15.1; ADR 0046 |
+| **A2-m9** Q1's sentence against the function | Two pure steps, as the owner decided and PRD revision 8 words it: `observe` (reading, own list) with a `NotObserved` result, then `judge` (started, observed, grammar). The three-lists sentence is withdrawn | 3.2, 3.3, 3.4, 3.7, 15.1; ADR 0046 |
 | **A2-m10** routing of D-1, D-7, D-9, D-11 | Flagged for the owner; the stories that build them are not sharded against the old sentences | 15.3 |
 | **A2-m11** version cites | `tauri` 2.10.2 and `wry` 0.54.2, the locked versions | 1.5 |
 | **A2-m12** W3 the largest story | A candidate to split at sharding, with the cut named | 17 |
 | **A2-m13** the monitor's removal missing from rule 4 and the invariant | Stated as the fourth way a terminal leaves the table | 1.2 rule 4, 1.5; ADR 0045; `server-panes.md` |
 | **A2-m14** who tells the monitor for an instance born ending | The insert gives the new monitor `EndedByUser` as its first input | 1.5, 2.5 step 7, 3.4; ADR 0045 |
-| **UX 1** (U-M3) refusals carry the first field only | Every failing field with a reason code from a closed list (owner decision): 14 words, 21 pairs, one Rust implementation at save, connect and load | 6, 7, 10; `saved-servers.md` |
+| **UX 1** (U-M3) refusals carry the first field only | Every failing field with a reason code from a closed list (owner decision): SV-1 AC1's 23 (PRD revision 8), 15 code words, one Rust implementation at save, connect and load | 6, 7, 10; `saved-servers.md` |
 | **UX 2** (U-M4) a row that fails its checks | The contract stays (failing members withheld). Added: `problems` with reasons, `fileIndex`, withheld-name rows ordered last; Edit gets nothing for a failing field but its reason | 5, 9; `saved-servers.md` |
 | **UX 3** (U-m2) the identity-file warning on list rows | No: only a save returns one, with the reason | 6, 9, 12, 15.3 (D-16); `saved-servers.md` |
 | **UX 4** (U-M5) the row changed since it was shown | `requestConnect` answers `held` with a `ConnectCheck` (`shown`, `pane`, `now`, `differs`, `why`), kept in `serverListStore.held` | 8.2, 8.4, 9; `saved-servers.md` |
@@ -2316,6 +2379,7 @@ contract points to the design; section 21 says which side moves on each.
 | **UX 6** (mismatch 7) `refusal: { kind }` | The whole kind; the context file's type is corrected | 8.1; `server-panes.md` |
 | **UX 7** (mismatch 8) restored against reopened | A member, `origin`, not saved | 8.1, 8.3, 8.5, 15.3 (D-18); `server-panes.md` |
 | **UX 8** (U-M1) `ConfirmDialog`, `useFocusTrap` | Designed, as a story of its own (C1) before W5 and W6; the Enter change is flagged (D-15) | 22, 17, 15.3 (D-15) |
+| **PRD revision 8** (coordinator, 2026-11-18) three points | (1) The home folder is passed as it is: the quoter works on bytes, `Word` has two makers, only an unset or empty home refuses (`home-unknown`); run with seven hostile homes under both shells, all byte-identical. (2) The reasons are SV-1 AC1's 23, in its order. (3) The pre-send check stays on every connect request; the widening and the hub's difference are noted for the product manager | 2.3, 6, 12, 15.3 (D-7, D-9, D-14), 16; `saved-servers.md`; ADR 0043, 0044 |
 | **UX 9** (U-m3, U-m10) the file's name; the blank line on Reconnect | The constant `saved-servers.json`; the blank line is a write to the pane's display only, 0 bytes to the PTY, asserted | 8.4, 9; both context files |
 
 ## 21. Answers to the UX review
@@ -2326,7 +2390,7 @@ architect's design".
 
 | # | Point | Decided | Side that moves |
 |---|---|---|---|
-| 1 | Refusals: every failing field with a reason code (U-M3, A1) | Yes. `fields: [{ field, reason }]`, the closed list in `saved-servers.md`. The UX's refusal table maps onto it row for row, with these differences for the designer: Host "first character" comes after the colon rules; Host has no separate "brackets" code (`not-ipv6` covers them); Identity file gains `home-unusable`, which a save never gives; User has no "empty" (empty means none) | **the design** (done); the PRD's row (product manager) |
+| 1 | Refusals: every failing field with a reason code (U-M3, A1) | Yes. `fields: [{ field, reason }]`, the closed list in `saved-servers.md`. It is SV-1 AC1's list of 23 (PRD revision 8). Against the UX's draft table, for the designer: Host has no "holds a user" (an `@` is `characters`), brackets and a `%` zone are `characters` too, `::` has its own reason (`unspecified`); Port has two reasons (`not-a-port`, `out-of-range`); User gains `first-character`; Identity file gains `home-unknown`, which a save never gives | **the design** (done); the PRD's row (product manager) |
 | 2 | The webview has the raw values of a failing row (U-M4, A8) | No. Failing members stay withheld. The UX gets `problems` and `fileIndex` | **the UX**: an empty destination, "Unnamed server", a label form for an empty summary, the Edit form with an empty failed field and its reason's words; no "cleaned value" anywhere |
 | 3 | A warning call on blur and for every row (U-m2, A3) | No. Only `servers_save`'s result | **the UX**: warn after a save |
 | 4 | A row that changed between showing and pressing (U-M5) | Kept. The webview holds a `ConnectCheck` (8.4) | **the UX** draws the held press, for Connect and for Reconnect (the control that turns into the changed form needs words and an announcement) |
