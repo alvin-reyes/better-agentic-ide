@@ -1,9 +1,10 @@
 # Saved servers: the record, the store, the commands, the kinds
 
-Status: **proposed** with the F7 S1 design
-(`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, revision 3, not
-approved, awaiting a re-check of finding A2-B1). PRD: `docs/prd.md` F7, SV-1, SV-2, SV-5, SV-8, SV-9. Companion:
-`server-panes.md`. ADRs (provisional numbers): 0043, 0044.
+Status: **approved by the owner on 2026-11-18** with the F7 S1 design
+(`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, revision 4). Not
+built yet: each shape here is made by the story the design names. PRD:
+`docs/prd.md` F7, SV-1, SV-2, SV-5, SV-8, SV-9. Companion:
+`server-panes.md`. ADRs (Accepted; provisional numbers): 0043, 0044.
 
 ## The record
 
@@ -29,6 +30,18 @@ row is loaded. `Failure` is one Rust enum of **23** `(field, reason)` pairs,
 serialised `{ "field": "...", "reason": "..." }`; a pair not in this table
 cannot be built. One entry per failing field (its **first** matching row, top
 to bottom), fields in the order name, host, port, user, identityFile.
+
+`check(input, existing)`: **what `existing` is depends on the caller**, because
+`taken` is decided from it.
+
+| Caller | `existing` |
+|---|---|
+| a save (`servers_save`) | every other row of the store; for an edit, every row but the one being edited |
+| loading the list (`servers_list`, and every command's load) | the rows **earlier in the file** than the row being checked |
+| a client start (`server_connect`) | the rows **earlier in the file** than the row being connected to |
+
+So of two rows with one name key the first is never `taken`, on load or at a
+connect, and the second is, in both.
 
 | Field | Reason (PRD's words) | Code | When |
 |---|---|---|---|
@@ -109,7 +122,16 @@ code.
   start (`server-failed-checks`, `{ field: "identityFile", reason:
   "home-unknown" }`); a record with no identity file or an absolute one is not.
   A `%` or `${` in the home folder's path reaches the SSH client, which
-  expands them (the PRD's stated limit). The expanded path goes only into the
+  expands them (the PRD's stated limit); so does a home folder path that
+  starts `~` (the client reads it as a user's home folder), and an unknown `%`
+  token makes the client exit (both from OpenSSH's documentation, not run).
+  **The home folder is read as bytes**: the value of `HOME` in the environment
+  the client start is given (`std::env::vars_os()` in the app), when it is not
+  empty; never through `crate::env_home`, which drops a home folder that is
+  not UTF-8. **The shell starts in the home folder; a start is never refused
+  for having none**: with `HOME` unset the shell starts in the user's home
+  folder from the password database (`/` if there is no entry), as every ADE
+  terminal does; with `HOME` empty, in `/`. The expanded path goes only into the
   argument: `destination.identityFile`, the row and every message keep the
   saved `~/` form, so the home folder's path never crosses to the webview.
 - Destination summary: `[USER@]HOST[:PORT]`, an IPv6 host in brackets when a port
@@ -158,24 +180,36 @@ Reconnect) or by the server id (a Connect), until it is confirmed, cancelled,
 or a later press finds nothing to hold:
 
 ```ts
-type Shown = { name: string; destination: Destination; summary: string };
+type Target = { destination: Destination; summary: string };
+type Shown = Target & { name: string };
 type ConnectCheck = {
   serverId: string;
   paneId?: string;            // present for a Reconnect
   why: "changed" | "gone" | "problem" | "unreadable";
   shown: Shown;               // what the pressed control was showing
-  pane?: Shown;               // a Reconnect: what the pane last connected to
+  pane?: Target;              // a Reconnect: what the pane last connected to
   now?: ServerRow;            // the row as just read; absent for "gone" and "unreadable"
   differs?: ("host" | "port" | "user" | "identityFile")[]; // now against shown; "changed" only
 };
 ```
 
-`shown`, `pane` and `now` are only values Rust returned. The confirming press
+`shown`, `pane` and `now` are only values Rust returned. `shown.name` is the
+`name` of the `ServerRow` the pressed control was drawn from. **`pane` has no
+name**: it is the pane's own remote record (`destination`, `summary`), which
+holds no server name, and the tab's name may be one the engineer typed. The
+confirming press
 is `requestConnect({ serverId, paneId?, shown: now, confirmed: now.destination })`,
 which reads the list once more. Nothing was sent for a held press.
 
 `terminal-not-started` has three causes (Kinds, below): only `start` means the
 shell could not be started.
+
+**A rejection that is not a kind never reaches a caller or the log as it
+arrived.** `serverInvoke.ts` checks every rejection of the five commands: one
+that is not an object with a known kind id (Tauri's own refusal of badly typed
+arguments is a string that can quote a value) is replaced by the fixed
+`Error("server command failed")`. Only a webview bug reaches it; a test feeds
+each wrapper a string rejection holding a marker and asserts the fixed text.
 
 ## Fixtures: the shapes that cross the boundary
 
@@ -211,7 +245,11 @@ the name in the webview, from the identifier it sent and the list it holds.
 | `not-handed-over-another-program` | none | not handed over: another program is running |
 | `not-handed-over-yet` | none | not handed over yet |
 
-`terminal-not-started`'s `cause`: `start`, the shell or its terminal could not
+`terminal-not-started`'s `cause` (**accepted by the owner on 2026-11-18**,
+design decision D-13; it amends SV-5 AC4's row for this kind, which the
+product manager writes into the PRD; stories R1, R3b and R4 are built to the
+amended row): a fixed word, always present, with the error number only on
+`start`. `start`, the shell or its terminal could not
 be started (the only cause whose message may say so); `closing`, the main
 window was destroyed, its page was replaced, or ADE is exiting (nobody is left
 to show it to); `pane`, the pane already has a connection or a start in
@@ -256,7 +294,10 @@ works on bytes and takes a `Word`, which has two makers: `Word::saved`, which
 gives nothing for a character outside `0x20`-`0x7e`, for every saved value;
 and `Word::under_home`, for the one identity file expanded from `~/`, whose
 home part may hold any byte. `grammar::arguments` is the only caller of the
-second.
+second. Run on macOS as the client start runs the shells (`zsh -l -i -c` and
+`bash -l -i -c` on a terminal, with start-up files, in UTF-8, C, Shift-JIS and
+Big5 locales, 14 awkward home folders): 112 of 112 arrived as one
+byte-identical argument, and no history file was written.
 
 Quoting every word defeats an alias named for the bare word. It does not defeat
 a `zsh` global alias whose name includes the quotes (`alias -g

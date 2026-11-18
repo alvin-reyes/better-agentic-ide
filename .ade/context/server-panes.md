@@ -1,9 +1,10 @@
 # Server panes: the remote record, the mark, the states, the events
 
-Status: **proposed** with the F7 S1 design
-(`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, revision 3, not
-approved, awaiting a re-check of finding A2-B1). PRD: `docs/prd.md` F7, SV-2 to SV-6. Companion: `saved-servers.md`.
-ADRs (provisional numbers): 0044, 0045, 0046. F3, F4 and the phone relay read tab
+Status: **approved by the owner on 2026-11-18** with the F7 S1 design
+(`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, revision 4). Not
+built yet: each shape here is made by the story the design names. PRD:
+`docs/prd.md` F7, SV-2 to SV-6. Companion: `saved-servers.md`.
+ADRs (Accepted; provisional numbers): 0044, 0045, 0046. F3, F4 and the phone relay read tab
 state: read this before adding a reader of a tab's name, folder or panes.
 
 ## On a pane and on a tab (`src/stores/tabStore.ts`)
@@ -48,9 +49,13 @@ Tab.serverNamed?: true         // ADE named the tab after a saved server
 
 **A remote terminal exists in Rust's table only while a pane holds its id.** The
 two bounded exceptions: while its `server_connect` has not been answered, and
-while the ending routine is running on it (at most 5 s). One stated window: a
+while the ending routine is running on it (at most 5 s). **One stated limit,
+accepted by the owner on 2026-11-18** (design 1.5, 12, decision D-17): a
 connect sent by a page in the milliseconds before it was reloaded can be
-inserted with no pane to hold it (design 1.5, 12).
+inserted with no pane to hold it. That is a running `ssh` nobody can see or
+end short of closing the main window, quitting Better Terminal or a second
+reload; after a Reconnect, that pane's Reconnect is refused meanwhile
+(`terminal-not-started`, cause `pane`).
 
 **How a remote terminal leaves the table: four ways, and no other.** The ending
 routine's last step, after an ending started (1) by a webview request, (2) by
@@ -58,7 +63,9 @@ routine's last step, after an ending started (1) by a webview request, (2) by
 removal after a natural exit, of a terminal **not** marked ending. **The
 monitor never removes a terminal marked ending**: it sends that terminal's
 `exit` when the pane's own process has gone and leaves the instance to the
-routine, which may still have a child to kill at 2 s. `end_all(Wait::Yes)` and
+routine, which may still have a child to kill at 2 s. If the instance is
+already gone when the monitor looks (an ending finished meanwhile), it sends
+the `exit` and touches nothing. `end_all(Wait::Yes)` and
 `server_terminal_end` wait on the table, so this rule is what makes a quit wait
 for the kill.
 

@@ -1,9 +1,8 @@
 # 0043: Saved servers live in one Rust-owned file outside the synced state
 
-- Status: Proposed (2026-11-18), with the F7 S1 design, revision 3
+- Status: Accepted (2026-11-18, the owner), with the F7 S1 design
   (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, sections 5 and
-  6). Not approved; awaiting a re-check of the delta review's finding A2-B1
-  (ADR `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`). The number is
+  6; approved at revision 3, recorded in revision 4). The number is
   provisional: numbers to 0042 are taken across open design branches; cite this
   ADR by its slug.
 - Context:
@@ -33,7 +32,13 @@
     (every failing field with a reason code from a closed list, never a value:
     owner decision, 2026-11-18; `.ade/context/saved-servers.md` holds the 23
     pairs) and is never connected to. One Rust function, `rules::check`,
-    produces the list at a save, at a client start and on load. Each of its five members is checked by itself,
+    produces the list at a save, at a client start and on load. **What it is
+    given as the other rows differs by caller** (the `taken` reason needs the
+    list): at a save, every other row of the store (an edit leaves out the row
+    being edited); on load and at a client start, the rows **earlier in the
+    file** than the row being checked. So the first holder of a name key is
+    never refused for a later row that repeats it, on load or at a connect.
+    Each of its five members is checked by itself,
     and one that fails is left out of the `ServerRow` (a failing name is sent
     as the empty string; the summary is empty unless host, port and user all
     passed). So an unbounded length, a control character or a bidirectional

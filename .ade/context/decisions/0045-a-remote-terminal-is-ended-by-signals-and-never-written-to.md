@@ -1,10 +1,11 @@
 # 0045: A remote terminal is ended by signals and never written to
 
-- Status: Proposed (2026-11-18), with the F7 S1 design, revision 3
-  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 1). Not
-  approved; awaiting a re-check of the delta review's one blocking finding,
-  A2-B1, which the "only `end` removes an ending terminal" rule below answers. The number is provisional; cite this ADR by
-  its slug.
+- Status: Accepted (2026-11-18, the owner), with the F7 S1 design
+  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 1;
+  approved at revision 3, recorded in revision 4). The re-check of revision 3
+  found the delta review's blocking finding, A2-B1, resolved by the "only
+  `end` removes an ending terminal" rule below, and reproduced the run. The
+  number is provisional; cite this ADR by its slug.
 - Context:
   - Ending or closing a server pane must write 0 bytes into it and leave no
     process of the pane alive, with an uncatchable kill 2 s after for whatever is
@@ -70,11 +71,15 @@
     instance inserted already ending; and, fourth, **the monitor's removal
     after a natural exit**, of a terminal that is not marked ending (the mark
     is read and the instance removed in one hold of the table lock, and the
-    `exit` is sent after the removal).
+    `exit` is sent after the removal). When the monitor comes to read the mark
+    and the instance is **already gone** (an ending finished in the monitor's
+    wait of up to 1 s after a natural exit), it sends the `exit` and touches
+    nothing.
   - **The gate.** `ending::Gate`, read and written only under the table lock:
     `closed` (the main window was destroyed, or ADE is exiting), `page` (a count
     of the main webview's page loads), `starting` (client starts between their
-    spawn and their insert).
+    **admission** and their insert: counted by `ending::admit`, before any
+    process is started, and subtracted on every way out).
   - **The three routes are closed.**
     1. *A connect resolves and no pane can hold it* (a Reconnect whose pane or
        tab was closed meanwhile): the webview sends `server_terminal_end` for
@@ -170,8 +175,12 @@
     in the same `poll`). That happens only at an ending, at a give-up, and
     after the 1 s wait for a process that holds the terminal open; a natural
     exit's output arrives whole, which SV-2 AC4's test asserts.
-  - A stated window (A2-m1): a connect the old page sent in the milliseconds
-    before a reload, whose gate check runs after the reload, is inserted with
-    no pane to hold it and stays until the main window closes or ADE quits.
-    Closing it needs the request to carry the page's load count (a sixth
-    command to read it); not built.
+  - **A stated limit, accepted by the owner on 2026-11-18** (design decision
+    D-17; A2-m1): a connect the old page sent in the milliseconds before a
+    reload, whose gate check runs after the reload, is inserted with no pane
+    to hold it. What that leaves is a running `ssh` that nobody can see or
+    end short of closing the main window, quitting Better Terminal or a
+    second reload; after a Connect there is no sign of it at all; after a
+    Reconnect, that pane's Reconnect is refused meanwhile. Closing the window
+    would need the request to carry the page's load count (a sixth command to
+    read it); not built.

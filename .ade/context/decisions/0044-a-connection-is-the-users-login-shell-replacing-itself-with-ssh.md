@@ -1,10 +1,9 @@
 # 0044: A connection is the user's login shell replacing itself with ssh
 
-- Status: Proposed (2026-11-18), with the F7 S1 design, revision 3
-  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 2). Not
-  approved; awaiting a re-check of the delta review's finding A2-B1 (ADR
-  `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`). The number is provisional; cite this ADR by
-  its slug.
+- Status: Accepted (2026-11-18, the owner), with the F7 S1 design
+  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 2;
+  approved at revision 3, recorded in revision 4). The number is provisional;
+  cite this ADR by its slug.
 - Context:
   - The owner chose the machine's own SSH client in an ADE terminal, and the
     product manager's model for it is D4: the user's own shell, replacing itself
@@ -54,6 +53,23 @@
     Run under zsh 5.9 and bash 3.2.57, `LANG` UTF-8 and C: home folders with a
     space and non-ASCII, a quote, a newline, shell metacharacters, bytes that
     are not UTF-8, and `%h${HOME}` each arrived as one argument, byte for byte.
+    Run again by the re-check of revision 3 as the client start itself runs
+    the shells (`-l -i -c` on a terminal, with start-up files that set a
+    history file), in four locales (UTF-8, C, Shift-JIS, Big5) with 14 awkward
+    home folders: 112 of 112 arrived as one byte-identical argument and no
+    history file was written (macOS; not run on Linux).
+  - **The home folder is read as bytes.** It is the value of `HOME` in the
+    base the client start is given (in the app `std::env::vars_os()`), taken
+    as an `OsString` when it is not empty (`client_start::home_of`). It is
+    **not** `crate::env_home`, which reads through `std::env::var` and a
+    `String` and so gives nothing for a home folder that is not UTF-8.
+  - **The folder the shell starts in.** The home folder when it is set and not
+    empty. A start is never refused because there is no home folder: with
+    `HOME` unset ADE sets no folder and `portable-pty` starts the shell in the
+    user's home folder from the password database (`/` when the user has no
+    entry), as it does for every ADE terminal today; with `HOME` set but empty
+    ADE passes `/`. Read in `portable-pty` 0.9.0 (`src/cmdbuilder.rs:498-576`),
+    not run.
   - **The environment.** `client_env(base, remove, macos)` starts from the base it
     is given and nothing else; drops every `ADE_*` name and every name in
     `remove` (the vault's names, from `vault::secret_names`, a plain-file read);
@@ -89,7 +105,19 @@
     product manager.
   - A `%` or `${` in the home folder's path reaches the SSH client, which
     expands them (the PRD's stated limit). A home folder that is set but not
-    absolute is passed as it is.
+    absolute is passed as it is. Two more cases of the same limit, **from
+    OpenSSH's documentation, not run:** a home folder whose path starts `~`
+    is expanded by the client as a user's home folder, and an unknown `%`
+    token in it makes the client exit with an error instead of connecting.
+    Each needs the user's own `HOME` to be so set.
+  - **A stated limit of the library, read, not run:** `portable-pty` 0.9.0
+    resolves a home folder as text whenever it builds a command
+    (`cmdbuilder.rs:501`, `560-576`), from `HOME` when that is valid UTF-8 and
+    otherwise from the password database. On a machine where **neither** is
+    valid UTF-8 the command cannot be built and the start is refused with
+    "could not start a terminal", cause `start`, for every record. Every ADE
+    terminal has the same limit today. macOS's file system does not allow
+    such a folder name; Linux does.
   - A function named `exec` or `command` (zsh), or `exec` (bash), still runs in
     place of the word. Nothing prevents that; the hand-over check is the backstop.
   - `portable-pty` sets `SHELL` itself when it builds the command, so `SHELL` is

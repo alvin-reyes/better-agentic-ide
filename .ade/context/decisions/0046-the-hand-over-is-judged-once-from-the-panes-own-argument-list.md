@@ -1,10 +1,9 @@
 # 0046: The hand-over is judged once, from the pane's own argument list
 
-- Status: Proposed (2026-11-18), with the F7 S1 design, revision 3
-  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 3). Not
-  approved; awaiting a re-check of the delta review's finding A2-B1 (ADR
-  `0045-a-remote-terminal-is-ended-by-signals-and-never-written-to`). The number is provisional; cite this ADR by
-  its slug.
+- Status: Accepted (2026-11-18, the owner), with the F7 S1 design
+  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, section 3;
+  approved at revision 3, recorded in revision 4). The number is provisional;
+  cite this ADR by its slug.
   - **Amends, when story R3a lands,** ADR
     `0014-terminals-open-terminals-through-the-hook-endpoint` ("Out of v1: exit
     codes") and `.ade/context/terminal-open.md` ("No exit code in v1:
@@ -16,7 +15,8 @@
     live only after ADE has seen the pane's own process become the SSH client
     (`docs/prd.md` F7, D4, SV-2 AC9). The rule is given by the PRD: the first image
     that is not the started shell is judged once, from its argument list alone,
-    by "one pure function of two argument lists".
+    by "one pure function of two argument lists" (revision 7's words; revision
+    8 has the two steps of the decision below).
   - The PRD leaves to the design how the image is observed and how often, and
     where an interpreter line that carries an option falls (F7.11).
   - Run on macOS 26: in the first tens of milliseconds after a spawn, a sample of
@@ -28,8 +28,8 @@
   - **Observed with `sysinfo`**, refreshed for the one process id ADE started,
     arguments only: `sysctl(KERN_PROCARGS2)` on macOS, `/proc/<pid>/cmdline` on
     Linux. Never the foreground group.
-  - **Two pure steps** (owner decision, 2026-11-18; the product manager is
-    writing them into SV-2 AC9). **Step one, whether a reading is an
+  - **Two pure steps** (owner decision, 2026-11-18; PRD revision 8 has them
+    in SV-2 AC9). **Step one, whether a reading is an
     observation:** `observe(reading, own)`, from the reading and Better
     Terminal's own argument list and nothing else. A reading that could not be
     made, is empty, or equals Better Terminal's own list is `NotObserved`:
@@ -42,6 +42,11 @@
     (`image(std::process::id())`, once per client start), never
     `std::env::args`, so the two sides of that comparison come from one source
     in one representation. If it cannot be read, that clause excludes nothing.
+  - **Argument lists are lists of `OsString`, end to end:** the sampler's
+    reading (`sysinfo` 0.33's `cmd()` returns `&[OsString]`), `observe`,
+    `judge` and the monitor's sample input. A base name is the bytes after the
+    last `/`. So a list that holds bytes that are not UTF-8 (the home folder
+    in an identity file) is compared as it is and never decoded.
   - **`judge(started, observed, grammar)`** is pure, and takes an observation.
     Equal to `started`: still the
     shell. `[P, G]`, `[I, P, G]` or `[E, I, P, G]`, with `P`'s base name `ssh`,
@@ -73,9 +78,11 @@
     then sends the `exit`, so a Reconnect made from the event is not refused
     for the pane still having a terminal. It **never** takes out a terminal
     marked ending: it sends that terminal's `exit` and leaves the instance to
-    the ending routine (ADR 0045; the quit's wait depends on it). A monitor
-    made for an instance inserted already ending gets "ended by the user" as
-    its first input.
+    the ending routine (ADR 0045; the quit's wait depends on it). When it
+    finds the instance already gone from the table (an ending finished during
+    its wait for the reader), it sends the `exit` and touches nothing. A
+    monitor made for an instance inserted already ending gets "ended by the
+    user" as its first input.
   - A stop of the reader can drop output in flight; after a natural exit with
     nothing holding the terminal the reader is never stopped, so the process's
     last bytes arrive whole (a test asserts it).
