@@ -341,7 +341,7 @@ body[data-view="follow"] .banner { display: block; }
 
   <fieldset id="fs-place">
     <legend>Restyle: where the card sits</legend>
-    <label><input type="radio" name="place" value="AB" checked> <span>AB. Top right on terminal tabs, bottom right on other tabs <small>recommended. A where the tab is a terminal, B everywhere else</small></span></label>
+    <label><input type="radio" name="place" value="AB" checked> <span>AB. Top right on terminal tabs, bottom right on other tabs <small>chosen by the owner. A where the tab is a terminal, B everywhere else</small></span></label>
     <label><input type="radio" name="place" value="A"> <span>A. Top right of the tab's content, every tab kind <small>terminal: under the pane header. Other tabs: over their top-right controls</small></span></label>
     <label><input type="radio" name="place" value="B"> <span>B. Bottom right of the tab's content, every tab kind <small>one place everywhere; over the newest lines of a full terminal</small></span></label>
     <label><input type="radio" name="place" value="C"> <span>C. Where it is today <small>window corner, 60 px up, 20 px in</small></span></label>
@@ -1314,7 +1314,7 @@ document.addEventListener("keydown", (e) => {
 });
 function setCaption() {
   const P = {
-    AB: "<b>AB, recommended: top right on a terminal tab, bottom right on every other tab kind.</b> On a terminal tab the card hangs 28 px under the top of the terminal area, under the pane header and its REC button, 12 px from the right edge of the content column. On an editor, browser, fleet, orchestrator or contracts tab it sits where B does, clear of that tab's top-right controls. It is never over a side panel. A tab counts as a terminal tab when the terminal layout is what is drawn. Switch the tab kind, the new-terminal state and what is open over the window to see what it costs.",
+    AB: "<b>AB, chosen by the owner: top right on a terminal tab, bottom right on every other tab kind.</b> On a terminal tab the card hangs 28 px under the top of the terminal area, under the pane header and its REC button, 12 px from the right edge of the content column. On an editor, browser, fleet, orchestrator or contracts tab it sits where B does, clear of that tab's top-right controls. It is never over a side panel. A tab counts as a terminal tab when the terminal layout is what is drawn. Switch the tab kind, the new-terminal state and what is open over the window to see what it costs.",
     A: "<b>A, top right of the tab's content on every tab kind.</b> Terminal tab: 28 px under the top of the terminal area, so under the pane header and REC; it starts 8 px under an open find bar its box would overlap at the top, whichever pane that find bar is in. It covers the right end of the first rows on screen: old output in a full terminal, the prompt and newest output in a new or cleared one. Other tab kinds: 8 px down, over their top-right controls.",
     B: "<b>B, bottom right of the tab's content on every tab kind.</b> 12 px above the bottom of the content column, 12 px from its right edge. Never over a side panel, the scratchpad or the shortcut bar. In a full terminal it covers the right end of the newest lines, of Claude Code's input box and of its status line; in a new or cleared terminal, empty rows.",
     C: "<b>C, where the toast is today.</b> Fixed to the window: 60 px up, 20 px in. Nothing moves. With a right panel open it sits on the panel, not the terminal; with the scratchpad open it sits on the scratchpad.",
