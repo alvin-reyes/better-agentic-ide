@@ -73,11 +73,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* The remote mark, drawn as the tab's type icon (spec 5.1). Shape carries the state; colour is the tab's own text colour. */
 .srv-ico { width: 14px; height: 14px; flex-shrink: 0; color: currentColor; }
 .srv-ico[data-state="connecting"] .box { stroke-dasharray: 2 1.7; }
-@keyframes srv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
-.srv-ico[data-state="connecting"] { animation: srv-pulse 1.4s ease-in-out infinite; }
-.rm .srv-ico[data-state="connecting"] { animation: none; }
-@media (prefers-reduced-motion: reduce) { .srv-ico[data-state="connecting"] { animation: none; } }
-
 .body { flex: 1; min-height: 0; display: flex; }
 .panes { flex: 1; min-width: 0; display: flex; }
 .pane { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
@@ -93,6 +88,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pnum { font: 600 9px monospace; color: var(--srv-text); border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 6px; background: var(--bg-secondary); flex-shrink: 0; }
 .pstate { font: 500 11px var(--font-ui); color: var(--srv-text); white-space: nowrap; flex-shrink: 0; }
 .phead .dest { font-size: 11px; }
+.pane-in { min-width: 0; }
 .term { height: 100%; font: 13px/1.5 var(--font-mono); color: var(--text-secondary); position: relative; overflow: hidden; cursor: text; }
 .term .ln { white-space: pre; overflow: hidden; }
 .term .ln b { color: var(--text-primary); font-weight: 500; }
@@ -102,24 +98,41 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .term textarea { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; resize: none; }
 .term a { color: var(--accent); text-decoration: underline; cursor: pointer; }
 
-/* ---------- the server bar (spec 5.3): one bar for every message a remote pane shows ---------- */
-.srv-bar { flex: 0 0 auto; display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px 8px 9px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-strong); border-left: 3px solid transparent; font-size: var(--text-sm); line-height: 17px; }
+/* ---------- the server bar (spec 5.3): one bar for every message a server pane shows. It is BOUNDED: open, it takes at most two fifths of
+   the pane (132 px when that is more) and its details scroll inside it; closed, it is its title and its buttons. ---------- */
+.barslot { flex: 0 1 auto; min-height: 0; max-height: max(40%, 132px); display: flex; flex-direction: column; }
+.srv-bar { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; background: var(--bg-secondary); border-bottom: 1px solid var(--border-strong); border-left: 3px solid transparent; font-size: var(--text-sm); line-height: 17px; }
 .srv-bar[data-tone="warn"] { border-left-color: var(--srv-yellow); }
+.srv-bar .bh { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 10px; padding: 8px 12px 8px 9px; }
 .srv-bar .ico { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; color: var(--srv-text); }
 .srv-bar[data-tone="warn"] .ico { color: var(--srv-yellow); }
-.srv-bar .txt { flex: 1; min-width: 0; }
-.srv-bar .ttl { font-weight: 600; color: var(--text-primary); font-size: var(--text-base); overflow-wrap: anywhere; }
+.srv-bar .ttl { flex: 1 1 150px; min-width: 0; font-weight: 600; color: var(--text-primary); font-size: var(--text-base); overflow-wrap: anywhere; }
+.srv-bar[data-open="false"] .ttl { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.srv-bar .more { flex: 0 1 auto; min-height: 0; overflow-y: auto; padding: 0 12px 8px 35px; }
 .srv-bar .bd { color: var(--srv-text); max-width: 78ch; overflow-wrap: anywhere; }
-.srv-bar .acts { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 50%; }
-.srv-bar .pair { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 8px; margin-top: 4px; align-items: center; color: var(--srv-text); }
-.srv-bar .pairv { min-width: 0; display: flex; gap: 8px; align-items: center; }
-.srv-bar .pairv .key { font: 11px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; unicode-bidi: isolate; }
+.srv-bar .acts { display: flex; gap: 8px; align-items: center; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; min-width: 0; max-width: 100%; }
+.srv-bar .beside { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; max-width: 100%; }
+.pair { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 8px; margin: 2px 0 4px; align-items: center; color: var(--srv-text); font-size: var(--text-xs); }
+.pairv { min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.srv-bar { container-type: inline-size; }
+@container (max-width: 420px) { .srv-bar .pair { grid-template-columns: minmax(0, 1fr); } }
+.key { font: 11px var(--font-mono); overflow-wrap: anywhere; min-width: 0; unicode-bidi: isolate; direction: ltr; }
+ul.why { list-style: none; margin: 2px 0 4px; color: var(--srv-text); }
+ul.why li { padding: 1px 0; overflow-wrap: anywhere; }
+ul.why b { color: var(--text-primary); font-weight: 600; }
 .srv-bar code, .srv code, .cdlg code { font: 12px var(--font-mono); color: var(--text-primary); }
+.pane:focus-visible { outline: 2px solid var(--srv-focus); outline-offset: -2px; }
+/* A server pane's header is a block of its own above the terminal, so the destination can take a row: it is never laid over the first line. */
+.srvpane .pane-in { padding-top: 3px; display: flex; flex-direction: column; }
+.srvpane .phead { position: static; height: auto; min-height: 17px; flex: 0 0 auto; flex-wrap: wrap; row-gap: 3px; margin: 0 0 3px -1px; pointer-events: auto; }
+.srvpane .term { flex: 1; min-height: 0; height: auto; }
 
-/* A destination summary: one line, never wraps; the head gives way, the end of the host and the port always show (spec 9). */
-.dest { display: inline-flex; max-width: 100%; min-width: 0; vertical-align: middle; font: 12px var(--font-mono); color: var(--srv-text); background: var(--bg-primary); border: 1px solid var(--srv-edge-2); border-radius: 3px; padding: 0 5px; height: 18px; line-height: 16px; white-space: nowrap; unicode-bidi: isolate; direction: ltr; }
-.dest .hd { overflow: hidden; text-overflow: ellipsis; min-width: 1ch; flex: 0 1 auto; }
-.dest .tl { flex: 0 0 auto; }
+/* A destination: mono, in a box, isolated, left to right. NEVER clipped: no overflow rule, no ellipsis by CSS. The text is cut in the page's
+   code (an ellipsis and the END); the box wraps to a row of its own, and its text wraps inside it when the row is narrower still. */
+.dest { display: inline-block; max-width: 100%; min-width: 0; vertical-align: middle; font: 12px/16px var(--font-mono); color: var(--srv-text); background: var(--bg-primary); border: 1px solid var(--srv-edge-2); border-radius: 3px; padding: 0 5px; white-space: normal; overflow-wrap: anywhere; word-break: break-all; unicode-bidi: isolate; direction: ltr; text-align: left; }
+.dest.none { font: italic 11px/16px var(--font-ui); border-style: dashed; word-break: normal; }
+button.dest { cursor: pointer; min-height: 24px; min-width: 24px; padding: 3px 5px; }
+button.dest:hover { color: var(--text-primary); }
 .nm-box, bdi.nmv { unicode-bidi: isolate; }
 
 /* ---------- ui.css, verbatim where used ---------- */
@@ -156,6 +169,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .srv-msg[data-tone="bad"] .ico { color: var(--srv-red); }
 .srv-msg .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .srv-msg b { font-weight: 600; }
+.srv-msg ul.why { color: var(--text-primary); }
 .filter { width: 100%; height: 28px; padding: 0 8px; margin-bottom: 8px; background: var(--bg-tertiary); border: 1px solid var(--srv-control-edge); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--text-primary); }
 .filter::placeholder, .fld input::placeholder { color: var(--srv-text); opacity: .8; }
 .grid { display: flex; flex-direction: column; }
@@ -164,11 +178,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .gmain { min-width: 0; display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 10px; row-gap: 3px; align-items: center; }
 .gmain .srv-ico { color: var(--srv-text); }
 .gname { font-size: var(--text-base); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gsub { grid-column: 2; display: flex; gap: 8px; align-items: center; min-width: 0; font-size: var(--text-xs); color: var(--srv-text); }
-.gsub .key { font: 11px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; unicode-bidi: isolate; }
-.gwarn { grid-column: 2; display: flex; gap: 6px; align-items: center; font-size: var(--text-xs); color: var(--srv-yellow); }
+.gsub { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; font-size: var(--text-xs); color: var(--srv-text); }
+.gwarn { grid-column: 2; display: flex; gap: 6px; align-items: flex-start; line-height: 15px; font-size: var(--text-xs); color: var(--srv-yellow); }
 .gwarn[data-tone="bad"] { color: var(--srv-red); }
-.gwarn svg { width: 12px; height: 12px; flex-shrink: 0; }
+.gwarn svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 1px; }
+.gname { display: flex; gap: 8px; align-items: baseline; }
+.gname .nmv { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gentry { font: 400 11px var(--font-ui); color: var(--srv-text); white-space: nowrap; flex-shrink: 0; }
+.gheld { grid-column: 2; border-left: 3px solid var(--srv-yellow); padding: 4px 0 4px 8px; margin-top: 2px; }
+.gheld .gwarn { color: var(--text-primary); font-weight: 600; }
+.gheld .gwarn svg { color: var(--srv-yellow); }
+.gnote { font-size: var(--text-xs); color: var(--srv-text); }
+.gacts { flex-wrap: wrap; justify-content: flex-end; max-width: 300px; }
+table.reasons { border-collapse: collapse; font-size: var(--text-xs); line-height: 16px; color: var(--srv-text); width: 100%; }
+table.reasons th { text-align: left; font-weight: 600; color: var(--text-primary); padding: 4px 8px 4px 0; border-bottom: 1px solid var(--srv-control-edge); }
+table.reasons td { vertical-align: top; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--border); }
+table.reasons td:first-child { color: var(--text-primary); white-space: nowrap; }
 .gacts { display: flex; gap: 6px; }
 .group-h { font-size: var(--text-xs); font-weight: 600; color: var(--srv-text); text-transform: uppercase; letter-spacing: var(--tracking-micro); padding: 8px 8px 4px; }
 .empty { text-align: center; padding: 32px 24px 28px; }
@@ -192,7 +217,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .fld .err b { font-weight: 600; }
 .preview { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; font-size: var(--text-xs); color: var(--srv-text); padding-top: 4px; border-top: 1px solid var(--border); min-width: 0; }
 /* The Remove question, inside the list overlay */
-.ask-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 5; }
+.ask-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 5; border-radius: var(--radius-lg); }
 .ask { width: min(420px, 90%); background: var(--bg-secondary); border: 1px solid var(--srv-control-edge); border-radius: var(--radius-lg); box-shadow: var(--elev-3); padding: 18px 18px 14px; }
 .ask h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; overflow-wrap: anywhere; }
 .ask p { font-size: var(--text-sm); line-height: 18px; color: var(--srv-text); margin-bottom: 14px; }
@@ -211,6 +236,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pal__cat { font: 700 9px monospace; padding: 2px 5px; border-radius: 3px; min-width: 44px; text-align: center; flex-shrink: 0; }
 .pal__lab { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; display: flex; gap: 8px; align-items: center; }
 .pal__item[aria-selected="true"] .pal__lab { color: var(--text-primary); }
+/* A server's row: the destination box is never cut by the row. The name gives way; when even that is not enough the row wraps. */
+.pal__lab.srvlab { white-space: normal; overflow: visible; flex-wrap: wrap; row-gap: 3px; }
+.pal__lab.srvlab .fx { flex: 0 0 auto; white-space: nowrap; }
+.pal__lab.srvlab .sv { flex: 0 1 auto; min-width: 6ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pal kbd { font: 500 11px monospace; color: var(--text-muted); background: var(--bg-tertiary); padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
 .pal__foot { padding: 8px 16px; border-top: 1px solid var(--border); display: flex; gap: 16px; font: 11px monospace; color: var(--text-muted); }
 .pal__none { padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
@@ -219,7 +248,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .sw { width: min(640px, 94%); max-height: 70%; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-secondary); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
 .sw input { margin: 10px; height: 30px; padding: 0 10px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text-primary); }
 .sw ul { list-style: none; overflow-y: auto; padding: 0 6px 6px; }
-.sw li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; min-width: 0; }
+.sw li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; min-width: 0; }
 .sw li[aria-selected="true"] { background: var(--accent-subtle); }
 .sw .num { font: 11px var(--font-mono); color: var(--srv-text); width: 14px; }
 .sw .name { font-weight: 500; flex-shrink: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -270,7 +299,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 </head>
 <body>
 <h1 class="page-h">Saved servers (SSH), slice S1: UX mockup</h1>
-<p class="page-p">A stand-in Better Terminal window with the tab bar, terminal panes, the command palette and the server list. Spec: <code>2026-11-18-saved-servers-ux.md</code>, beside this file. Everything inside the framed window is the design; the dashed boxes above and to the right are demo controls. Nothing here connects to anything: the "start-up files" control decides what a Connect pretends to see. Host, user and client names are invented. The 30 s hand-over bound runs as 3 s while “Fast timer” is ticked. Keys: Ctrl+P or ⌘P opens the palette, Ctrl+K or ⌘K the tab switcher, Shift+F10 on a tab its menu.</p>
+<p class="page-p">A stand-in Better Terminal window with the tab bar, terminal panes, the command palette and the server list. Spec: <code>2026-11-18-saved-servers-ux.md</code>, beside this file. Everything inside the framed window is the design; the dashed boxes above and to the right are demo controls. Nothing here connects to anything: the "start-up files" control decides what a Connect pretends to see. Host, user and client names are invented. The 30 s hand-over bound runs as 3 s while “Fast timer” is ticked. Keys: Ctrl+P or ⌘P opens the palette, Ctrl+K or ⌘K the tab switcher, Ctrl or ⌘ with ← and → moves between panes, Shift+F10 on a tab its menu.</p>
 
 <div class="demo" id="demo">
   <div>
@@ -284,18 +313,25 @@ button, input, select, textarea { font: inherit; color: inherit; }
     <div class="row"><label>What the start-up files do at the next Connect <select id="rc" aria-label="Start-up files behaviour">
       <option value="quick">hand over to ssh quickly</option>
       <option value="another">replace the shell with another program (tmux)</option>
+      <option value="wrapper">run your own ssh wrapper, which Better Terminal does not recognise (the session works)</option>
       <option value="waiting">ask a question and wait</option>
       <option value="child">run ssh as a child of the shell</option>
       <option value="silent">a function named exec that returns (status 0)</option>
+      <option value="signal">a signal ends the shell before ssh (no status)</option>
       <option value="nossh">no ssh on PATH (status 127)</option>
-      <option value="spawn">the shell cannot be started</option>
+      <option value="spawn">the shell cannot be started (system error 2)</option>
+      <option value="spawn0">the shell cannot be started (no error number)</option>
+      <option value="closing">the window was closing as the request arrived</option>
+      <option value="pane">the pane already has a start in progress</option>
     </select></label>
-    <label>Login shell <select id="shell" aria-label="Login shell"><option>zsh</option><option>bash</option><option>fish</option><option value="?">a name that cannot be shown</option></select></label></div>
+    <label>Login shell <select id="shell" aria-label="Login shell"><option>zsh</option><option>bash</option><option>fish</option><option value="?">a name that cannot be shown</option></select></label>
+    <label><input type="checkbox" id="nohome"> No home folder is set</label></div>
   </div>
   <div>
     <h2>Stand-ins for existing actions</h2>
     <div class="row" id="acts"></div>
     <div class="row"><label>A Better Terminal write comes from <select id="writer" aria-label="Which feature writes"><option value="tokens">the Tokens panel</option><option value="guard">the context guard's button</option><option value="picker">the agent picker, This terminal</option><option value="foundry">Contracts, New Foundry project</option><option value="slop">the anti-slop fix</option><option value="insert">the sub-terminal notice, Insert command</option></select></label></div>
+    <div class="row"><label><input type="checkbox" id="silent"> The next change to the file is made by another program (no event: the screen goes stale)</label></div>
     <div class="row" id="tries" hidden></div>
   </div>
   <div id="cap" aria-live="off"></div>
@@ -441,7 +477,7 @@ function svg(vb, cls, shapes, label) {
   return s;
 }
 const SK = { stroke: "currentColor", "stroke-width": "1.3", "stroke-linecap": "round", "stroke-linejoin": "round" };
-/* The remote mark's glyph: a server box. connecting: a dashed, empty box. live: a solid box with its two lights on. ended: a solid box struck through. plain: the list's own icon, no state. */
+/* The remote mark's glyph: a server box. connecting (ssh not confirmed): a dashed, empty box, which does not move. live: a solid box with its two lights on. ended: a solid box struck through. plain: the list's own icon, no state. */
 function srvIcon(state, label) {
   const box = ["rect", { class: "box", x: "1.5", y: "2.5", width: "11", height: "9", rx: "1.5", ...SK }];
   const mid = ["path", { d: "M1.5 7h11", ...SK }];
@@ -452,49 +488,59 @@ function srvIcon(state, label) {
 const warnIcon = (cls = "ico") => svg("0 0 16 16", cls, [["path", { d: "M8 2.2L14.5 13.5H1.5L8 2.2Z", ...SK }], ["path", { d: "M8 6.5V9.6", ...SK }], ["circle", { cx: "8", cy: "11.6", r: ".8", fill: "currentColor" }]]);
 const infoIcon = (cls = "ico") => svg("0 0 16 16", cls, [["rect", { x: "2", y: "2", width: "12", height: "12", rx: "2.5", ...SK }], ["path", { d: "M8 7.4V11.4", ...SK }], ["circle", { cx: "8", cy: "5", r: ".8", fill: "currentColor" }]]);
 const stopIcon = (cls = "ico") => svg("0 0 16 16", cls, [["path", { d: "M5.4 1.8h5.2l3.6 3.6v5.2l-3.6 3.6H5.4L1.8 10.6V5.4L5.4 1.8Z", ...SK }], ["path", { d: "M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4", ...SK }]]);
+const LOCAL_CHIP = "NOT A SAVED SERVER";
 const chevIcon = () => svg("0 0 16 16", "chev", [["path", { d: "M5.5 4L9.5 8L5.5 12", stroke: "currentColor", "stroke-width": "1.5", "stroke-linecap": "round", "stroke-linejoin": "round" }]]);
 
-/* ---------- words: one place for every string the design fixes (spec sections 5 to 8) ---------- */
-const STATE_WORDS = { connecting: "starting ssh", live: "ssh running", ended: "ended" };
-const STATE_NAMES = { connecting: "Server, starting ssh", live: "Server, ssh running", ended: "Server, ended" };
+/* ---------- words: one place for every string the design fixes (spec sections 4 to 8) ---------- */
+const STATE_WORDS = { connecting: "ssh not confirmed", live: "ssh running", ended: "ended" };
+const STATE_NAMES = { connecting: "Server, ssh not confirmed", live: "Server, ssh running", ended: "Server, ended" };
 const OS = "macOS";
 const NO_SSH_HELP = { macOS: "macOS ships one at /usr/bin/ssh, so check the PATH your start-up files set.", Linux: "Install your distribution's OpenSSH client package (openssh-client on Debian and Ubuntu, openssh-clients on Fedora, openssh on Arch)." };
 const SSH_STILL_WORKS = "ssh typed in a terminal still works.";
+const FILE_NAME = "saved-servers.json";   /* SERVER_LIST_FILE_NAME: the only thing a message may say about where the list is kept */
 const WRITE_REFUSED = ["Not sent", "This pane is a server session, and Better Terminal types nothing of its own into one. Use a local pane, or type it there yourself."];
-const IMG_REFUSED = ["Not sent", "Images can't go to a server session: an attached image is sent as a file path on this machine, which means nothing on a server. Remove the images to send the text. Your text is kept."];
+const IMG_REFUSED = ["Not sent", "Images can't go to a server session: an attached image is sent as a file path on this computer, which a server can't read. Remove the images to send the text. Your text is kept."];
+/* One message per (field, reason) pair of the contract's table (23 pairs). A message names the rule and never holds a value. */
 const MSG = {
-  Name: {
-    empty: "Enter a name.",
-    long: "Use 64 characters or fewer.",
-    chars: "Remove the characters that can't be seen. A name can't hold control characters, direction marks, zero-width characters or line breaks.",
-    dup: "Another saved server already has this name. Names are compared without regard to upper and lower case.",
+  name: {
+    "empty": "Enter a name.",
+    "too-long": "Use 64 characters or fewer.",
+    "characters": "Remove the characters that can't be seen. A name can't hold control characters, direction marks, zero-width characters or line breaks.",
+    "taken": "Another saved server already has this name. Upper and lower case count as the same.",
   },
-  Host: {
-    empty: "Enter a host name, an IP address or an alias from your SSH config.",
-    long: "Use 253 characters or fewer.",
-    user: "Put the user name in the User field, not in Host.",
-    port: "Put the port in the Port field, not in Host.",
-    start: "A host starts with a letter, a digit or a colon.",
-    chars: "Use only letters, digits, dots, hyphens and underscores, or an IPv6 address. No spaces and no other characters.",
-    v6: "This is not a complete IPv6 address. Write it without brackets and without a % zone; \"::\" alone is not accepted. For a link-local address, add an alias in ~/.ssh/config and enter the alias.",
-    v4: "A host of only digits and dots must be four numbers from 0 to 255 with no leading zero, like 192.0.2.7.",
-    hex: "No part of a host can start with 0x.",
+  host: {
+    "empty": "Enter a host name, an IP address or an alias from your SSH config.",
+    "too-long": "Use 253 characters or fewer.",
+    "characters": "Use only letters, digits, dots, hyphens and underscores, or an IPv6 address. A user name goes in the User field, not in Host. No @, spaces, brackets, % or other characters.",
+    "first-character": "Start the host with a letter or a digit. Only an IPv6 address may start with a colon.",
+    "holds-port": "Put the port in the Port field, and leave it out of Host.",
+    "not-ipv6": "A host that holds a colon must be a complete IPv6 address. If the colon was for a port, use the Port field.",
+    "unspecified": "The unspecified address (two colons alone) can't be used as a host.",
+    "not-ipv4": "A host of only digits and dots must be four numbers from 0 to 255 with no leading zero, like 192.0.2.7.",
+    "leading-0x": "No part of a host can start with 0x.",
   },
-  Port: { bad: "Enter a whole number from 1 to 65535 with no sign and no leading zero, or leave it empty." },
-  User: {
-    long: "Use 64 characters or fewer.",
-    chars: "Use only letters, digits, dot, underscore, hyphen and @, and don't start with a hyphen. For any other user name, set User under an alias in ~/.ssh/config and enter the alias in Host.",
+  port: {
+    "not-a-port": "Enter 1 to 5 digits with no sign and no leading zero, or leave it empty.",
+    "out-of-range": "Enter a number from 1 to 65535, or leave it empty.",
   },
-  "Identity file": {
-    path: "Enter a full path that starts with / or ~/.",
-    long: "Use 1024 characters or fewer.",
-    chars: "Use only plain printable characters (ASCII) in the path.",
-    token: "A path can't hold % or ${ here. ssh would expand them. Put such a path in ~/.ssh/config under an alias.",
+  user: {
+    "too-long": "Use 64 characters or fewer.",
+    "characters": "Use only letters, digits, dots, underscores, hyphens and @. For any other user name, set User under an alias in ~/.ssh/config and enter the alias in Host.",
+    "first-character": "A user name can't start with a hyphen.",
+  },
+  key: {
+    "not-a-path": "Enter a full path that starts with / or ~/.",
+    "too-long": "Use 1024 characters or fewer.",
+    "characters": "Use only plain printable characters (ASCII) in the path.",
+    "expands": "A path can't hold % or ${ here: ssh would expand them. Put such a path in ~/.ssh/config under an alias.",
+    "home-unknown": "This path starts with ~/, and Better Terminal found no home folder to put in its place. Edit the server and enter the full path, starting with /.",
   },
 };
+/* The short name of each reason (the PRD's words), for a list row, where five full messages would not fit. */
+const SHORT = { "empty": "empty", "too-long": "too long", "characters": "a character that is not allowed", "taken": "already used", "first-character": "its first character", "holds-port": "written with a port", "not-ipv6": "not an IPv6 address", "unspecified": "the unspecified address", "not-ipv4": "not an IPv4 address", "leading-0x": "a part written in hexadecimal", "not-a-port": "not a port number", "out-of-range": "out of range", "not-a-path": "not a path", "expands": "a token ssh expands", "home-unknown": "home folder not known" };
 const KEY_WARN = {
-  missing: "No file at this path right now. It is saved as written; ssh will say so when you connect.",
-  notfile: "This path is not a regular file (a folder or a pipe). It is saved as written; ssh will say so when you connect.",
+  "not-found": "Its identity file: no file at this path right now. It is saved as written; ssh will say so when you connect.",
+  "not-a-regular-file": "Its identity file: this path is not a regular file (a folder or a pipe). It is saved as written; ssh will say so when you connect.",
 };
 const FIELDS = [
   { id: "name", label: "Name", req: true, hint: "Shown on the tab and in the command palette. 1 to 64 characters.", ph: "db1" },
@@ -503,8 +549,9 @@ const FIELDS = [
   { id: "user", label: "User", mono: true, hint: "Empty: your SSH config or your local user name decides.", ph: "" },
   { id: "key", label: "Identity file", mono: true, wide: true, hint: "A path only, starting with / or ~/. Better Terminal never opens the file and stores no password or passphrase: ssh asks for those in the pane.", ph: "~/.ssh/id_ed25519" },
 ];
+const LABEL = Object.fromEntries(FIELDS.map((f) => [f.id, f.label]));
 
-/* ---------- the rules of SV-1 AC1, as a stand-in. In the build there is one implementation, in Rust; the form asks it (spec 4.4). ---------- */
+/* ---------- the rules of SV-1 AC1, as a stand-in for Rust's one function. The first matching row per field wins, in the contract's order. ---------- */
 const norm = (s) => s.normalize("NFC").toLowerCase();
 function isV4(s) { return /^[0-9]+([.][0-9]+){3}$/.test(s) && s.split(".").every((p) => (p === "0" || !p.startsWith("0")) && Number(p) <= 255); }
 function isV6(s) {
@@ -517,40 +564,62 @@ function isV6(s) {
   return halves.length === 2 ? n < 8 : n === 8;
 }
 const RE_NAME_BAD = new RegExp("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "u");
-function check(v, selfId, list) {
+/** v: the five values as strings. others: the records a name may not repeat. Gives { fieldId: reasonCode } for every failing field. */
+function check(v, others, o = {}) {
   const out = {}; const name = v.name.trim(), host = v.host, port = v.port.trim(), user = v.user, key = v.key;
-  if (!name) out.Name = "empty"; else if ([...name].length > 64) out.Name = "long"; else if (RE_NAME_BAD.test(name)) out.Name = "chars";
-  else if (list.some((s) => s.id !== selfId && norm(s.name) === norm(name))) out.Name = "dup";
-  if (!host) out.Host = "empty"; else if (host.length > 253) out.Host = "long"; else if (host.includes("@")) out.Host = "user";
-  else if (/^[^:\[\]]+:[0-9]+$/.test(host)) out.Host = "port"; else if (/[\[\]%]/.test(host)) out.Host = "v6";
-  else if (!/^[A-Za-z0-9:]/.test(host)) out.Host = "start"; else if (!/^[A-Za-z0-9._:-]+$/.test(host)) out.Host = "chars";
-  else if (host.includes(":")) { if (!isV6(host) || host === "::") out.Host = "v6"; }
-  else if (/^[0-9.]+$/.test(host)) { if (!isV4(host)) out.Host = "v4"; }
-  else if (host.split(".").some((p) => /^0x/i.test(p))) out.Host = "hex";
-  if (port && (!/^[1-9][0-9]{0,4}$/.test(port) || Number(port) > 65535)) out.Port = "bad";
-  if (user) { if (user.length > 64) out.User = "long"; else if (!/^[A-Za-z0-9._@-]+$/.test(user) || user.startsWith("-")) out.User = "chars"; }
-  if (key) { if (!(key.startsWith("/") || key.startsWith("~/"))) out["Identity file"] = "path"; else if (key.length > 1024) out["Identity file"] = "long"; else if (/[^ -~]/.test(key)) out["Identity file"] = "chars"; else if (key.includes("%") || key.includes("${")) out["Identity file"] = "token"; }
+  if (!name) out.name = "empty"; else if ([...name].length > 64) out.name = "too-long"; else if (RE_NAME_BAD.test(name)) out.name = "characters";
+  else if (others.some((s) => norm(s.name.trim()) === norm(name))) out.name = "taken";
+  if (!host) out.host = "empty"; else if (host.length > 253) out.host = "too-long"; else if (!/^[A-Za-z0-9._:-]+$/.test(host)) out.host = "characters";
+  else if (!/^[A-Za-z0-9:]/.test(host)) out.host = "first-character"; else if (/^[^:]*:[0-9]+$/.test(host)) out.host = "holds-port";
+  else if (host.includes(":") && !isV6(host)) out.host = "not-ipv6"; else if (host === "::") out.host = "unspecified";
+  else if (/^[0-9.]+$/.test(host) && !isV4(host)) out.host = "not-ipv4"; else if (!host.includes(":") && host.split(".").some((p) => /^0x/i.test(p))) out.host = "leading-0x";
+  if (port) { if (!/^[0-9]{1,5}$/.test(port) || /^0[0-9]/.test(port)) out.port = "not-a-port"; else if (Number(port) < 1 || Number(port) > 65535) out.port = "out-of-range"; }
+  if (user) { if (user.length > 64) out.user = "too-long"; else if (!/^[A-Za-z0-9._@-]+$/.test(user)) out.user = "characters"; else if (user.startsWith("-")) out.user = "first-character"; }
+  if (key) { if (!(key.startsWith("/") || key.startsWith("~/"))) out.key = "not-a-path"; else if (key.length > 1024) out.key = "too-long"; else if (/[^ -~]/.test(key)) out.key = "characters"; else if (key.includes("%") || key.includes("${")) out.key = "expands";
+    else if (o.atStart && key.startsWith("~/") && !o.home) out.key = "home-unknown"; }
   return out;
 }
-const keyWarnFor = (key) => (!key ? null : /missing/.test(key) ? "missing" : /fifo|\/$/.test(key) ? "notfile" : null);
-const badField = (s, list) => Object.keys(check({ name: s.name, host: s.host, port: s.port == null ? "" : String(s.port), user: s.user || "", key: s.key || "" }, s.id, list))[0] || null;
+const ORDER = ["name", "host", "port", "user", "key"];
+const failures = (errs) => ORDER.filter((f) => errs[f]).map((f) => ({ field: f, reason: errs[f] }));
+const asValues = (s) => ({ name: s.name, host: s.host, port: s.port == null ? "" : String(s.port), user: s.user || "", key: s.key || "" });
+/* What servers_save says about the identity file of the row just saved, and nothing else does (the demo decides by the path's text). */
+const keyWarnFor = (key) => (!key ? null : /missing/.test(key) ? "not-found" : /fifo|\/$/.test(key) ? "not-a-regular-file" : null);
 
-/* ---------- destination summary (SV-9 AC1) and how it is shown (spec 9) ---------- */
-const destOf = (s) => ({ user: s.user || null, host: s.host, port: s.port || null, key: s.key || null });
+/* ---------- destination summary (SV-9 AC1; Rust's string in the build) and how it is shown (spec 9) ---------- */
+const destOf = (s) => ({ user: s.user || null, host: s.host ?? null, port: s.port ?? null, key: s.key || null });
 const sameDest = (a, b) => a.user === b.user && a.host === b.host && a.port === b.port && a.key === b.key;
 function summary(d) { const hst = d.port && d.host.includes(":") ? "[" + d.host + "]" : d.host; return (d.user ? d.user + "@" : "") + hst + (d.port ? ":" + d.port : ""); }
-const TAIL = 26, HEAD = 14;
-function cutDest(text) { const g = graphemes(text); if (g.length <= TAIL + 3) return ["", g.join("")]; let hd = g.slice(0, g.length - TAIL); if (hd.length > HEAD + 1) hd = hd.slice(0, HEAD).concat(DOTS); return [hd.join(""), g.slice(-TAIL).join("")]; }
-function fullDest(d) { const g = graphemes(cleanText(summary(d)) || "(no host)"); return g.length > 400 ? g.slice(0, 399).join("") + DOTS : g.join(""); }
-function destEl(d) {
-  const full = fullDest(d), [hd, tl] = cutDest(full);
-  return h("bdi", { class: "dest", title: full }, hd && h("span", { class: "hd" }, hd), h("span", { class: "tl" }, tl));
+/* A destination box holds at most BOX graphemes: the whole summary, or an ellipsis and its END. It is never clipped: it wraps to a row of
+   its own, and when that row is narrower than its text the text wraps inside the box. */
+const BOX = 40, NO_DEST = "destination not shown";
+function fullSum(sum) { const g = graphemes(cleanText(sum || "")); return g.length > 400 ? DOTS + g.slice(-399).join("") : g.join(""); }
+function cutDest(full) { const g = graphemes(full); return g.length <= BOX ? [full, false] : [DOTS + g.slice(-(BOX - 1)).join(""), true]; }
+/* o.plain: inside a listbox option, where no button can sit; o.whole: draw it whole (the selected option). Elsewhere a cut box is a button that shows the whole. */
+function destEl(sum, o = {}) {
+  const full = fullSum(sum);
+  if (!full) return h("span", { class: "dest none" }, NO_DEST);
+  const [cut, isCut] = cutDest(full);
+  if (!isCut) return h("bdi", { class: "dest" }, full);
+  if (o.plain) return h("bdi", { class: "dest", "data-cut": o.whole ? "whole" : "cut" }, o.whole ? full : cut);
+  const name = (open) => "Destination " + full + (open ? ", shown whole. Press to cut it short." : ", shown cut short. Press to show it whole.");
+  const b = h("button", { type: "button", class: "dest destbtn", "data-act": "dest", "data-cut": "cut", "aria-expanded": "false", "aria-label": name(false), tabindex: o.tabindex,
+    on: { mousedown: (e) => e.preventDefault(), click: (e) => { e.stopPropagation(); const open = b.getAttribute("aria-expanded") !== "true"; b.setAttribute("aria-expanded", String(open)); b.setAttribute("aria-label", name(open)); b.dataset.cut = open ? "whole" : "cut"; b.textContent = open ? full : cut; } } }, cut);
+  return b;
 }
 function cutMid(text, head, tail) { const g = graphemes(text); return g.length > head + tail + 1 ? g.slice(0, head).join("") + DOTS + g.slice(-tail).join("") : g.join(""); }
+const keyEl = (key) => h("span", { class: "key", title: key ? cleanText(key) : null }, key ? "key " + cutMid(cleanText(key), 14, 30) : "no identity file");
 const nameEl = (raw, fallback = "Unnamed server") => h("bdi", { class: "nmv", title: fullName(raw, fallback) }, cleanName(raw, fallback));
-const part = (p) => (typeof p === "string" ? p : p.name !== undefined ? nameEl(p.name, p.fallback) : p.dest ? destEl(p.dest) : p.code ? h("code", null, p.code) : p.b ? h("b", null, p.b) : "");
+const part = (p) => (typeof p === "string" ? p : p.name !== undefined ? nameEl(p.name, p.fallback) : p.dest !== undefined ? destEl(p.dest) : p.code ? h("code", null, p.code) : p.b ? h("b", null, p.b) : "");
 const parts = (arr) => (Array.isArray(arr) ? arr : [arr]).map(part);
-const flat = (arr) => (Array.isArray(arr) ? arr : [arr]).map((p) => (typeof p === "string" ? p : p.name !== undefined ? cleanName(p.name, p.fallback || "Unnamed server") : p.dest ? fullDest(p.dest) : p.code || p.b || "")).join("");
+const flat = (arr) => (Array.isArray(arr) ? arr : [arr]).map((p) => (typeof p === "string" ? p : p.name !== undefined ? cleanName(p.name, p.fallback || "Unnamed server") : p.dest !== undefined ? fullSum(p.dest) || NO_DEST : p.code || p.b || "")).join("");
+/* Plain strings (accessible names, the tab's title, announcements, the palette's matched label): the destination comes first, after fixed
+   words, and the name follows the fixed words "saved as" in quotes. A destination holds no space and no comma, so nothing in a name can pose as it. */
+const quoted = (raw) => cp(0x201C) + fullName(raw, "") + cp(0x201D);
+const entryOf = (row) => "entry " + row.fileIndex + " in " + FILE_NAME;
+function rowWho(row) {
+  const d = fullSum(row.summary), named = !!cleanText(row.name);
+  return (d || entryOf(row) + " (" + NO_DEST + ")") + (named ? ", saved as " + quoted(row.name) : ", unnamed") + (d && row.problems ? " (" + entryOf(row) + ")" : "");
+}
 
 /* ---------- hostile and long text, as a hand-edited store could hold it. Built from code points: this file holds no control or direction character. ---------- */
 const RLO = cp(0x202E), LRI = cp(0x2066), ESCc = cp(0x1b), BEL = cp(7), NLc = cp(10), ZWSP = cp(0x200B);
@@ -559,6 +628,7 @@ const HOSTILE = [
   { id: "h2", name: "<img src=x onerror=alert(1)>", host: "db1.example.com;id", port: null, user: "$HOME", key: "~/.ssh/%h" },
   { id: "h3", name: ZWSP + cp(0x2060) + cp(0x3164), host: "-oProxyCommand=x", port: null, user: null, key: null },
   { id: "h4", name: "root@prod.example.com", host: "evil.example.net", port: null, user: "deploy", key: null },
+  { id: "h5", name: "z" + cp(0x301).repeat(40) + cp(0x3164) + "algo" + cp(0xFE0F) + cp(0xFE0F), host: "zalgo.example.com", port: null, user: null, key: null },
 ];
 const LONGS = [
   { id: "l1", name: "Northwind production database primary eu-west do-not-touch", host: "db1.example.com." + "very-long-label-".repeat(11) + "evil.example.net", port: 65535, user: "svc.backup_account-with-a-very-long-name@corp.example", key: "/home/dev/keys/clients/northwind/2026/production/primary/../primary/id_ed25519_northwind_production_primary" },
@@ -570,10 +640,10 @@ const BASE = () => [
   { id: "s3", name: "build box", host: "192.0.2.7", port: null, user: "svc.backup_1", key: "~/keys/missing_key" },
   { id: "s4", name: "edge v6", host: "2001:db8::7", port: 2200, user: "ops", key: null },
 ];
-const byName = (a, b) => { const x = norm(a.name), y = norm(b.name); return x < y ? -1 : x > y ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : 0; };
-
-/* ---------- state ---------- */
-let S, seq = 0, counts, LIST = null;
+/* ---------- state ----------
+   S.servers is the file, in file order (the stand-in for Rust's side). W is what the webview holds (serverListStore): the rows servers_list
+   returned, which is all the page ever draws from, and the presses it is holding. */
+let S, W, seq = 0, counts, LIST = null;
 const LAYERS = [];
 const PANES = new Map();
 const nid = (p) => p + ++seq;
@@ -587,19 +657,48 @@ const activePane = () => { const t = activeTab(); return t && (t.panes.find((p) 
 const remoteOf = (t) => t.panes.find((p) => p.remote);
 const isServerTab = (t) => !!(t.serverNamed || remoteOf(t));
 const serverById = (id) => S.servers.find((s) => s.id === id);
-const pname = (p) => serverById(p.remote?.serverId)?.name ?? tabOf(p)?.name ?? "";
 const focusTerm = (p = activePane()) => { if (p) PANES.get(p.id)?.ta.focus(); };
 
+/* A ServerRow, as servers_list gives it. A member that failed its own rule is NOT sent: the page never holds it. */
+function rowOf(rec, i) {
+  const errs = check(asValues(rec), S.servers.slice(0, i)), fl = failures(errs);
+  const row = { id: rec.id, fileIndex: i + 1, name: errs.name && errs.name !== "taken" ? "" : rec.name.trim(), summary: "" };
+  if (!errs.host) row.host = rec.host;
+  if (rec.port != null && !errs.port) row.port = rec.port;
+  if (rec.user && !errs.user) row.user = rec.user;
+  if (rec.key && !errs.key) row.key = rec.key;                 /* identityFile, always in its saved ~/ form */
+  if (!errs.host && !errs.port && !errs.user) row.summary = summary(destOf(rec));
+  if (fl.length) row.problems = fl;
+  return row;
+}
+const byName = (a, b) => { const x = norm(a.name), y = norm(b.name); return x < y ? -1 : x > y ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : 0; };
+function loadList() {
+  counts.lists++;
+  if (S.store === "unreadable") { W.status = "unreadable"; W.rows = []; return; }
+  const rows = S.servers.map(rowOf);
+  W.status = "ok"; W.rows = rows.filter((r) => r.name).sort(byName).concat(rows.filter((r) => !r.name));   /* a withheld name: last, in file order */
+}
+const rowById = (id) => W.rows.find((r) => r.id === id);
+const rowDest = (row) => ({ user: row.user ?? null, host: row.host ?? null, port: row.port ?? null, key: row.key ?? null });
+const shownOf = (row) => ({ name: row.name, dest: rowDest(row), summary: row.summary });
+/* The event Better Terminal's own saves send: the list is read again, and what shows it is drawn again. Focus is not moved. */
+function serversChanged(serverId) {
+  loadList();
+  for (const t of S.tabs) for (const p of t.panes) if (p.remote) { if (!serverId || p.remote.serverId === serverId) { p.refusal = null; p.held = null; } updatePane(p); }
+  if (LIST && LIST.page === "list") drawList();
+}
+function paneWho(p) { const r = p.remote, row = rowById(r.serverId), d = fullSum(r.summary); return d + (row && cleanText(row.name) ? ", saved as " + quoted(row.name) : ", in tab " + quoted(tabOf(p)?.name || "")); }
+
 /* ---------- panes ---------- */
-function newPane(o = {}) { return { id: nid("p"), remote: o.remote || null, cwd: o.cwd === undefined ? "~" : o.cwd, lines: o.lines || [], timers: [], confirming: false, refusal: null }; }
+function newPane(o = {}) { return { id: nid("p"), remote: o.remote || null, cwd: o.cwd === undefined ? "~" : o.cwd, lines: o.lines || [], timers: [], held: null, refusal: null, barKey: null, barClosed: false }; }
 function paneDom(p) {
   let d = PANES.get(p.id); if (d) return d;
   const ta = h("textarea", { class: "xterm-helper-textarea", "aria-label": "Terminal input", autocapitalize: "off", spellcheck: "false" });
   const lines = h("div", { class: "lines" });
   const term = h("div", { class: "term", on: { mousedown: (e) => { e.preventDefault(); const t = tabOf(p); if (t) { t.activePane = p.id; markActive(t); } ta.focus(); } } }, lines, ta);
   const head = h("div", { class: "phead" }), bar = h("div", { class: "barslot" });
-  const root = h("div", { class: "pane", role: "group" }, bar, h("div", { class: "pane-in" }, head, term));
-  ta.addEventListener("focus", () => { const t = tabOf(p); if (t && t.activePane !== p.id) { t.activePane = p.id; markActive(t); } });
+  const root = h("div", { class: "pane", role: "group", tabindex: "-1" }, bar, h("div", { class: "pane-in" }, head, term));
+  root.addEventListener("focusin", () => { const t = tabOf(p); if (t && t.activePane !== p.id) { t.activePane = p.id; markActive(t); } });
   d = { root, head, bar, lines, ta }; PANES.set(p.id, d); return d;
 }
 function markActive(t) { for (const p of t.panes) PANES.get(p.id)?.root.classList.toggle("active", p.id === t.activePane); renderSide(); }
@@ -614,73 +713,108 @@ function drawLines(p) {
   }
   if (!p.remote || p.remote.state !== "ended") d.lines.append(h("div", { class: "ln" }, h("span", { class: "cur" })));
 }
-/* What the pane's bar says, for the pane's record (spec 5.3 to 5.6). null: no bar. */
+const T_NOT_SEEN = "ssh not confirmed: this pane's program is not one Better Terminal recognises as ssh";
+const B_NOT_SEEN = "The program in this pane is not one Better Terminal recognises as ssh with the arguments it gave. It may be a local program, or your own ssh wrapper, in which case the session works. Better Terminal cannot tell which, so check the prompt before you type. It is still running, and Better Terminal leaves it running. This pane stays a server session: file links, the folder and Better Terminal's own typing stay off. " + SSH_STILL_WORKS;
+const T_NOT_YET = "ssh not confirmed after 30 seconds";
+const B_NOT_YET = "Better Terminal has not seen your shell hand over to ssh. Whatever is running in this pane is still running. It may be waiting for an answer from you; or ssh may be running under your shell, in which case the session works and you can go on using it. Better Terminal cannot tell which, so check the prompt before you type. This pane stays a server session: file links, the folder and Better Terminal's own typing stay off. " + SSH_STILL_WORKS;
+/* What the pane's bar says, from the pane's record and the list the page holds (spec 5.3 to 5.6). null: no bar. */
 function barFor(p) {
   const r = p.remote; if (!r) return null;
-  const tab = tabOf(p), nm = { name: pname(p) };
   const endBtn = { label: "End what is running", aria: "End what is running in this pane", act: "end", run: () => endPane(p) };
   if (r.state === "live") return null;
   if (r.state === "connecting") {
-    if (r.kind === "another") return { tone: "warn", title: "Your shell has not handed over to ssh: another program is running",
-      body: "Your shell's start-up files started another program in this pane in place of ssh, and it is still running. What you type here goes to that program, on this machine. Better Terminal keeps treating this pane as a server session: file links, the folder and its own typing stay off. " + SSH_STILL_WORKS, acts: [endBtn] };
-    if (r.kind === "notyet") return { tone: "warn", title: "Your shell has not handed over to ssh yet",
-      body: "After 30 seconds your shell's start-up files have not handed over to ssh. Whatever is running in this pane is still running. It may be waiting for an answer from you; or ssh may be running under your shell, in which case you can go on using it. Better Terminal treats this pane as a server session meanwhile: file links, the folder and its own typing stay off. " + SSH_STILL_WORKS, acts: [endBtn] };
+    if (r.notice === "another") return { key: "another", tone: "warn", title: T_NOT_SEEN, body: B_NOT_SEEN, acts: [endBtn] };
+    if (r.notice === "notyet") return { key: "notyet", tone: "warn", title: T_NOT_YET, body: B_NOT_YET, acts: [endBtn] };
     return null;
   }
-  /* ended */
-  const srv = serverById(r.serverId), cur = srv && destOf(srv), changed = srv && !sameDest(cur, r.dest);
+  /* ended: the control reads the current list (design 8.4's table) */
+  const row = rowById(r.serverId), held = p.held, pressed = held ? "You pressed Reconnect, and nothing was started. " : "";
   const openList = { label: "Open saved servers", act: "list", run: () => openList_() };
-  const rec = srv && { label: "Reconnect", aria: "Reconnect to " + cleanName(srv.name, "Unnamed server") + ", " + fullDest(cur), act: "reconnect", primary: true, run: () => reconnect(p) };
-  const beside = srv && ["to ", { dest: cur }];
-  if (p.refusal && srv) {
-    const f = p.refusal, common = { tone: "warn", beside, acts: [rec] };
-    if (f.kind === "checks") return { ...common, title: ["“", nm, "” can't connect: its " + f.field + " is not valid"], body: "Edit it in your saved servers, then reconnect. Nothing was started.", acts: [rec, openList], beside: null };
-    if (f.kind === "shell") return { ...common, title: "Saved servers need zsh or bash as your login shell", body: (f.shell ? ["Yours is ", { code: f.shell }, ". "] : ["Yours is neither. "]).concat("Nothing was started. ssh typed in a terminal works as before.") };
-    if (f.kind === "unreadable") return { ...common, title: "The server list could not be read", body: "Nothing was started and nothing was changed. Reconnect is off until the list can be read.", acts: [rec, openList], beside: null };
-    if (f.kind === "engagement") return { ...common, title: "Saved servers are not available in an engagement", body: "Nothing was started. ssh typed in a terminal works as before." };
+  if (W.status !== "ok") return { key: "unreadable", tone: "warn", title: "The server list could not be read", body: pressed + (held ? "" : "Nothing was started and nothing was changed. ") + "Reconnect is off until " + FILE_NAME + " in Better Terminal's data folder can be read.", acts: [openList] };
+  if (!row) return { key: "gone", tone: "warn", title: "This saved server no longer exists", body: [pressed + "It was removed from your saved servers, so this pane can't reconnect. It was last started for ", { dest: r.summary }, ". Its output stays until you close the pane."], acts: [openList] };
+  const cur = rowDest(row), nm = { name: row.name };
+  const editBtn = { label: "Edit in saved servers", aria: "Edit " + rowWho(row), act: "edit", run: () => { openList_(); openForm(rowById(row.id)); } };
+  if (row.problems) return { key: "problem", tone: "warn", title: ["“", nm, "” can't connect until it is fixed"], list: row.problems, body: [pressed + "It failed its checks when the list was read, so there is no Reconnect. This pane was last started for ", { dest: r.summary }, "."], acts: [editBtn] };
+  const rec = { label: "Reconnect", aria: "Reconnect to " + rowWho(row), act: "reconnect", primary: true, run: () => reconnect(p) };
+  const beside = ["to ", { dest: row.summary }];
+  const line = (label, d, sum, keys) => [label, { sum, key: keys ? d.key || "" : undefined }];
+  if (held && held.why === "changed") {
+    const sh = held.shown, late = !sameDest(sh.dest, cur);      /* late: it changed between what the control showed and the press */
+    const three = late && !sameDest(sh.dest, r.dest), keys = cur.key !== r.dest.key || (three && sh.dest.key !== cur.key);
+    const pair = [line("This pane was last started for", r.dest, r.summary, keys)];
+    if (three) pair.push(line("Reconnect was showing", sh.dest, sh.summary, keys));
+    pair.push(line(late ? "The saved server now holds" : "It would now connect to", cur, row.summary, keys));
+    return { key: "ask", ask: true, tone: "warn", title: late ? ["“", nm, "” changed as you pressed Reconnect. Nothing was started."] : "Connect this pane to a different destination?", pair,
+      body: late ? "Better Terminal read the list again at your press and found a different destination. Go on only if you expected that." : ["The saved server “", nm, "” changed since this pane was last started. Go on only if you expected that."],
+      acts: [{ label: "Cancel", act: "cancel", run: () => { p.held = null; delete W.held[p.id]; updatePane(p, { focus: "reconnect" }); } },
+        { label: sameDest(cur, r.dest) ? "Connect to what it holds now" : "Connect to the new destination", act: "confirm", primary: true, run: () => reconnect(p, { confirmed: cur }) }] };
   }
-  if (!srv) return { tone: "warn", title: "This saved server no longer exists", body: ["It was removed from your saved servers, so this pane can't reconnect. It was last started for ", { dest: r.dest }, ". Its output stays until you close the pane."], acts: [openList] };
-  const keyToo = changed && cur.key !== r.dest.key, withKey = (d) => (keyToo ? { dest: d, key: d.key || "" } : d);
-  if (p.confirming) return { tone: "warn", ask: true, title: ["Connect this pane to a different destination?"], pair: [["It was last started for", withKey(r.dest)], ["It would now connect to", withKey(cur)]],
-    body: ["The saved server “", nm, "” changed since then. Go on only if you expected that."], acts: [{ label: "Cancel", act: "cancel", run: () => { p.confirming = false; updatePane(p, "reconnect"); } }, { label: "Connect to the new destination", act: "confirm", primary: true, run: () => { p.confirming = false; startChecked(p, srv); } }] };
-  if (changed) return { tone: "warn", title: ["The destination of “", { name: srv.name }, "” changed since this pane was last started"], pair: [["Last started for", withKey(r.dest)], ["Reconnect would go to", withKey(cur)]], body: null, acts: [{ ...rec, label: "Reconnect…" }] };
-  if (r.kind === "before") return { tone: "warn", title: "Ended before ssh was seen to start (exit status " + r.status + ")", body: "Better Terminal did not see ssh start in this pane. Your shell ended with exit status " + r.status + "; anything it printed is in the pane. " + SSH_STILL_WORKS, acts: [rec], beside };
-  if (r.kind === "nossh") return { tone: "warn", title: "No SSH client found (exit status 127)", body: "Your shell ended with status 127 before ssh was seen to start, which usually means there is no ssh on its PATH. " + NO_SSH_HELP[OS] + " " + SSH_STILL_WORKS, acts: [rec], beside };
-  if (r.kind === "spawn") return { tone: "warn", title: "Could not start a terminal (system error " + r.status + ")", body: "Better Terminal could not start your shell for this connection, so nothing was run.", acts: [rec], beside };
-  if (r.note === "restored") return { tone: "note", title: "Restored from your last session", body: "ssh is not running here. Nothing reconnects by itself.", acts: [rec], beside };
-  if (r.note === "reopened") return { tone: "note", title: "Reopened tab", body: "ssh is not running here. The earlier output was not kept, and nothing reconnects by itself.", acts: [rec], beside };
-  if (r.note === "byEnd") return { tone: "note", title: "Ended by you", body: "You ended what was running in this pane.", acts: [rec], beside };
-  return { tone: "note", title: r.status == null ? "ssh ended" : "ssh ended (exit status " + r.status + ")", body: null, acts: [rec], beside };
+  if (!sameDest(cur, r.dest)) { const keys = cur.key !== r.dest.key;
+    return { key: "changed", tone: "warn", title: ["The destination of “", nm, "” changed since this pane was last started"], pair: [line("Last started for", r.dest, r.summary, keys), line("Reconnect would go to", cur, row.summary, keys)], body: null, acts: [{ ...rec, label: "Reconnect…" }] }; }
+  const f = p.refusal;
+  if (f) {
+    const common = { key: "refused-" + f.kind + (f.cause ? "-" + f.cause : ""), tone: "warn", acts: [rec], beside };
+    if (f.kind === "server-failed-checks") return { ...common, title: ["“", nm, "” was refused at the start: a check failed"], list: f.fields, body: "Nothing was started.", acts: [editBtn, rec] };
+    if (f.kind === "shell-not-supported") return { ...common, title: "Saved servers need zsh or bash as your login shell", body: (f.shell ? ["Yours is ", { code: f.shell }, ". "] : ["Yours is neither. "]).concat("Nothing was started. ssh typed in a terminal works as before.") };
+    if (f.kind === "not-in-engagement") return { ...common, title: "Saved servers are not available in an engagement", body: "Nothing was started. ssh typed in a terminal works as before." };
+    if (f.kind === "terminal-not-started" && f.cause === "start") return { ...common, title: "Could not start a terminal" + (f.errno == null ? "" : " (system error " + f.errno + ")"), body: "Better Terminal could not start your shell for this connection, so nothing was run." };
+    if (f.kind === "terminal-not-started" && f.cause === "closing") return { ...common, title: "Not started: Better Terminal's window was closing or reloading", body: "The request arrived as the main window was closing or its page was being replaced, so no connection was kept. Nothing is running in this pane." };
+    if (f.kind === "terminal-not-started") return { ...common, title: "Not started: this pane already has a connection or a start in progress", body: "Better Terminal keeps one connection per pane. Nothing new was started." };
+  }
+  const e = r.end, st = e && e.status != null ? e.status : null;
+  if (e && e.kind === "ended-before-ssh") return { key: "before", tone: "warn", title: "Ended before ssh was seen to start" + (st == null ? "" : " (exit status " + st + ")"), body: "Better Terminal did not see ssh start in this pane. The pane's program ended " + (st == null ? "without an exit status, as it does when a signal ends it" : "with exit status " + st) + "; anything it printed is in the pane. " + SSH_STILL_WORKS, acts: [rec], beside };
+  if (e && e.kind === "no-ssh-client") return { key: "nossh", tone: "warn", title: "Possibly no SSH client: the pane's program ended with status 127 before ssh was seen to start", body: "Status 127 usually means the shell found no ssh on its PATH. Better Terminal did not see ssh start, and cannot tell more than that. " + NO_SSH_HELP[OS] + " " + SSH_STILL_WORKS, acts: [rec], beside };
+  if (r.origin === "restored") return { key: "restored", tone: "note", title: "Restored from your last session", body: "ssh is not running here. Nothing reconnects by itself.", acts: [rec], beside };
+  if (r.origin === "reopened") return { key: "reopened", tone: "note", title: "Reopened tab", body: "ssh is not running here. The earlier output was not kept, and nothing reconnects by itself.", acts: [rec], beside };
+  if (e && e.by === "ended") return { key: "byEnd", tone: "note", title: "Ended by you", body: "You ended what was running in this pane.", acts: [rec], beside };
+  return { key: "exit", tone: "note", title: st == null ? "ssh ended" : "ssh ended (exit status " + st + ")", body: null, acts: [rec], beside };
 }
-function updatePane(p, focusAct) {
+const reasonList = (fl) => h("ul", { class: "why" }, fl.map((x) => h("li", null, h("b", null, LABEL[x.field] + ": "), MSG[x.field][x.reason])));
+function updatePane(p, o = {}) {
   const d = paneDom(p), tab = tabOf(p), r = p.remote;
-  const hadFocus = d.bar.contains(document.activeElement);
-  /* header: the mark takes the folder's place */
+  const hadFocus = d.bar.contains(document.activeElement), hadAct = hadFocus && document.activeElement.dataset.act, prevKey = p.barKey;
+  /* header: on a server pane it is a block of its own, so the destination can take a row; the mark takes the folder's place */
+  d.root.classList.toggle("srvpane", !!r);
   d.head.textContent = "";
   if (tab && tab.panes.length > 1) d.head.append(h("span", { class: "pnum" }, String(tab.panes.indexOf(p) + 1)));
   if (r) {
-    d.head.append(h("span", { class: "chip" }, srvIcon(r.state), "SERVER"), h("span", { class: "pstate" }, STATE_WORDS[r.state]), destEl(r.dest));
-    d.root.setAttribute("aria-label", "Server session " + cleanName(pname(p), "Unnamed server") + ", " + STATE_WORDS[r.state]);
+    /* S1b: a hub's source mark goes after the SERVER chip. Nothing is drawn in S1. */
+    d.head.append(h("span", { class: "chip" }, srvIcon(r.state), "SERVER"), h("span", { class: "pstate" }, STATE_WORDS[r.state]), destEl(r.summary));
+    d.root.setAttribute("aria-label", "Server session, " + STATE_WORDS[r.state] + ": " + paneWho(p));
   } else {
-    if (tab && remoteOf(tab)) d.head.append(h("span", { class: "chip" }, "LOCAL"));
+    if (tab && remoteOf(tab)) d.head.append(h("span", { class: "chip" }, LOCAL_CHIP));
     d.head.append(h("span", { class: "cwd" }, p.cwd || "~"));
-    d.root.setAttribute("aria-label", "Local pane, " + (p.cwd || "~"));
+    d.root.setAttribute("aria-label", "Not a saved server: a shell started in " + (p.cwd || "~"));
   }
   d.root.classList.toggle("multi", !!tab && tab.panes.length > 1);
   d.root.classList.toggle("active", !!tab && tab.activePane === p.id);
-  /* bar */
+  /* bar: bounded. Open, its details scroll inside a fixed share of the pane; closed, it is its title and its buttons. */
   const b = barFor(p); d.bar.textContent = "";
-  if (b) {
-    const acts = h("div", { class: "acts" }, b.acts.map((a) => h("button", { type: "button", class: "ui-btn ui-btn--md " + (a.primary ? "ui-btn--primary" : "ui-btn--secondary"), "aria-label": a.aria, "data-act": a.act, on: { mousedown: (e) => e.preventDefault(), click: a.run } }, a.label)), b.beside && h("span", { class: "bd" }, parts(b.beside)));
-    const txt = h("div", { class: "txt" }, h("div", { class: "ttl", id: "bt-" + p.id }, parts(b.title)),
-      b.pair && h("div", { class: "pair" }, b.pair.flatMap(([k, dd]) => [h("span", null, k), h("span", { class: "pairv" }, destEl(dd.dest || dd), dd.dest && h("span", { class: "key", title: cleanText(dd.key) }, dd.key ? "key " + cutMid(cleanText(dd.key), 14, 30) : "no identity file"))])),
-      b.body && h("div", { class: "bd" }, parts(b.body)));
-    d.bar.append(h("div", { class: "srv-bar", role: "group", "aria-labelledby": "bt-" + p.id, "data-tone": b.tone, "data-kind": p.confirming ? "confirm" : p.refusal ? "refused-" + p.refusal.kind : r.kind || r.note || "" }, b.tone === "warn" ? warnIcon() : infoIcon(), txt, acts));
+  if (!b) p.barKey = null;
+  else {
+    if (p.barKey !== b.key) { p.barKey = b.key; p.barClosed = false; }
+    const closed = p.barClosed && !b.ask, mid = "bm-" + p.id, pd = (e) => e.preventDefault();
+    const details = h("div", { class: "more", id: mid },
+      b.pair && h("div", { class: "pair" }, b.pair.flatMap(([k, v]) => [h("span", null, k), h("span", { class: "pairv" }, destEl(v.sum), v.key !== undefined && keyEl(v.key))])),
+      b.list && reasonList(b.list), b.body && h("div", { class: "bd" }, parts(b.body)));
+    const hasMore = details.childNodes.length > 0;
+    const toggle = hasMore && !b.ask && h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--ghost", "data-act": "more", "aria-expanded": String(!closed), "aria-controls": mid, "aria-label": closed ? "Show the whole message" : "Show less of this message", on: { mousedown: pd, click: () => { p.barClosed = !closed; updatePane(p, { focus: "more" }); } } }, closed ? "More" : "Less");
+    const acts = h("div", { class: "acts" }, b.acts.map((a) => h("button", { type: "button", class: "ui-btn ui-btn--md " + (a.primary ? "ui-btn--primary" : "ui-btn--secondary"), "aria-label": a.aria, "data-act": a.act, on: { mousedown: pd, click: a.run } }, a.label)), b.beside && h("span", { class: "bd beside" }, parts(b.beside)), toggle);
+    d.bar.append(h("div", { class: "srv-bar", role: "group", "aria-labelledby": "bt-" + p.id, "data-tone": b.tone, "data-kind": b.key, "data-open": String(!closed) },
+      h("div", { class: "bh" }, b.tone === "warn" ? warnIcon() : infoIcon(), h("div", { class: "ttl", id: "bt-" + p.id }, parts(b.title)), acts), hasMore && !closed && details));
+    if (details.isConnected && details.scrollHeight > details.clientHeight + 1) { details.tabIndex = 0; details.setAttribute("role", "region"); details.setAttribute("aria-label", "Message details"); }
   }
-  if (hadFocus) (d.bar.querySelector("button") || d.ta).focus();
+  /* Focus. A press that asks a question goes to its Cancel. Otherwise a bar that changed under a focused button hands focus to the PANE: never to
+     another button (a second Enter would press it) and never into the terminal's input (a second Enter would be typed). */
+  const at = (act) => d.bar.querySelector('[data-act="' + act + '"]');
+  if (o.focus) (at(o.focus) || d.root).focus();
+  else if (hadFocus) ((b && prevKey === b.key && hadAct && at(hadAct)) || d.root).focus();
   drawLines(p);
 }
+function focusBar(p) { const d = paneDom(p); p.barClosed = false; updatePane(p); (d.bar.querySelector('[data-act="cancel"]') || d.bar.querySelector('[data-act="more"]') || d.bar.querySelector("button") || d.root).focus(); }
 function showTab(id, focus = true) {
+  /* A bar is shown open once: when its tab is hidden and shown again it comes back closed (its title and its buttons). */
+  const was = activeTab(); if (was && was.id !== id) for (const p of was.panes) if (p.barKey) p.barClosed = true;
   S.active = id; const t = activeTab();
   panesEl.textContent = "";
   for (const p of t.panes) { panesEl.append(paneDom(p).root); updatePane(p); }
@@ -688,7 +822,8 @@ function showTab(id, focus = true) {
 }
 
 /* ---------- tab bar ---------- */
-function tabTitle(t) { const r = remoteOf(t)?.remote; return fullName(t.name, "Untitled tab") + (r ? " — " + STATE_NAMES[r.state].toLowerCase() + " — " + fullDest(r.dest) : ""); }
+/* The title is a plain string: the destination comes first, after a fixed word, and the tab's name last, in quotes. */
+function tabTitle(t) { const r = remoteOf(t)?.remote; return r ? "Server " + fullSum(r.summary) + ": " + STATE_WORDS[r.state] + ". Tab " + quoted(t.name) : fullName(t.name, "Untitled tab"); }
 function renderTabs() {
   const hadFocus = tabbar.contains(document.activeElement) && document.activeElement.dataset.tab;
   tabbar.textContent = "";
@@ -710,82 +845,127 @@ function renderTabs() {
 function addLocalTab(name = "Terminal", cwd = "~") { const p = newPane({ cwd, lines: [{ text: "dev@mac " + cwd + " % " }] }); const t = { id: nid("t"), name, serverNamed: false, panes: [p], activePane: p.id }; S.tabs.push(t); showTab(t.id); return t; }
 
 /* ---------- connect, the three states, End, Reconnect ---------- */
-function preflight(srv) {
-  if (S.store === "unreadable") return { kind: "unreadable" };
-  const sh = $("#shell").value; if (sh !== "zsh" && sh !== "bash") return { kind: "shell", shell: sh === "?" ? null : sh };
-  if (!srv) return { kind: "gone" };
-  const f = badField(srv, S.servers); if (f) return { kind: "checks", field: f };
+/* What server_connect rejects with (the stand-in for Rust), for a request the page's own check let through. */
+function rustRefusal(rec) {
+  if (S.store === "unreadable") return { kind: "list-unreadable" };
+  if (!S.available) return { kind: "not-in-engagement" };
+  const sh = $("#shell").value; if (sh !== "zsh" && sh !== "bash") return sh === "?" ? { kind: "shell-not-supported" } : { kind: "shell-not-supported", shell: sh };
+  if (!rec) return { kind: "server-gone" };
+  const fl = failures(check(asValues(rec), S.servers.slice(0, S.servers.indexOf(rec)), { atStart: true, home: !$("#nohome").checked }));
+  if (fl.length) return { kind: "server-failed-checks", fields: fl };
+  const how = $("#rc").value;
+  if (how === "spawn") return { kind: "terminal-not-started", cause: "start", errno: 2 };
+  if (how === "spawn0") return { kind: "terminal-not-started", cause: "start" };
+  if (how === "closing" || how === "pane") return { kind: "terminal-not-started", cause: how };
   return null;
 }
-/* Connect, from the palette or the list. A refusal opens no tab: the list shows it (SV-2 AC5, AC7, AC10). */
-function connect(serverId) {
-  const srv = serverById(serverId), no = preflight(srv);
-  if (no) {
-    log("Connect refused before any start (" + no.kind + "): no tab opened, 0 processes started.");
-    if (LIST) { LIST.msg = refusalMsg(no, srv); LIST.page = "list"; drawList(); } else { closeAllLayers(false); openList_({ refusal: no, server: srv }); }
-    if (LIST && S.store !== "unreadable") (LIST.dlg.querySelector('[data-act="msg"]') || LIST.dlg.querySelector(".filter"))?.focus();
-    say(flat(LIST?.msg?.text || "The server list could not be read.")); return;
+/* The check before EVERY connect request (design 8.4): read the list again at the press and compare it with what the pressed control showed.
+   Anything but "the same" sends nothing and holds the press as a ConnectCheck. */
+function requestConnect({ serverId, pane, shown, confirmed }) {
+  loadList();
+  const row = rowById(serverId), key = pane ? pane.id : serverId; let why = null;
+  if (W.status !== "ok") why = "unreadable"; else if (!row) why = "gone"; else if (row.problems) why = "problem";
+  else { const now = rowDest(row); if (!sameDest(now, shown.dest) || (pane && !sameDest(now, pane.remote.dest) && !(confirmed && sameDest(now, confirmed)))) why = "changed"; }
+  if (why) {
+    const check = { serverId, why, shown };
+    if (pane) { check.paneId = pane.id; check.pane = { name: shown.name, dest: pane.remote.dest, summary: pane.remote.summary }; }
+    if (row) check.now = row;
+    if (why === "changed") check.differs = ["host", "port", "user", "key"].filter((m) => rowDest(row)[m] !== shown.dest[m]);
+    W.held[key] = check; counts.held++;
+    log("The press read the list again and was HELD (" + why + "): 0 connect requests. Held as a ConnectCheck under " + (pane ? "the pane" : "the server") + ".");
+    return { outcome: "held", check };
+  }
+  delete W.held[key];
+  counts.connect++;
+  log("Connect request #" + counts.connect + ": { serverId: " + serverId + ", paneId } and nothing else of the server.");
+  const no = rustRefusal(serverById(serverId));
+  if (no) { log("server_connect rejected with the kind " + JSON.stringify(no) + "."); return { outcome: "rejected", kind: no }; }
+  return { outcome: "sent", row };
+}
+/* Connect, from the list or from a palette entry. shown: the row the pressed control was drawn from. Anything but a start opens no tab: the list shows why. */
+function connect(serverId, shown, o = {}) {
+  const res = requestConnect({ serverId, shown, confirmed: o.confirmed });
+  if (res.outcome !== "sent") {
+    const held = res.outcome === "held" ? res.check : null, kind = held ? null : res.kind;
+    if (kind && (kind.kind === "list-unreadable" || kind.kind === "server-gone")) loadList();
+    for (const L of LAYERS.slice()) if (!LIST || L !== LIST.layer) closeLayer(L, false);
+    const row = rowById(serverId);
+    const msg = held ? (held.why === "gone" ? refusalMsg({ kind: "server-gone" }) : held.why === "problem" ? refusalMsg({ kind: "server-failed-checks", fields: row.problems, loaded: true }, row) : null) : refusalMsg(kind, row);
+    if (LIST) { LIST.msg = msg; LIST.page = "list"; LIST.filter = ""; drawList(); } else openList_({ msg });
+    const d = LIST.dlg, at = (sel) => d.querySelector(sel);
+    if (held && held.why === "changed") { at('[data-act="held-cancel"]')?.scrollIntoView({ block: "nearest" }); focusCellOf(serverId, 0); say([rowWho(row), ": this saved server changed since it was shown. Nothing was started. It was showing ", { dest: held.shown.summary }, "."]); }
+    else { (at('[data-act="msg"]') || at(".filter") || at("[data-first]") || d).focus(); say(msg ? ["Nothing was started. ", ...[].concat(msg.text)] : "Nothing was started. The server list could not be read."); }
+    return;
   }
   closeAllLayers(false);
-  const p = newPane({ cwd: null }); const t = { id: nid("t"), name: srv.name, serverNamed: true, panes: [p], activePane: p.id };
-  S.tabs.push(t); p.remote = { serverId: srv.id, dest: destOf(srv), state: "connecting", kind: null, status: null, note: null };
-  showTab(t.id); startClient(p, srv, true);
+  const row = res.row, p = newPane({ cwd: null }), t = { id: nid("t"), name: row.name, serverNamed: true, panes: [p], activePane: p.id };
+  S.tabs.push(t); p.remote = { serverId: row.id, dest: rowDest(row), summary: row.summary, state: "connecting", notice: null, end: null, origin: null };
+  showTab(t.id); startClient(p, true);
 }
 function clearTimers(p) { for (const x of p.timers) clearTimeout(x); p.timers = []; }
 function setState(p, patch, announce) { Object.assign(p.remote, patch); const t = tabOf(p); updatePane(p); if (t) renderTabs(); renderSide(); if (announce) say(announce); }
-function startClient(p, srv, fresh) {
-  clearTimers(p); p.refusal = null; p.confirming = false;
-  counts.connect++; counts.starts++;
-  log("Connect request #" + counts.connect + ": { server: " + srv.id + ", pane: " + p.id + " } and nothing else. Client start #" + counts.starts + ".");
-  const how = $("#rc").value, nm = { name: srv.name };
-  if (!fresh) p.lines.push({ text: "" });
-  p.remote = { serverId: srv.id, dest: destOf(srv), state: "connecting", kind: null, status: null, note: null };
-  setState(p, {}, [nm, ": starting ssh."]);
+const PAL_END = " With this pane active, End is in the command palette.", PAL_RE = " With this pane active, Reconnect is in the command palette.";
+function startClient(p, fresh) {
+  clearTimers(p); p.refusal = null; p.held = null;
+  counts.starts++; log("Client start #" + counts.starts + " in pane " + p.id + ".");
+  const how = $("#rc").value, r = p.remote, hostOnly = r.summary.split("@").pop().split(":")[0];
+  if (!fresh) { p.lines.push({ text: "" }); log("Reconnect: a blank line is drawn between the old output and the new, on the pane's display only (0 bytes to the terminal)."); }
+  Object.assign(r, { state: "connecting", notice: null, end: null, origin: null });
+  setState(p, {}, [paneWho(p), ": started. ssh not confirmed."]);
   const at = (ms, fn) => p.timers.push(setTimeout(fn, ms));
-  const ended = (kind, status, lines, words) => { for (const l of lines) p.lines.push({ text: l }); p.lines.push({ text: "[Process exited]" }); setState(p, { state: "ended", kind, status }, [nm, ": ", words, " Reconnect is in the command palette."]); };
-  if (how === "spawn") return at(200, () => ended("spawn", 2, [], "could not start a terminal, system error 2."));
-  if (how === "quick") return at(FAST() ? 700 : 1400, () => { p.lines.push({ text: summary(p.remote.dest).split(":")[0] + "'s password: " }); setState(p, { state: "live" }, [nm, ": ssh is running."]); });
-  if (how === "another") return at(600, () => { p.lines.push({ text: "[0] 0:zsh*                                   \"mac\" 10:42 18-Nov" }); setState(p, { kind: "another" }, [nm, ": your shell has not handed over to ssh. Another program is running. End is in the command palette."]); });
-  if (how === "silent") return at(500, () => ended("before", 0, [], "ended before ssh was seen to start, exit status 0."));
-  if (how === "nossh") return at(500, () => ended("nossh", 127, ["zsh:1: command not found: ssh"], "no SSH client found, exit status 127."));
+  const ended = (kind, status, lines, words) => { for (const l of lines) p.lines.push({ text: l }); p.lines.push({ text: "[Process exited]" }); setState(p, { state: "ended", notice: null, end: { status, kind, by: "process" } }, [paneWho(p), ": ", words, PAL_RE]); };
+  if (how === "quick") return at(FAST() ? 700 : 1400, () => { p.lines.push({ text: hostOnly + "'s password: " }); setState(p, { state: "live" }, [paneWho(p), ": ssh running."]); });
+  if (how === "another") return at(600, () => { p.lines.push({ text: "[0] 0:zsh*                                   \"mac\" 10:42 18-Nov" }); setState(p, { notice: "another" }, [paneWho(p), ": ssh not confirmed. The pane's program is not one Better Terminal recognises as ssh. Check the prompt before you type." + PAL_END]); });
+  if (how === "wrapper") return at(600, () => { p.lines.push({ text: hostOnly + "'s password: " }); setState(p, { notice: "another" }, [paneWho(p), ": ssh not confirmed. The pane's program is not one Better Terminal recognises as ssh. Check the prompt before you type." + PAL_END]); });
+  if (how === "silent") return at(500, () => ended("ended-before-ssh", 0, [], "ended before ssh was seen to start, exit status 0."));
+  if (how === "signal") return at(500, () => ended("ended-before-ssh", null, [], "ended before ssh was seen to start."));
+  if (how === "nossh") return at(500, () => ended("no-ssh-client", 127, ["zsh:1: command not found: ssh"], "the pane's program ended with status 127 before ssh was seen to start. There may be no SSH client on your PATH."));
   if (how === "waiting") p.lines.push({ text: "Load the work profile? [y/N] " });
-  if (how === "child") at(500, () => { p.lines.push({ text: summary(p.remote.dest).split(":")[0] + "'s password: " }); drawLines(p); });
+  if (how === "child") at(500, () => { p.lines.push({ text: hostOnly + "'s password: " }); drawLines(p); });
   drawLines(p);
-  at(BOUND(), () => setState(p, { kind: "notyet" }, [nm, ": your shell has not handed over to ssh yet. End is in the command palette."]));
+  at(BOUND(), () => setState(p, { notice: "notyet" }, [paneWho(p), ": ssh not confirmed after 30 seconds." + PAL_END]));
 }
 function answerStartup(p = activePane()) { /* demo: the start-up file's question is answered; ssh is then confirmed */
-  if (!p?.remote || p.remote.state !== "connecting" || p.remote.kind === "another") return log("Nothing to answer in the active pane.");
-  clearTimers(p); p.lines.push({ text: "y" }, { text: summary(p.remote.dest).split(":")[0] + "'s password: " });
-  setState(p, { state: "live", kind: null }, [{ name: pname(p) }, ": ssh is running."]);
-  log("ssh confirmed after the question was answered: the pane is live; the message and End are gone.");
+  if (!p?.remote || p.remote.state !== "connecting" || p.remote.notice === "another") return log("Nothing to answer in the active pane.");
+  clearTimers(p); p.lines.push({ text: "y" }, { text: p.remote.summary.split("@").pop().split(":")[0] + "'s password: " });
+  setState(p, { state: "live", notice: null }, [paneWho(p), ": ssh running."]);
+  log("ssh confirmed after the question was answered: the pane is live; the message and End are gone. Focus that was on End is on the pane, not in its input.");
 }
 function endPane(p) {
   clearTimers(p); p.lines.push({ text: "[Process exited]" });
-  log("End: 0 bytes written into the pane; every process of the pane ended (a job that ignores the hangup is killed after 2 s). No second question.");
-  setState(p, { state: "ended", kind: null, note: "byEnd" }, [{ name: pname(p) }, ": ended. Reconnect is in the command palette."]);
+  log("End: 0 bytes written into the pane; every process of the pane ended (a job that ignores the hangup is killed after 2 s). No second question. Focus that was on End is on the pane, not on Reconnect.");
+  setState(p, { state: "ended", notice: null, end: { status: null, kind: null, by: "ended" } }, [paneWho(p), ": ended by you." + PAL_RE]);
 }
 function sshExits(p = activePane(), status = 255) {
   if (!p?.remote || p.remote.state !== "live") return log("The active pane has no running ssh.");
   p.lines.push({ text: "Connection to " + p.remote.dest.host + " closed." }, { text: "[Process exited]" });
-  setState(p, { state: "ended", status }, [{ name: pname(p) }, ": ssh ended, exit status " + status + ". Reconnect is in the command palette."]);
+  setState(p, { state: "ended", end: { status, kind: null, by: "process" } }, [paneWho(p), ": ssh ended" + (status == null ? "." : ", exit status " + status + ".") + PAL_RE]);
 }
-function reconnect(p) {
-  const srv = serverById(p.remote.serverId); if (!srv) return;
-  if (!sameDest(destOf(srv), p.remote.dest)) { /* the second, separate question: nothing starts here */
-    if (!p.confirming) { p.confirming = true; log("Reconnect: the destination changed, so 0 connect requests until the second confirmation."); }
-    updatePane(p); paneDom(p).bar.querySelector('[data-act="cancel"]')?.focus(); return;
+/* Reconnect, and the confirming press of its question. Every press goes through the check; a press the check holds starts nothing. */
+function reconnect(p, o = {}) {
+  const r = p.remote, row = rowById(r.serverId);
+  const shown = row ? shownOf(row) : { name: "", dest: r.dest, summary: r.summary };
+  const res = requestConnect({ serverId: r.serverId, pane: p, shown, confirmed: o.confirmed });
+  if (res.outcome === "held") {
+    const c = res.check, late = c.why !== "changed" || !sameDest(c.shown.dest, rowDest(c.now));
+    p.held = c; for (const t of S.tabs) for (const q of t.panes) if (q.remote && q !== p) updatePane(q);
+    updatePane(p, c.why === "changed" ? { focus: "cancel" } : {});
+    if (c.why === "changed") say(late ? [paneWho(p), ": the saved server changed as you pressed Reconnect. Nothing was started. It now holds ", { dest: c.now.summary }, ". Cancel has focus."] : [paneWho(p), ": Reconnect would go to a different destination, ", { dest: c.now.summary }, ". Nothing was started. Cancel has focus."]);
+    else say([fullSum(r.summary), ": Reconnect was not sent. ", c.why === "gone" ? "The saved server no longer exists." : c.why === "problem" ? "The saved server failed its checks." : "The server list could not be read.", " Nothing was started."]);
+    return;
   }
-  startChecked(p, srv);
-}
-function startChecked(p, srv) {
-  const no = preflight(srv);
-  if (no) { p.refusal = no; log("Reconnect refused before any start (" + no.kind + "): the pane stays ended."); updatePane(p); say([{ name: pname(p) }, ": Reconnect was refused. Nothing was started."]); return; }
-  const hadBarFocus = paneDom(p).bar.contains(document.activeElement);
-  startClient(p, srv, false); if (hadBarFocus) focusTerm(p);
+  p.held = null;
+  if (res.outcome === "rejected") {
+    p.refusal = res.kind; if (res.kind.kind === "list-unreadable" || res.kind.kind === "server-gone") loadList();
+    updatePane(p); say([paneWho(p), ": Reconnect was refused. Nothing was started."]); return;
+  }
+  Object.assign(r, { dest: rowDest(res.row), summary: res.row.summary });
+  startClient(p, false);
 }
 
 /* ---------- closing ---------- */
 const asks = (p) => p.remote && p.remote.state !== "ended";
+const CLOSE_TAIL = " Better Terminal types nothing into it.";
 function closePane(p = activePane()) {
   const t = tabOf(p); if (!t) return;
   const go = () => {
@@ -797,39 +977,40 @@ function closePane(p = activePane()) {
     t.activePane = t.panes[0].id; showTab(t.id);
   };
   if (!asks(p)) return go();
-  const r = p.remote, live = r.state === "live", who = "“" + cleanName(pname(p), "Unnamed server") + "” (" + fullDest(r.dest) + ")";
-  confirmDlg({ title: "Close this pane and end its connection?",
-    message: live ? "ssh is running in this pane for " + who + ". Closing the pane ends it, and anything running over that connection may be cut off. Better Terminal types nothing into it."
-      : "A connection to " + who + " is starting in this pane. Closing the pane ends whatever your shell's start-up files are running in it. Better Terminal types nothing into it.",
-    confirm: "Close and end connection", onConfirm: go });
+  const live = p.remote.state === "live";
+  confirmDlg({ title: live ? "Close this pane and end its connection?" : "Close this pane and end what is running in it?",
+    message: (live ? "ssh is running in this pane for " + paneWho(p) + ". Closing the pane ends it, and anything running over that connection may be cut off."
+      : "A connection to " + paneWho(p) + " was started in this pane, and ssh is not confirmed. Closing the pane ends whatever is running in it.") + CLOSE_TAIL,
+    confirm: live ? "Close and end connection" : "Close and end what is running", onConfirm: go });
 }
 function dropTab(t) {
   if (S.tabs.length === 1) addLocalTab();
   const rp = remoteOf(t);
-  if (isServerTab(t)) S.closed.push({ name: t.name, serverNamed: t.serverNamed, remote: rp && { serverId: rp.remote.serverId, dest: rp.remote.dest } });
-  else S.closed.push({ name: t.name });
+  if (rp) S.closed.push({ name: t.name, serverNamed: t.serverNamed, remote: { serverId: rp.remote.serverId, dest: rp.remote.dest, summary: rp.remote.summary } });
+  else S.closed.push({ name: t.serverNamed ? "Terminal" : t.name });
   for (const p of t.panes) { clearTimers(p); PANES.get(p.id)?.root.remove(); PANES.delete(p.id); }
   S.tabs.splice(S.tabs.indexOf(t), 1); showTab(S.tabs[S.tabs.length - 1].id);
 }
 function closeTab(t = activeTab()) {
   const p = t.panes.find(asks);
   if (!p) { if (remoteOf(t)) log("Closing an ended server tab asks nothing."); return dropTab(t); }
-  const r = p.remote, others = t.panes.length - 1, more = others ? " The tab's " + (others === 1 ? "local pane closes" : others + " local panes close") + " too." : "";
-  confirmDlg({ title: "Close “" + cleanName(t.name, "Untitled tab") + "” and end its connection?",
-    message: (r.state === "live" ? "ssh is running in this tab for " + fullDest(r.dest) + ". Closing the tab ends it, and anything running over that connection may be cut off."
-      : "A connection to " + fullDest(r.dest) + " is starting in this tab. Closing the tab ends whatever your shell's start-up files are running in it.") + " Better Terminal types nothing into it." + more,
-    confirm: "Close and end connection", onConfirm: () => { log("Close of the tab: 0 bytes written into the remote pane; every process of the pane ended."); dropTab(t); } });
+  const r = p.remote, live = r.state === "live", others = t.panes.length - 1, more = others ? " The tab's " + (others === 1 ? "other pane closes" : others + " other panes close") + " too." : "";
+  confirmDlg({ title: "Close " + cp(0x201C) + cleanName(t.name, "Untitled tab") + cp(0x201D) + (live ? " and end its connection?" : " and end what is running in it?"),
+    message: (live ? "ssh is running in this tab for " + fullSum(r.summary) + ". Closing the tab ends it, and anything running over that connection may be cut off."
+      : "A connection to " + fullSum(r.summary) + " was started in this tab, and ssh is not confirmed. Closing the tab ends whatever is running in its server pane.") + CLOSE_TAIL + more,
+    confirm: live ? "Close and end connection" : "Close and end what is running", onConfirm: () => { log("Close of the tab: 0 bytes written into the remote pane; every process of the pane ended."); dropTab(t); } });
 }
 function reopenClosed() {
   const c = S.closed.pop(); if (!c) return log("No closed tab to reopen.");
   if (!c.remote) return addLocalTab(c.name);
-  const p = newPane({ cwd: null }); p.remote = { serverId: c.remote.serverId, dest: c.remote.dest, state: "ended", kind: null, status: null, note: "reopened" };
+  const p = newPane({ cwd: null }); p.remote = { serverId: c.remote.serverId, dest: c.remote.dest, summary: c.remote.summary, state: "ended", notice: null, end: null, origin: "reopened" };
   const t = { id: nid("t"), name: c.name, serverNamed: c.serverNamed, panes: [p], activePane: p.id }; S.tabs.push(t); showTab(t.id);
-  log("Reopen Closed Tab: an ended server tab; 0 connect requests, 0 terminals started.");
+  log("Reopen Closed Tab: an ended server tab (origin: reopened); 0 connect requests, 0 terminals started.");
 }
 function quitRestart() {
-  let n = 0; for (const t of S.tabs) for (const p of t.panes) if (p.remote) { if (p.remote.state !== "ended") n++; clearTimers(p); p.confirming = false; p.refusal = null; Object.assign(p.remote, { state: "ended", kind: null, status: null, note: "restored" }); }
-  closeAllLayers(false); log("Quit: asked nothing; " + n + " live or starting connection" + (n === 1 ? "" : "s") + " ended, nothing typed into them. Restart: every server tab is back ended; 0 connect requests.");
+  let n = 0; for (const t of S.tabs) for (const p of t.panes) if (p.remote) { if (p.remote.state !== "ended") n++; clearTimers(p); p.held = null; p.refusal = null; Object.assign(p.remote, { state: "ended", notice: null, end: null, origin: "restored" }); }
+  closeAllLayers(false); W.held = {}; loadList();
+  log("Quit: asked nothing; " + n + " running or unconfirmed connection" + (n === 1 ? "" : "s") + " ended, nothing typed into them. Restart: every server tab is back ended (origin: restored); 0 connect requests.");
   showTab(S.active);
 }
 function split() {
@@ -837,8 +1018,9 @@ function split() {
   t.panes.push(p); t.activePane = p.id; log("Split: a local shell in your home folder (one create_pty request, 0 connect requests)."); showTab(t.id);
 }
 
-/* ---------- layers: one stack; Esc closes the top one only; Tab stays inside it; focus returns ---------- */
-const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/* ---------- layers: one stack; Esc closes the top one only; only the top layer's trap handles Tab; focus returns (useEscapeToClose and
+   useFocusTrap as story C1 leaves them: a control with tabindex -1 is never a stop). ---------- */
+const TABBABLE = 'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 function openLayer(el, o = {}) {
   const L = { el, onEsc: o.onEsc, returnTo: o.returnTo || document.activeElement, trap: o.trap || el };
   LAYERS.push(L); (o.host || layerEl).append(el); (o.initial?.() || el.querySelector(TABBABLE) || el).focus(); return L;
@@ -849,14 +1031,15 @@ function closeLayer(L, focusTo) {
   const to = focusTo || L.returnTo;
   if (to && to.isConnected && to.offsetParent !== null && !to.disabled) to.focus(); else if (LAYERS.length) (LAYERS[LAYERS.length - 1].trap.querySelector(TABBABLE))?.focus(); else focusTerm();
 }
-function closeAllLayers(focus = true) { while (LAYERS.length) closeLayer(LAYERS[LAYERS.length - 1], false); LIST = null; $("#tries").hidden = true; if (focus) focusTerm(); }
+function closeAllLayers(focus = true) { while (LAYERS.length) closeLayer(LAYERS[LAYERS.length - 1], false); if (LIST) { W.warn = {}; for (const k in W.held) if (!W.held[k].paneId) delete W.held[k]; } LIST = null; $("#tries").hidden = true; if (focus) focusTerm(); }
 document.addEventListener("keydown", (e) => {
   const L = LAYERS[LAYERS.length - 1];
   if (L) {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); (L.onEsc || (() => closeLayer(L)))(); return; }
     if (e.key === "Tab") {
-      const stops = $$(TABBABLE, L.trap).filter((n) => n.offsetParent !== null && n.getAttribute("tabindex") !== "-1"), first = stops[0] || L.trap, last = stops[stops.length - 1] || L.trap, a = document.activeElement;
-      if (!L.trap.contains(a) || stops.length === 0 || (e.shiftKey ? a === first : a === last)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+      const stops = $$(TABBABLE, L.trap).filter((n) => n.offsetParent !== null), i = stops.indexOf(document.activeElement);
+      if (!stops.length) { e.preventDefault(); L.trap.focus(); }
+      else if (i < 0 || (e.shiftKey ? i === 0 : i === stops.length - 1)) { e.preventDefault(); (e.shiftKey ? stops[stops.length - 1] : stops[0]).focus(); }
     }
     return;
   }
@@ -865,17 +1048,20 @@ document.addEventListener("keydown", (e) => {
   const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
   if (mod && e.key.toLowerCase() === "p") { e.preventDefault(); openPalette(); }
   else if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); openSwitcher(); }
+  else if (mod && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { const t = activeTab(), i = t.panes.findIndex((p) => p.id === t.activePane), n = t.panes[i + (e.key === "ArrowRight" ? 1 : -1)]; if (n) { e.preventDefault(); t.activePane = n.id; markActive(t); focusTerm(n); } }
 }, true);
 
-/* ---------- ConfirmDialog, as today: plain strings, Cancel has focus, Enter confirms, Esc cancels. F7 gives it words; what it needs to carry them is in the spec (6.1, question A7). ---------- */
-function confirmDlg({ title, message, confirm, onConfirm, onCancel }) {
+/* ---------- ConfirmDialog as story C1 leaves it (design section 22): role alertdialog, labelled and described, in the Esc stack, a focus trap,
+   focus given back; and NO window-level Enter: Enter presses the focused button only, and focus opens on Cancel. o.host: rendered inside
+   another dialog's element (Remove's question, inside the list). ---------- */
+function confirmDlg({ title, message, confirm, onConfirm, onCancel, host }) {
   const tid = nid("ct"), mid = nid("cm"); let L;
   const done = (yes) => { closeLayer(L, yes || onCancel ? false : undefined); if (yes) onConfirm(); else onCancel?.(); };
   const cancel = h("button", { type: "button", class: "cbtn cbtn--cancel", "data-act": "cancel", on: { click: () => done(false) } }, "Cancel");
   const ok = h("button", { type: "button", class: "cbtn cbtn--ok", "data-act": "confirm", on: { click: () => done(true) } }, confirm);
-  const dlg = h("div", { class: "cdlg", role: "alertdialog", "aria-modal": "true", "aria-labelledby": tid, "aria-describedby": mid, on: { keydown: (e) => { if (e.key === "Enter") { e.preventDefault(); done(true); } } } },
+  const dlg = h("div", { class: "cdlg", role: "alertdialog", "aria-modal": "true", "aria-labelledby": tid, "aria-describedby": mid, tabindex: "-1" },
     h("div", { class: "h" }, warnIcon(""), h("span", { id: tid }, title)), h("p", { id: mid }, message), h("div", { class: "btns" }, cancel, ok));
-  L = openLayer(h("div", { class: "cscrim", on: { mousedown: (e) => { if (e.target === e.currentTarget) done(false); } } }, dlg), { initial: () => cancel, onEsc: () => done(false) });
+  L = openLayer(h("div", { class: host ? "ask-scrim" : "cscrim", on: { mousedown: (e) => { if (e.target === e.currentTarget) done(false); } } }, dlg), { initial: () => cancel, onEsc: () => done(false), host });
 }
 function toast(title, body) { toastsEl.textContent = ""; const t = h("div", { class: "toast", role: "status" }, h("div", { class: "t" }, title), h("div", { class: "b" }, body)); toastsEl.append(t); setTimeout(() => t.remove(), 8000); }
 
@@ -883,7 +1069,8 @@ function toast(title, body) { toastsEl.textContent = ""; const t = h("div", { cl
 function openMenu(t, x, y) {
   const wr = win.getBoundingClientRect(), server = isServerTab(t); let L;
   const item = (label, run, o = {}) => h("button", { type: "button", role: "menuitem", class: o.sep ? "sep" : "", disabled: o.disabled, on: { click: () => { closeLayer(L); run(); } } }, label);
-  const menu = h("div", { class: "menu", role: "menu", "aria-label": "Tab", style: "left:" + Math.min(x - wr.left, wr.width - 250) + "px;top:" + (y - wr.top) + "px" },
+  /* The reason line is the MENU's description, so it is read on entering the menu; it is not an item and not a stop. */
+  const menu = h("div", { class: "menu", role: "menu", "aria-label": "Tab", "aria-describedby": server ? "menu-why" : null, style: "left:" + Math.min(x - wr.left, wr.width - 250) + "px;top:" + (y - wr.top) + "px" },
     item("Rename", () => log("Rename: the tab bar's box opens. A commit with the text unchanged is not a rename and keeps the tab a server tab (SV-3 AC1).")),
     !server && item("Duplicate", () => addLocalTab(t.name === "Terminal" ? t.name : t.name + " (copy)")),
     item("New Sub-terminal", () => log("New Sub-terminal: a local shell in your home folder, as today.")),
@@ -892,7 +1079,7 @@ function openMenu(t, x, y) {
     item("Reopen Closed Tab", reopenClosed, { disabled: S.closed.length === 0 }),
     item("Close Others", () => {}, { sep: true, disabled: S.tabs.length < 2 }),
     item("Close", () => closeTab(t), { disabled: S.tabs.length < 2 }),
-    server && h("div", { class: "note", role: "note" }, "A server tab can't be copied or moved to its own window."));
+    server && h("div", { class: "note", id: "menu-why" }, "A server tab can't be copied or moved to its own window."));
   menu.addEventListener("keydown", (e) => { const items = $$("button:not([disabled])", menu), i = items.indexOf(document.activeElement);
     if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); } else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); } });
   const wrap = h("div", null, h("div", { class: "menu-catch", on: { mousedown: () => closeLayer(L) } }), menu);
@@ -900,7 +1087,8 @@ function openMenu(t, x, y) {
 }
 
 /* ---------- the palette (CommandPalette.tsx): today's entries, then F7's ---------- */
-const CAT = { Tabs: "#58a6ff", Panes: "#3fb950", Panels: "#bc8cff", Themes: "#d29922", Recording: "#ff7b72", BMAD: "#2dd4bf", Contracts: "#f0883e", Servers: "#56d4dd" };
+const CAT = { Tabs: "#58a6ff", Panes: "#3fb950", Panels: "#bc8cff", Themes: "#d29922", Recording: "#ff7b72", BMAD: "#2dd4bf", Contracts: "#f0883e", SSH: "#56d4dd" };
+const isF7 = (label) => /^Servers: |^Connect to /.test(label);
 function paletteItems() {
   const note = (what) => () => log("Palette: " + what + " (an existing command; not part of this mockup).");
   const it = [
@@ -912,18 +1100,20 @@ function paletteItems() {
     ["Panels", "Open Settings", "⌘,", note("Settings")], ["Themes", "Theme: Precision", null, () => setTheme(0)], ["Themes", "Theme: Nord", null, () => setTheme(4)],
   ].map(([category, label, shortcut, run]) => ({ category, label, shortcut, run }));
   S.tabs.forEach((t, i) => it.push({ category: "Tabs", label: "Switch to: " + fullName(t.name, "Untitled tab"), shortcut: i < 9 ? "⌘" + (i + 1) : null, run: () => showTab(t.id) }));
-  /* F7's entries follow every entry the palette had (SV-9 AC2). */
-  const p = activePane(), r = p?.remote;
-  if (r && r.state === "ended" && serverById(r.serverId)) it.push({ category: "Servers", label: "Servers: Reconnect this pane", run: () => reconnect(p), f7: true });
-  if (r && r.state === "connecting" && r.kind) it.push({ category: "Servers", label: "Servers: End what is running in this pane", run: () => endPane(p), f7: true });
-  if (S.available) {
-    it.push({ category: "Servers", label: "Servers: Open saved servers", run: () => openList_(), f7: true, keep: true });
-    if (S.store !== "unreadable") for (const s of S.servers.slice().sort(byName)) it.push({ category: "Servers", label: "Connect to " + fullName(s.name, "Unnamed server") + " (" + fullDest(destOf(s)) + ")", server: s, run: () => connect(s.id), f7: true, keep: true });
-  }
+  /* F7's entries follow every entry the palette had (SV-9 AC2). The category is "SSH": text typed for a server (its name, "server", "srv") does not match it. */
+  if (!S.available) return it;
+  const p = activePane(), r = p?.remote, b = r && barFor(p);
+  if (b && b.acts.some((a) => a.act === "reconnect" || a.act === "confirm")) it.push({ category: "SSH", label: "Servers: Reconnect this pane", run: () => (b.ask ? focusBar(p) : reconnect(p)) });
+  if (b && b.acts.some((a) => a.act === "end")) it.push({ category: "SSH", label: "Servers: End what is running in this pane", run: () => { endPane(p); paneDom(p).root.focus(); } });
+  if (b) it.push({ category: "SSH", label: "Servers: Show this pane's message", run: () => focusBar(p) });
+  it.push({ category: "SSH", label: "Servers: Open saved servers", run: () => openList_() });
+  /* One per ServerRow, built from the rows read when the palette opened; its action carries that row as what it was showing. */
+  if (W.status === "ok") for (const row of W.rows) it.push({ category: "SSH", label: "Connect to " + rowWho(row), row, run: () => connect(row.id, shownOf(row)) });
   return it;
 }
 function openPalette(preset = "") {
   if (LAYERS.length) return;
+  if (S.available) loadList();
   let items = paletteItems(), shown = items, sel = 0, L;
   const list = h("div", { class: "pal__list", role: "listbox", id: "pal-list", "aria-label": "Commands" });
   const input = h("input", { type: "text", placeholder: "Type a command...", "aria-label": "Command", role: "combobox", "aria-expanded": "true", "aria-controls": "pal-list", autocomplete: "off", spellcheck: "false" });
@@ -932,18 +1122,20 @@ function openPalette(preset = "") {
     if (!shown.length) list.append(h("div", { class: "pal__none" }, "No matching commands"));
     shown.forEach((x, i) => {
       const col = CAT[x.category];
-      const lab = x.server ? h("span", { class: "pal__lab" }, h("span", null, "Connect to ", nameEl(x.server.name)), destEl(destOf(x.server))) : h("span", { class: "pal__lab" }, x.label);
-      const row = h("div", { class: "pal__item", role: "option", id: "pal-" + i, "aria-selected": String(i === sel), "aria-label": x.label, on: { mouseenter: () => { sel = i; mark(); }, click: () => run(i) } },
+      /* A server's row is a rendered label: fixed words, the destination in its box (whole on the selected row), then "saved as" and the name, which is what gives way. */
+      const lab = x.row ? h("span", { class: "pal__lab srvlab" }, h("span", { class: "fx" }, "Connect to"), destEl(x.row.summary, { plain: true, whole: i === sel }), !x.row.summary && h("span", { class: "fx" }, entryOf(x.row)),
+          cleanText(x.row.name) ? h("span", { class: "sv" }, "saved as ", nameEl(x.row.name)) : h("span", { class: "fx" }, "unnamed"))
+        : h("span", { class: "pal__lab" }, x.label);
+      const row = h("div", { class: "pal__item", role: "option", id: "pal-" + i, "aria-selected": String(i === sel), "aria-label": x.label, on: { mouseenter: () => { if (sel !== i) { sel = i; draw(); } }, click: () => run(i) } },
         h("div", { class: "l" }, h("span", { class: "pal__cat", style: col ? "color:" + col + ";background:" + col + "20" : "color:var(--text-muted)" }, x.category), lab), x.shortcut && h("kbd", null, x.shortcut));
       list.append(row);
     });
-    mark();
+    const cur = list.children[sel]; if (cur?.id) { input.setAttribute("aria-activedescendant", cur.id); cur.scrollIntoView({ block: "nearest" }); } else input.removeAttribute("aria-activedescendant");
   };
-  const mark = () => { $$(".pal__item", list).forEach((n, i) => n.setAttribute("aria-selected", String(i === sel))); const cur = list.children[sel]; if (cur?.id) { input.setAttribute("aria-activedescendant", cur.id); cur.scrollIntoView({ block: "nearest" }); } else input.removeAttribute("aria-activedescendant"); };
   const filter = () => { const q = input.value.toLowerCase(); shown = !q ? items : items.filter((x) => x.label.toLowerCase().includes(q) || x.category.toLowerCase().includes(q) || (x.shortcut || "").toLowerCase().includes(q)); sel = 0; draw(); };
-  const run = (i) => { const x = shown[i]; if (!x) return; closeLayer(L, false); x.run(); if (!LAYERS.length && !paneDom(activePane()).bar.contains(document.activeElement)) focusTerm(); };
+  const run = (i) => { const x = shown[i]; if (!x) return; closeLayer(L, false); x.run(); if (!LAYERS.length && !paneDom(activePane()).root.contains(document.activeElement)) focusTerm(); };
   input.addEventListener("input", filter);
-  input.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(sel + 1, shown.length - 1); mark(); } else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(sel - 1, 0); mark(); } else if (e.key === "Enter") { e.preventDefault(); run(sel); } });
+  input.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(sel + 1, shown.length - 1); draw(); } else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(sel - 1, 0); draw(); } else if (e.key === "Enter") { e.preventDefault(); run(sel); } });
   const pal = h("div", { class: "pal", role: "dialog", "aria-modal": "true", "aria-label": "Command palette" }, h("div", { class: "pal__in" }, input), list, h("div", { class: "pal__foot" }, h("span", null, "↑↓ navigate"), h("span", null, "↵ select"), h("span", null, "esc close")));
   L = openLayer(h("div", { class: "scrim palz", on: { mousedown: (e) => { if (e.target === e.currentTarget) closeLayer(L); } } }, pal), { initial: () => input });
   input.value = preset; filter();
@@ -959,9 +1151,9 @@ function openSwitcher() {
     const q = input.value.toLowerCase(); shown = S.tabs.filter((t) => cleanText(t.name).toLowerCase().includes(q) || (!remoteOf(t) && (t.panes[0].cwd || "").includes(q)));
     ul.textContent = "";
     shown.forEach((t, i) => { const r = remoteOf(t)?.remote;
-      ul.append(h("li", { role: "option", id: "sw-" + i, "aria-selected": String(i === sel), on: { click: () => go(i), mouseenter: () => { sel = i; draw(); } } },
+      ul.append(h("li", { role: "option", id: "sw-" + i, "aria-selected": String(i === sel), "aria-label": r ? tabTitle(t) : null, on: { click: () => go(i), mouseenter: () => { if (sel !== i) { sel = i; draw(); } } } },
         h("span", { class: "num" }, String(S.tabs.indexOf(t) + 1)), r ? srvIcon(r.state) : chevIcon(), h("span", { class: "name" }, nameEl(t.name, "Untitled tab")),
-        r ? [h("span", { class: "st" }, "server · " + STATE_WORDS[r.state]), destEl(r.dest)] : h("span", { class: "path" }, t.panes[0].cwd || "~"))); });
+        r ? [h("span", { class: "st" }, "server · " + STATE_WORDS[r.state]), destEl(r.summary, { plain: true, whole: i === sel })] : h("span", { class: "path" }, t.panes[0].cwd || "~"))); });
     if (!shown.length) ul.append(h("li", null, "No tab matches."));
     if (shown.length) input.setAttribute("aria-activedescendant", "sw-" + sel);
   };
@@ -972,49 +1164,59 @@ function openSwitcher() {
   draw();
 }
 
-/* ---------- the server list (spec 4) ---------- */
+/* ---------- the server list (spec 4). Everything is drawn from W.rows: the rows servers_list returned. ---------- */
 function openList_(o = {}) {
   if (!S.available) return log("Saved servers are not available here (Windows, or an engagement's instance): there is no list and no palette entry.");
-  if (LIST) { LIST.msg = o.refusal ? refusalMsg(o.refusal, o.server) : LIST.msg; LIST.page = "list"; drawList(); return; }
+  loadList();
+  if (LIST) { if (o.msg !== undefined) LIST.msg = o.msg; LIST.page = "list"; drawList(); return; }
   const dlg = h("div", { class: "srv", tabindex: "-1", role: "dialog", "aria-modal": "true", "aria-labelledby": "srv-title" });
-  LIST = { dlg, page: "list", msg: o.refusal ? refusalMsg(o.refusal, o.server) : null, filter: "", row: 0, col: 0, edit: null, errors: {}, values: null, saveFail: false };
+  LIST = { dlg, page: "list", msg: o.msg || null, filter: "", row: 0, col: 0, edit: null, errors: {}, values: null };
   LIST.layer = openLayer(h("div", { class: "scrim", on: { mousedown: (e) => { if (e.target === e.currentTarget && LIST.page === "list") closeList(); } } }, dlg), { onEsc: () => (LIST.page === "form" ? leaveForm() : closeList()), initial: () => dlg });
   drawList(); focusListStart();
 }
-function closeList() { const L = LIST.layer; LIST = null; $("#tries").hidden = true; closeLayer(L); }
-function refusalMsg(f, srv) {
-  if (f.kind === "checks") return { tone: "bad", text: ["“", { name: srv.name }, "” can't connect: its " + f.field + " is not valid. Nothing was started. Edit it to fix it."], action: { label: "Edit", aria: "Edit " + cleanName(srv.name, "Unnamed server"), run: () => openForm(srv) } };
-  if (f.kind === "shell") return { tone: "warn", text: ["Saved servers need zsh or bash as your login shell. "].concat(f.shell ? ["Yours is ", { code: f.shell }, ". "] : ["Yours is neither. "], "Nothing was started. You can still add, edit and remove servers, and ssh typed in a terminal works as before.") };
-  if (f.kind === "gone") return { tone: "warn", text: "That saved server no longer exists. Nothing was started. The list below is current." };
-  if (f.kind === "engagement") return { tone: "warn", text: "Saved servers are not available in an engagement. Nothing was started." };
+function closeList() { const L = LIST.layer; LIST = null; W.warn = {}; for (const k in W.held) if (!W.held[k].paneId) delete W.held[k]; $("#tries").hidden = true; closeLayer(L); }
+const failedText = (fl) => fl.length === 1 ? "1 field failed its checks" : fl.length + " fields failed their checks";
+/* The words of a kind a Connect was refused with, for the list's strip (spec 8). A kind carries no name: the page puts it in from the row it holds. */
+function refusalMsg(f, row) {
+  const editAct = row && { label: "Edit", aria: "Edit " + rowWho(row), run: () => openForm(rowById(row.id)) };
+  if (f.kind === "server-failed-checks") return { tone: "bad", text: ["“", { name: row.name }, "” can't connect: " + failedText(f.fields) + (f.loaded ? " when the list was read" : " at the start") + ". Nothing was started."], list: f.fields, action: editAct };
+  if (f.kind === "shell-not-supported") return { tone: "warn", text: ["Saved servers need zsh or bash as your login shell. "].concat(f.shell ? ["Yours is ", { code: f.shell }, ". "] : ["Yours is neither. "], "Nothing was started. You can still add, edit and remove servers, and ssh typed in a terminal works as before.") };
+  if (f.kind === "server-gone") return { tone: "warn", text: "That saved server no longer exists. Nothing was started. The list below is current." };
+  if (f.kind === "not-in-engagement") return { tone: "warn", text: "Saved servers are not available in an engagement. Nothing was started. ssh typed in a terminal works as before." };
+  if (f.kind === "terminal-not-started") return { tone: "bad", text: f.cause === "start" ? "Could not start a terminal" + (f.errno == null ? "" : " (system error " + f.errno + ")") + ". Better Terminal could not start your shell for this connection, so nothing was run and no tab was opened."
+    : f.cause === "closing" ? "Not started: Better Terminal's window was closing or reloading as the request arrived. No connection was kept and no tab was opened."
+    : "Not started: that pane already has a connection or a start in progress. Nothing new was started." };
   return null;
 }
-const listRows = () => S.servers.slice().sort(byName).filter((s) => { const q = LIST.filter.toLowerCase(); return !q || cleanText(s.name).toLowerCase().includes(q) || s.host.toLowerCase().includes(q) || (s.user || "").toLowerCase().includes(q); });
+const listRows = () => W.rows.filter((s) => { const q = LIST.filter.toLowerCase(); return !q || cleanText(s.name).toLowerCase().includes(q) || (s.host || "").toLowerCase().includes(q) || (s.user || "").toLowerCase().includes(q); });
 function focusListStart() { const d = LIST.dlg; (d.querySelector('[data-act="msg"]') || d.querySelector(".filter") || d.querySelector('[data-first]') || d.querySelector(TABBABLE) || d).focus(); }
+const cellsOf = (rowEl) => $$("button[data-col]", rowEl).sort((a, b) => a.dataset.col - b.dataset.col);
 function focusCell(r, c) {
   const rows = $$(".grow", LIST.dlg); if (!rows.length) return;
-  r = Math.max(0, Math.min(r, rows.length - 1)); const btns = $$("button", rows[r]); c = Math.max(0, Math.min(c, btns.length - 1));
+  r = Math.max(0, Math.min(r, rows.length - 1)); const btns = cellsOf(rows[r]); c = Math.max(0, Math.min(c, btns.length - 1));
   LIST.row = r; LIST.col = c; $$(".grow button", LIST.dlg).forEach((b) => b.setAttribute("tabindex", "-1")); btns[c].setAttribute("tabindex", "0"); btns[c].focus(); btns[c].scrollIntoView({ block: "nearest" });
 }
+function focusCellOf(serverId, c) { const i = listRows().findIndex((x) => x.id === serverId); if (i < 0) return focusListStart(); if (typeof c === "string") c = Math.max(0, cellsOf($$(".grow", LIST.dlg)[i]).findIndex((b) => b.dataset.act === c)); focusCell(i, c); }
 function msgStrip(m, live = "status") {
-  return h("div", { class: "srv-msg", role: live, "data-tone": m.tone }, m.tone === "bad" ? stopIcon() : warnIcon(), h("div", { class: "txt" }, parts(m.text)),
+  return h("div", { class: "srv-msg", role: live, "data-tone": m.tone }, m.tone === "bad" ? stopIcon() : warnIcon(), h("div", { class: "txt" }, parts(m.text), m.list && reasonList(m.list)),
     m.action && h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--secondary", "aria-label": m.action.aria, "data-act": "msg", on: { click: m.action.run } }, m.action.label));
 }
+const FOOT = "Saved servers stay on this computer. In a server pane, file paths are not links, the file browser and the folder panels show nothing, and Better Terminal types nothing of its own. Quitting Better Terminal or closing its main window ends running connections without asking.";
 function drawList() {
   const d = LIST.dlg; d.textContent = ""; $("#tries").hidden = true;
-  const n = S.servers.length, full = n >= 200, unread = S.store === "unreadable";
+  const n = W.rows.length, full = n >= 200, unread = W.status !== "ok";
   const close = h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--icon ui-btn--ghost", "aria-label": "Close saved servers", title: "Close (Esc)", on: { click: closeList } }, "✕");
-  const add = !unread && h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--primary", "data-act": "add", on: { click: () => (S.servers.length >= 200 ? fullMsg() : openForm(null)) } }, "Add server");
+  const add = !unread && h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--primary", "data-act": "add", on: { click: () => (W.rows.length >= 200 ? fullMsg() : openForm(null)) } }, "Add server");
   d.append(h("div", { class: "srv__header" }, h("h2", { id: "srv-title" }, "Saved servers"), h("span", { class: "srv__count" }, unread ? "" : n + " of 200"), add, close));
   const body = h("div", { class: "srv__body" }); d.append(body);
   if (unread) {
     body.append(h("div", { class: "empty", role: "alert" }, stopIcon("big"), h("h3", null, "The server list could not be read"),
-      h("p", null, "Better Terminal found the file that holds your saved servers, but it is damaged or was written by a newer version. It has not been changed and will not be."),
-      h("p", null, "Until it can be read, Connect, Reconnect, Add, Edit and Remove are off. Update Better Terminal, or put back a copy of the file that worked. ssh typed in a terminal works as before."),
-      h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--secondary", "data-first": true, on: { click: () => { log("Read again: the file is read once more; nothing is written."); say("The server list still could not be read."); } } }, "Read again")));
+      h("p", null, "Better Terminal found " + FILE_NAME + " in its data folder, but the file is damaged or was written by a newer version. It has not been changed and will not be."),
+      h("p", null, "Until it can be read, Connect, Reconnect, Add, Edit and Remove are off. Update Better Terminal, or put back a copy of " + FILE_NAME + " that worked. ssh typed in a terminal works as before."),
+      h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--secondary", "data-first": true, on: { click: () => { loadList(); log("Read again: the file is read once more; nothing is written."); if (W.status === "ok") { drawList(); focusListStart(); say("The server list was read."); } else say("The server list still could not be read."); } } }, "Read again")));
     return foot(d);
   }
-  if (LIST.msg) body.append(msgStrip(LIST.msg, "alert"));
+  if (LIST.msg) body.append(msgStrip(LIST.msg, LIST.msg.live || "alert"));
   if (full && !LIST.msg) body.append(msgStrip({ tone: "warn", text: "The list is full: it holds 200 servers, the most Better Terminal keeps. Remove one to add another." }));
   if (n === 0) {
     body.append(h("div", { class: "empty" }, srvIcon("plain"), h("h3", null, "No saved servers yet"),
@@ -1024,9 +1226,10 @@ function drawList() {
     body.querySelector(".srv-ico").classList.add("big");
     return foot(d);
   }
-  const filter = h("input", { class: "filter", type: "text", placeholder: "Filter by name, host or user", "aria-label": "Filter saved servers", value: LIST.filter, autocomplete: "off", spellcheck: "false" });
+  const filter = h("input", { class: "filter", type: "text", placeholder: "Filter by name, host or user", "aria-label": "Filter saved servers. Down arrow moves to the list.", value: LIST.filter, autocomplete: "off", spellcheck: "false" });
   filter.addEventListener("input", () => { LIST.filter = filter.value; drawGrid(); });
-  filter.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" || e.key === "Enter") { e.preventDefault(); focusCell(0, 0); } });
+  /* Only Down leaves the filter. Enter does nothing here, so no chain of Enters reaches a Connect. */
+  filter.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); focusCell(0, 0); } else if (e.key === "Enter") e.preventDefault(); });
   /* S1b: a second group ("From open hubs") goes under this one, each with a heading. With one group no heading is drawn. */
   const grid = h("div", { class: "grid", role: "grid", "aria-label": "Saved servers", id: "srv-grid" });
   body.append(filter, grid); drawGrid(); foot(d);
@@ -1035,66 +1238,75 @@ function drawGrid() {
   const grid = $("#srv-grid", LIST.dlg), rows = listRows(); grid.textContent = ""; grid.setAttribute("aria-rowcount", String(rows.length));
   if (!rows.length) { grid.append(h("div", { class: "empty", role: "status" }, h("p", null, "No saved server matches the filter."))); return; }
   rows.forEach((s, r) => {
-    const bad = badField(s, S.servers), kw = keyWarnFor(s.key), nm = cleanName(s.name, "Unnamed server");
-    const btn = (label, c, run, cls = "ui-btn--secondary") => h("button", { type: "button", class: "ui-btn ui-btn--md " + cls, tabindex: r === 0 && c === 0 ? "0" : "-1", "aria-label": label + " " + nm, "aria-describedby": c === 0 ? "gd-" + s.id : null, "data-act": label.toLowerCase(), "data-server": s.id, on: { click: run, focus: () => { LIST.row = r; LIST.col = c; } } }, label);
-    const row = h("div", { class: "grow", role: "row", "aria-rowindex": String(r + 1), "data-server": s.id },
-      h("div", { class: "gmain", role: "gridcell" }, srvIcon("plain"), h("span", { class: "gname" }, nameEl(s.name)),
-        h("div", { class: "gsub", id: "gd-" + s.id }, destEl(destOf(s)), s.key && h("span", { class: "key", title: cleanText(s.key) }, "key " + cutMid(cleanText(s.key), 14, 30))),
-        bad && h("div", { class: "gwarn", "data-tone": "bad" }, stopIcon(""), "Can't connect until fixed: " + bad + " is not valid."),
-        !bad && kw && h("div", { class: "gwarn" }, warnIcon(""), kw === "missing" ? "Identity file: no file at this path right now." : "Identity file: not a regular file.")),
-      h("div", { class: "gacts" }, h("span", { role: "gridcell" }, btn("Connect", 0, () => connect(s.id))), h("span", { role: "gridcell" }, btn("Edit", 1, () => openForm(s), "ui-btn--ghost")), h("span", { role: "gridcell" }, btn("Remove", 2, () => askRemove(s), "ui-btn--ghost"))));
+    const who = rowWho(s), held = W.held[s.id] && W.held[s.id].why === "changed" ? W.held[s.id] : null, kw = W.warn[s.id];
+    const btn = (label, c, run, o = {}) => h("button", { type: "button", class: "ui-btn ui-btn--md " + (o.cls || "ui-btn--secondary"), tabindex: r === 0 && c === 0 ? "0" : "-1", "aria-label": (o.aria || label) + " " + who, "aria-describedby": c === 0 ? "gd-" + s.id : null, "data-act": o.act || label.toLowerCase(), "data-col": c, "data-server": s.id, on: { click: run, focus: () => { LIST.row = r; LIST.col = c; } } }, label);
+    const dest = destEl(s.summary, { tabindex: "-1" });
+    if (dest.tagName === "BUTTON") { dest.dataset.col = 9; dest.addEventListener("focus", () => { LIST.row = r; LIST.col = cellsOf(row).indexOf(dest); }); }
+    const keys = held && held.shown.dest.key !== (s.key ?? null);
+    const acts = held
+      ? [btn("Cancel", 0, () => { delete W.held[s.id]; drawGrid(); focusCellOf(s.id, 0); }, { act: "held-cancel", aria: "Cancel the connection to" }), btn("Connect to the new destination", 1, () => connect(s.id, shownOf(s), { confirmed: rowDest(s) }), { act: "held-confirm", cls: "ui-btn--primary", aria: "Connect to the new destination," })]
+      : [btn("Connect", 0, () => connect(s.id, shownOf(s)), { aria: "Connect to" })];
+    acts.push(btn("Edit", acts.length, () => openForm(s), { cls: "ui-btn--ghost" }), btn("Remove", acts.length + 1, () => askRemove(s), { cls: "ui-btn--ghost" }));
+    const row = h("div", { class: "grow", role: "row", "aria-rowindex": String(r + 1), "data-server": s.id, "data-held": held ? "changed" : null },
+      h("div", { class: "gmain", role: "gridcell" }, srvIcon("plain"), h("span", { class: "gname" }, nameEl(s.name), s.problems && h("span", { class: "gentry" }, entryOf(s))),
+        h("div", { class: "gsub", id: "gd-" + s.id }, dest, s.key && keyEl(s.key),
+          s.problems && h("span", { class: "sr" }, " Can't connect until fixed: " + s.problems.map((x) => LABEL[x.field] + ", " + SHORT[x.reason]).join("; ") + ".")),
+        s.problems && h("div", { class: "gwarn", "data-tone": "bad" }, stopIcon(""), h("span", null, "Can't connect until fixed. " + s.problems.map((x) => LABEL[x.field] + ": " + SHORT[x.reason] + ".").join(" "))),
+        held && h("div", { class: "gheld", role: "group", "aria-label": "This server changed since it was shown" }, h("div", { class: "gwarn" }, warnIcon(""), h("span", null, "This server changed since it was shown. Nothing was started.")),
+          h("div", { class: "pair" }, h("span", null, "It was showing"), h("span", { class: "pairv" }, destEl(held.shown.summary, { tabindex: "-1" }), keys && keyEl(held.shown.dest.key)), h("span", null, "It now holds"), h("span", { class: "pairv" }, destEl(s.summary, { tabindex: "-1" }), keys && keyEl(s.key))),
+          h("div", { class: "gnote" }, "Go on only if you expected that.")),
+        !s.problems && kw && h("div", { class: "gwarn" }, warnIcon(""), h("span", null, KEY_WARN[kw]))),
+      h("div", { class: "gacts" }, acts.map((b) => h("span", { role: "gridcell" }, b))));
     row.addEventListener("keydown", (e) => { const k = e.key, mv = { ArrowDown: [1, 0], ArrowUp: [-1, 0], ArrowRight: [0, 1], ArrowLeft: [0, -1] }[k];
       if (mv) { e.preventDefault(); focusCell(LIST.row + mv[0], LIST.col + mv[1]); } else if (k === "Home") { e.preventDefault(); focusCell(0, LIST.col); } else if (k === "End") { e.preventDefault(); focusCell(1e9, LIST.col); } });
     grid.append(row);
   });
 }
-function foot(d) { d.append(h("div", { class: "srv__foot" }, "Saved servers stay on this machine. In a server pane, file paths are not links, the file browser and the folder panels show nothing, and Better Terminal types nothing of its own.")); }
+function foot(d) { d.append(h("div", { class: "srv__foot" }, FOOT)); }
 function fullMsg() { LIST.msg = { tone: "warn", text: "Not added: the list is full. It holds 200 servers, the most Better Terminal keeps. Remove one to add another." }; drawList(); LIST.dlg.querySelector('[data-act="add"]').focus(); log("The 201st add is refused: “the server list is full”."); }
+/* Remove's question: the shared confirm dialog as story C1 leaves it, rendered INSIDE the overlay's dialog element. */
 function askRemove(s) {
-  const idx = listRows().indexOf(s);
-  confirmDlg({ title: "Remove “" + cleanName(s.name, "Unnamed server") + "” from saved servers?",
-    message: "Only this entry is removed. Tabs that are open stay open, but an ended one can no longer reconnect. Nothing in ~/.ssh is touched.", confirm: "Remove",
-    onCancel: () => focusCell(idx, 2),
+  const named = !!cleanText(s.name);
+  confirmDlg({ host: LIST.dlg, title: named ? "Remove " + cp(0x201C) + cleanName(s.name) + cp(0x201D) + " from saved servers?" : "Remove this unnamed server from saved servers?",
+    message: (fullSum(s.summary) ? "Its destination is " + fullSum(s.summary) + ". " : "Its destination is not shown, because it failed its checks. ") + (s.problems ? "It is " + entryOf(s) + ". " : "") + "Only this entry is removed. Tabs that are open stay open, but an ended one can no longer reconnect. Nothing in ~/.ssh is touched.", confirm: "Remove",
+    onCancel: () => focusCellOf(s.id, "remove"),
     onConfirm: () => {
-      if (S.store === "readonly") { LIST.msg = saveFailMsg("Not removed"); drawList(); focusCell(idx, 2); log("Remove failed: “the server list could not be saved”; the list is unchanged."); return; }
-      S.servers.splice(S.servers.indexOf(s), 1); log("Remove: one remove request, after the confirmation. Open tabs and ~/.ssh are untouched."); LIST.msg = null; say(["Removed ", { name: s.name }, "."]);
-      drawList(); if (S.servers.length) focusCell(Math.min(idx, listRows().length - 1), 0); else focusListStart();
-      refreshPanes(s.id);
+      const idx = listRows().findIndex((x) => x.id === s.id);
+      if (S.store === "readonly" || S.store === "readonly0") { LIST.msg = saveFailMsg("Not removed"); drawList(); focusCellOf(s.id, "remove"); log("Remove failed: “the server list could not be saved”; the list is unchanged."); return; }
+      S.servers.splice(S.servers.findIndex((x) => x.id === s.id), 1); log("Remove: one remove request, after the confirmation. Open tabs and ~/.ssh are untouched."); LIST.msg = null;
+      serversChanged(s.id); say(["Removed ", named ? quoted(s.name) : "the unnamed server", "."]);
+      if (W.rows.length) focusCell(Math.min(idx, listRows().length - 1), 0); else focusListStart();
     } });
 }
-const saveFailMsg = (lead) => ({ tone: "bad", text: lead + ": the server list could not be saved (system error 28). Nothing was changed, and the list shown is the one on disk. Check that the disk has room and that Better Terminal can write to its data folder, then try again." });
+const saveFailMsg = (lead) => ({ tone: "bad", text: lead + ": the server list could not be saved" + (S.store === "readonly0" ? "" : " (system error 28)") + ". Nothing was changed, and the list shown is the one on disk. Check that the disk has room and that Better Terminal can write to its data folder, then try again." });
 
-/* The form: a page of the same dialog. */
+/* The form: a page of the same dialog. For a row that failed its checks the page was sent NOTHING for a failing field: the field is empty, with its reason. */
 function openForm(s) {
-  LIST.page = "form"; LIST.edit = s; LIST.errors = {}; LIST.formMsg = null;
-  const raw = s ? { name: s.name, host: s.host, port: s.port == null ? "" : String(s.port), user: s.user || "", key: s.key || "" } : { name: "", host: "", port: "", user: "", key: "" };
-  /* A stored value that holds characters that can't be shown is loaded cleaned, and the form says so (spec 9). */
-  LIST.values = {}; LIST.cleaned = [];
-  for (const k in raw) { const c = k === "name" ? cleanText(raw[k]) : raw[k].replace(new RegExp("[^ -~]", "g"), ""); if (c !== raw[k] && s) LIST.cleaned.push(FIELDS.find((f) => f.id === k).label); LIST.values[k] = c; }
-  drawForm(); LIST.dlg.querySelector("#f-name").focus();
+  LIST.page = "form"; LIST.edit = s; LIST.errors = {}; LIST.formMsg = null; LIST.withheld = []; LIST.saved = false;
+  LIST.values = s ? { name: s.name, host: s.host ?? "", port: s.port == null ? "" : String(s.port), user: s.user ?? "", key: s.key ?? "" } : { name: "", host: "", port: "", user: "", key: "" };
+  if (s && s.problems) for (const x of s.problems) { LIST.errors[x.field] = x.reason; if (!(x.field === "name" && x.reason === "taken")) LIST.withheld.push(LABEL[x.field]); }
+  drawForm(); const first = FIELDS.find((f) => LIST.errors[f.id]); LIST.dlg.querySelector("#f-" + (first ? first.id : "name")).focus();
 }
-function leaveForm(focusId) { const s = LIST.edit; LIST.page = "list"; drawList(); const rows = listRows(), i = rows.findIndex((x) => x.id === (focusId || s?.id)); if (i >= 0) focusCell(i, focusId ? 0 : 1); else (LIST.dlg.querySelector('[data-act="add"]') || LIST.dlg).focus(); }
+function leaveForm(focusId) { const s = LIST.edit, id = focusId || s?.id; LIST.page = "list"; drawList(); if (id && listRows().some((x) => x.id === id)) focusCellOf(id, focusId ? 0 : "edit"); else (LIST.dlg.querySelector('[data-act="add"]') || LIST.dlg).focus(); }
 function drawForm() {
   const d = LIST.dlg, s = LIST.edit, v = LIST.values, errs = LIST.errors; d.textContent = "";
-  d.append(h("div", { class: "srv__header" }, h("h2", { id: "srv-title" }, s ? "Edit server" : "Add server"), h("span", { class: "srv__count" }, s ? "" : S.servers.length + " of 200")));
+  d.append(h("div", { class: "srv__header" }, h("h2", { id: "srv-title" }, s ? "Edit server" : "Add server"), h("span", { class: "srv__count" }, s ? (s.problems ? entryOf(s) : "") : W.rows.length + " of 200")));
   const body = h("div", { class: "srv__body" }); d.append(body);
   const strip = h("div", { id: "f-strip" }); body.append(strip);
-  const drawStrip = () => { const bad = Object.keys(LIST.errors); strip.textContent = "";
+  const drawStrip = () => { const bad = FIELDS.filter((f) => LIST.errors[f.id]).map((f) => f.label); strip.textContent = "";
     if (LIST.formMsg) strip.append(msgStrip(LIST.formMsg, "alert"));
+    else if (LIST.withheld.length && !LIST.saved) strip.append(msgStrip({ tone: "warn", text: "This entry failed its checks when the list was read. " + LIST.withheld.join(", ") + (LIST.withheld.length === 1 ? " is" : " are") + " shown empty: what " + (LIST.withheld.length === 1 ? "it" : "they") + " held is not shown and can't be recovered here. Saving replaces " + (LIST.withheld.length === 1 ? "it" : "them") + "." }));
     else if (bad.length) strip.append(msgStrip({ tone: "bad", text: [{ b: "Not saved. " }, bad.length === 1 ? "1 field needs a change: " : bad.length + " fields need a change: ", bad.join(", ") + "."] }, "alert")); };
   drawStrip();
-  if (LIST.cleaned.length) body.append(msgStrip({ tone: "warn", text: "The saved " + LIST.cleaned.join(", ") + (LIST.cleaned.length === 1 ? " held" : " each held") + " characters that can't be shown. They are left out here. Save to store what you see." }));
   const form = h("form", { class: "form", novalidate: true, "aria-labelledby": "srv-title", on: { submit: (e) => { e.preventDefault(); save(); } } });
   for (const f of FIELDS) {
-    const id = "f-" + f.id, e = errs[f.label], kw = f.id === "key" && !e ? keyWarnFor(v.key) : null;
+    const id = "f-" + f.id, e = errs[f.id];
     const input = h("input", { id, type: "text", class: f.mono ? "mono" : "", value: v[f.id], placeholder: f.ph, autocomplete: "off", autocapitalize: "off", spellcheck: "false", "aria-required": f.req ? "true" : null, "aria-invalid": e ? "true" : null,
-      "aria-describedby": [id + "-h", e && id + "-e", kw && id + "-w"].filter(Boolean).join(" "), inputmode: f.id === "port" ? "numeric" : null });
+      "aria-describedby": [e && id + "-e", id + "-h"].filter(Boolean).join(" "), inputmode: f.id === "port" ? "numeric" : null });
     input.addEventListener("input", () => { v[f.id] = input.value; drawPreview();
-      if (LIST.errors[f.label]) { delete LIST.errors[f.label]; input.removeAttribute("aria-invalid"); form.querySelector("#" + id + "-e")?.remove(); input.setAttribute("aria-describedby", id + "-h"); drawStrip(); } });
-    if (f.id === "key") input.addEventListener("blur", () => { const w = keyWarnFor(v.key); if (!!w !== !!form.querySelector("#f-key-w") && !LIST.errors["Identity file"]) { const slot = form.querySelector("#f-key-slot"); slot.textContent = ""; if (w) slot.append(h("p", { class: "warn", id: "f-key-w" }, warnIcon(""), h("span", null, KEY_WARN[w]))); } });
+      if (LIST.errors[f.id]) { delete LIST.errors[f.id]; input.removeAttribute("aria-invalid"); form.querySelector("#" + id + "-e")?.remove(); input.setAttribute("aria-describedby", id + "-h"); if (!LIST.withheld.length || LIST.saved) drawStrip(); } });
     form.append(h("div", { class: "fld" + (f.wide ? " wide" : "") }, h("label", { for: id }, f.label, !f.req && h("span", { class: "opt" }, " (optional)")), input,
-      e && h("p", { class: "err", id: id + "-e" }, stopIcon(""), h("span", null, h("b", null, f.label + " is not valid. "), MSG[f.label][e])),
-      f.id === "key" ? h("div", { id: "f-key-slot" }, kw && h("p", { class: "warn", id: id + "-w" }, warnIcon(""), h("span", null, KEY_WARN[kw]))) : null,
+      e && h("p", { class: "err", id: id + "-e", "data-reason": e }, stopIcon(""), h("span", null, MSG[f.id][e])),
       h("p", { class: "hint", id: id + "-h" }, f.hint)));
   }
   form.append(h("div", { class: "preview", id: "f-prev" }));
@@ -1107,22 +1319,24 @@ function drawForm() {
 function drawPreview() {
   const el = $("#f-prev", LIST.dlg), v = LIST.values; if (!el) return; el.textContent = "";
   if (!v.host.trim()) return void el.append("Destination: enter a host to see it.");
-  el.append("Destination", destEl({ user: v.user || null, host: v.host, port: v.port.trim() || null }), h("span", null, "is what the tab, the palette and Reconnect will show."));
+  el.append("Destination", destEl(summary({ user: v.user || null, host: v.host, port: v.port.trim() || null }), { tabindex: "0" }), h("span", null, "is what the tab, the palette and Reconnect will show."));
 }
 function save() {
-  const s = LIST.edit, v = LIST.values, errs = check(v, s?.id, S.servers);
-  LIST.errors = errs; LIST.formMsg = null;
-  if (Object.keys(errs).length) { log("Save refused whole (“a saved server failed its checks”: " + Object.keys(errs).join(", ") + "); the store is unchanged."); drawForm(); const first = FIELDS.find((f) => errs[f.label]); LIST.dlg.querySelector("#f-" + first.id).focus(); return; }
+  const s = LIST.edit, v = LIST.values, errs = check(v, S.servers.filter((x) => x.id !== s?.id));
+  LIST.errors = errs; LIST.formMsg = null; LIST.saved = true;
+  if (Object.keys(errs).length) { log("Save refused whole (“a saved server failed its checks”: " + failures(errs).map((x) => x.field + "/" + x.reason).join(", ") + "); the store is unchanged; no typed value is in the refusal."); drawForm(); const first = FIELDS.find((f) => errs[f.id]); LIST.dlg.querySelector("#f-" + first.id).focus(); return; }
   if (!s && S.servers.length >= 200) { LIST.formMsg = { tone: "warn", text: "Not added: the list is full. It holds 200 servers, the most Better Terminal keeps. Remove one to add another." }; drawForm(); return; }
-  if (S.store === "readonly") { LIST.formMsg = saveFailMsg("Not saved"); log("Save failed: “the server list could not be saved”, carrying the system's error number only."); drawForm(); LIST.dlg.querySelector('[data-act="save"]').focus(); return; }
+  if (S.store === "readonly" || S.store === "readonly0") { LIST.formMsg = saveFailMsg("Not saved"); log("Save failed: “the server list could not be saved”, carrying the system's error number when there is one, and nothing else."); drawForm(); LIST.dlg.querySelector('[data-act="save"]').focus(); return; }
   const rec = { id: s ? s.id : nid("s"), name: v.name.trim(), host: v.host, port: v.port.trim() ? Number(v.port.trim()) : null, user: v.user || null, key: v.key || null };
-  if (s) Object.assign(s, rec); else S.servers.push(rec);
-  log((s ? "Edit" : "Add") + " saved. Open tabs keep their names; an ended pane's Reconnect shows the new destination.");
-  LIST.msg = null; say(["Saved ", { name: rec.name }, "."]); leaveForm(rec.id);
-  refreshPanes(rec.id);
+  const old = s && serverById(s.id); if (old) Object.assign(old, rec); else S.servers.push(rec);
+  log((s ? "Edit" : "Add") + " saved; servers-changed is sent. Open tabs keep their names; an ended pane's Reconnect shows the new destination.");
+  const w = keyWarnFor(rec.key); delete W.held[rec.id]; LIST.saved = false;
+  serversChanged(rec.id); if (w) W.warn[rec.id] = w; else delete W.warn[rec.id];
+  LIST.msg = w ? { tone: "warn", live: "status", text: ["Saved ", { name: rec.name }, ". ", KEY_WARN[w]] } : null;
+  say(["Saved ", quoted(rec.name), "."].concat(w ? [" ", KEY_WARN[w]] : [])); leaveForm(rec.id);
 }
-const TRIES = [["host:port", "host", "db1.example.com:2222"], ["user@host", "host", "deploy@db1.example.com"], ["an option", "host", "-oProxyCommand=x"], ["a space", "host", "host name"], ["127.1", "host", "127.1"], ["a zone", "host", "fe80::1%en0"], ["brackets", "host", "[2001:db8::7]"], ["a:b:c", "host", "a:b:c"], ["0x7f.1", "host", "0x7f.1"],
-  ["port 022", "port", "022"], ["port 65536", "port", "65536"], ["user $HOME", "user", "$HOME"], ["user DOM\\user", "user", "DOM\\user"], ["key not a path", "key", "id_ed25519"], ["key %h", "key", "~/.ssh/%h"], ["key missing (warns)", "key", "~/keys/missing_key"], ["name DB1 (taken)", "name", "DB1"], ["name with a direction mark", "name", "prod" + RLO + "bd"], ["65 characters", "name", "n".repeat(65)]];
+const TRIES = [["host:port", "host", "db1.example.com:2222"], ["user@host", "host", "deploy@db1.example.com"], ["an option", "host", "-oProxyCommand=x"], ["a leading dot", "host", ".example.com"], ["a space", "host", "host name"], ["127.1", "host", "127.1"], ["a zone", "host", "fe80::1%en0"], ["brackets", "host", "[2001:db8::7]"], ["a:b:c", "host", "a:b:c"], ["two colons alone", "host", "::"], ["0x7f.1", "host", "0x7f.1"],
+  ["port 022", "port", "022"], ["port 65536", "port", "65536"], ["user $HOME", "user", "$HOME"], ["user -l", "user", "-l"], ["key not a path", "key", "id_ed25519"], ["key %h", "key", "~/.ssh/%h"], ["key missing (warns after the save)", "key", "~/keys/missing_key"], ["name DB1 (taken)", "name", "DB1"], ["name with a direction mark", "name", "prod" + RLO + "bd"], ["65 characters", "name", "n".repeat(65)]];
 function drawTries() {
   const box = $("#tries"); box.hidden = false; box.textContent = ""; box.append(h("span", null, "Fill a field with a refused value, then Save:"));
   for (const [label, f, val] of TRIES) box.append(h("button", { type: "button", on: { mousedown: (e) => e.preventDefault(), click: () => { if (LIST?.page !== "form") return; LIST.values[f] = val; const i = LIST.dlg.querySelector("#f-" + f); i.value = val; drawPreview(); } } }, label));
@@ -1149,7 +1363,7 @@ function toggleScratch(withImage) {
 function toggleFb(force) { fbEl.hidden = force === undefined ? !fbEl.hidden : !force; renderSide(); }
 function renderSide() {
   if (fbEl.hidden) return; const p = activePane(); fbEl.textContent = ""; fbEl.append(h("h3", null, "Files"));
-  if (p?.remote) fbEl.append(h("div", { class: "onsrv", role: "status" }, h("b", null, "This pane is a server session"), "The file browser shows folders on this machine, and a server session has none to show. Click a local pane to see its folder."));
+  if (p?.remote) fbEl.append(h("div", { class: "onsrv", role: "status" }, h("b", null, "This pane is a server session"), "The file browser shows folders on this computer, and a server session has none to show. Click another pane to see its folder."));
   else fbEl.append(h("div", { class: "tree" }, (p?.cwd || "~") + "/", h("br"), "  src/", h("br"), "  README.md", h("br"), "  package.json"));
 }
 function saveTabSet() {
@@ -1163,68 +1377,115 @@ function saveTabSet() {
     h("div", { class: "srv__body" }, h("div", { style: "display:flex;gap:8px" }, name, h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--primary", "data-act": "ws-save", on: { click: save } }, "Save Current Workspace")), out));
   L = openLayer(h("div", { class: "scrim" }, dlg), { initial: () => name });
 }
-function editBehind() { const s = serverById("s1"); if (!s) return log("db1 is not in the list."); s.host = s.host === "db1.example.com" ? "db1.example.net" : "db1.example.com"; log("The saved server db1 now points at " + s.host + " (an edit, or a rewritten store)."); refreshPanes("s1"); if (LIST) drawList(); }
-function removeBehind() { const i = S.servers.findIndex((s) => s.id === "s1"); if (i < 0) return log("db1 is already gone."); S.servers.splice(i, 1); log("The saved server db1 was removed."); refreshPanes("s1"); if (LIST) drawList(); }
-function editKeyBehind() { const s = serverById("s1"); if (!s) return log("db1 is not in the list."); s.key = s.key === "~/.ssh/id_ed25519" ? "~/.ssh/id_other" : "~/.ssh/id_ed25519"; log("The saved server db1 now names the identity file " + s.key + "."); refreshPanes("s1"); if (LIST) drawList(); }
-/* A saved server changed: a refusal or a question that was showing for it goes, and each of its panes is drawn again. Focus is not moved. */
-function refreshPanes(serverId) { for (const t of S.tabs) for (const p of t.panes) if (p.remote) { if (p.remote.serverId === serverId) { p.refusal = null; p.confirming = false; } updatePane(p); } }
+/* A change to the file. With "by another program" ticked nothing is announced: no event, and nothing on screen changes until a press reads the list again. */
+function behind(what, fn) {
+  fn();
+  if ($("#silent").checked) return log(what + ", by another program: no event is sent, so what is on screen is now stale. The next Connect or Reconnect press reads the list again.");
+  log(what + " (Better Terminal's own save: servers-changed is sent)."); serversChanged("s1");
+}
+function editBehind() { const s = serverById("s1"); if (!s) return log("db1 is not in the list."); behind("db1's host changed", () => { s.host = s.host === "db1.example.com" ? "db1.example.net" : s.host === "db1.example.net" ? "db1.example.org" : "db1.example.com"; }); }
+function editKeyBehind() { const s = serverById("s1"); if (!s) return log("db1 is not in the list."); behind("db1's identity file changed", () => { s.key = s.key === "~/.ssh/id_ed25519" ? "~/.ssh/id_other" : "~/.ssh/id_ed25519"; }); }
+function removeBehind() { const i = S.servers.findIndex((s) => s.id === "s1"); if (i < 0) return log("db1 is already gone."); behind("db1 was removed", () => S.servers.splice(i, 1)); }
+function breakBehind() { const s = serverById("s1"); if (!s) return log("db1 is not in the list."); behind("db1's host was given a character that is not allowed", () => { s.host = "db1.example.com;id"; }); }
+function unreadableBehind() { behind("The file was made " + (S.store === "ok" ? "unreadable" : "readable again"), () => { S.store = S.store === "ok" ? "unreadable" : "ok"; }); }
 
-/* ---------- presets, reduced motion ---------- */
+/* ---------- presets ---------- */
 function setTheme(i) { const t = THEMES[i]; VARS.forEach((v, k) => document.documentElement.style.setProperty(v, t[k + 1])); const a = t[9]; for (const [n, al] of [["--accent-subtle", "26"], ["--accent-hover", "40"]]) document.documentElement.style.setProperty(n, a + al); $("#theme").value = String(i); }
+
+/* ---------- a reference: every (field, reason) pair of the contract with its message ---------- */
+const REASON_WORDS = { "empty": "empty", "too-long": "too long", "characters": "a character that is not allowed", "taken": "already used", "first-character": "first character", "holds-port": "written with a port", "not-ipv6": "not an IPv6 address", "unspecified": "the unspecified address", "not-ipv4": "not an IPv4 address", "leading-0x": "a part written in hexadecimal", "not-a-port": "not a port number", "out-of-range": "out of range", "not-a-path": "not a path", "expands": "a token the SSH client expands", "home-unknown": "home folder not known" };
+function openReasons() {
+  if (LAYERS.length) return; let L;
+  const rows = ORDER.flatMap((f) => Object.keys(MSG[f]).map((code) => h("tr", { "data-pair": f + "/" + code }, h("td", null, LABEL[f]), h("td", null, REASON_WORDS[code]), h("td", null, h("code", null, code)), h("td", null, MSG[f][code] + (code === "home-unknown" ? " (Shown where a connect is refused, never in the form.)" : "")))));
+  const dlg = h("div", { class: "srv", role: "dialog", "aria-modal": "true", "aria-label": "Every reason a value is refused, with its message (reference)", tabindex: "-1" },
+    h("div", { class: "srv__header" }, h("h2", null, "Every reason, with its message"), h("span", { class: "srv__count" }, rows.length + " pairs · reference, not a screen of the app"), h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--icon ui-btn--ghost", "aria-label": "Close the reference", on: { click: () => closeLayer(L) } }, "✕")),
+    h("div", { class: "srv__body", tabindex: "0", role: "region", "aria-label": "The table of reasons" }, h("table", { class: "reasons" }, h("thead", null, h("tr", null, h("th", null, "Field"), h("th", null, "Reason"), h("th", null, "Code"), h("th", null, "Message shown"))), h("tbody", null, rows))));
+  L = openLayer(h("div", { class: "scrim" }, dlg));
+}
 
 /* ---------- scenarios ---------- */
 function reset(servers = BASE()) {
-  for (const p of PANES.keys()) { /* timers */ } for (const t of S?.tabs || []) for (const p of t.panes) clearTimers(p);
+  for (const t of S?.tabs || []) for (const p of t.panes) clearTimers(p);
   closeAllLayers(false); LIST = null; PANES.clear(); panesEl.textContent = ""; toastsEl.textContent = ""; sayEl.textContent = ""; scratchEl.hidden = true; fbEl.hidden = true;
-  $("#rc").value = "quick"; $("#shell").value = "zsh";
-  counts = { connect: 0, starts: 0 };
+  $("#rc").value = "quick"; $("#shell").value = "zsh"; $("#silent").checked = false; $("#nohome").checked = false;
+  counts = { connect: 0, starts: 0, held: 0, lists: 0 };
   S = { servers, store: "ok", tabs: [], active: null, closed: [], available: true };
+  W = { status: "idle", rows: [], held: {}, warn: {} }; loadList();
   const p = newPane({ cwd: "~/work/shop", lines: [{ text: "dev@mac shop % git status" }, { text: "On branch main, nothing to commit" }, { text: "dev@mac shop % cat ", path: "src/main.rs:12" }, { text: "dev@mac shop % " }] });
   const t = { id: nid("t"), name: "shop", serverNamed: false, panes: [p], activePane: p.id, agent: false }; S.tabs.push(t); showTab(t.id, false);
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-async function connected(how = "quick", id = "s1") { $("#rc").value = how; connect(id); await wait(950); }
+const go = (id) => { loadList(); connect(id, shownOf(rowById(id))); };
+async function started(how = "quick", id = "s1") { $("#rc").value = how; go(id); await wait(950); }
+const silently = (fn) => { $("#silent").checked = true; fn(); };
+const FAILING = () => [
+  { id: "f1", name: ZWSP + cp(0x2060), host: "-oProxyCommand=x", port: null, user: null, key: null },
+  { id: "f2", name: "prod" + RLO + "bd", host: "db1.example.com;id", port: 70000, user: "-l", key: "~/.ssh/%h" },
+  { id: "f3", name: "DB1", host: "db1.example.net", port: 2222, user: "deploy", key: null },
+  { id: "f4", name: "cache", host: "cache.example.com", port: null, user: null, key: "id_ed25519" },
+];
+const NARROW = () => ({ id: "n1", name: "prod-db (root@prod-db.internal.example.com:22)", host: "db1.example.com.evil-x.co", port: null, user: "deploy", key: null });
+async function narrow(n, how) { reset(BASE().concat(NARROW(), LONGS[0])); await started(how, "n1"); for (let i = 1; i < n; i++) split(); const t = activeTab(); t.activePane = t.panes[0].id; showTab(t.id); }
 const SCENARIOS = [
   ["empty", "The list, empty", "No saved servers: what the feature does, and Add server. No host is listed from anywhere else (SV-9 AC3).", async () => { reset([]); openList_(); }],
-  ["list", "The list, with servers", "Rows in name order: name, destination summary, identity file. One row warns that its identity file is not there (a warning, never a refusal). Tab reaches the filter, then the grid; arrows move in the grid; Enter or Space presses.", async () => { reset(); openList_(); }],
+  ["list", "The list, with servers", "Rows in name order: name, destination, identity file. Tab reaches the filter, then the grid; only Down leaves the filter for the grid (Enter does nothing there); arrows move in the grid; Enter or Space presses. The footer says what a server pane switches off, and that quitting ends running connections without asking.", async () => { reset(); openList_(); }],
   ["add", "Add a server", "Five fields and no others: no password, no passphrase, no options. Try the refused values in the box above, then Save.", async () => { reset(); openList_(); openForm(null); }],
-  ["refusals", "Every field refused", "A save is refused whole. Each field says which rule it broke, in words; no value is repeated in a message. Focus goes to the first field to fix.", async () => { reset(); openList_(); openForm(null); Object.assign(LIST.values, { name: "DB1", host: "db1.example.com:2222", port: "022", user: "$HOME", key: "id_ed25519" }); drawForm(); save(); }],
-  ["edit", "Edit a server, with the identity-file warning", "The identity file's path names nothing on disk: a warning under the field, and Save still saves. Better Terminal never opens the file.", async () => { reset(); openList_(); openForm(serverById("s3")); }],
+  ["refusals", "Every field refused at once", "A save is refused whole. Every failing field is reported, each with the message of its one reason code; no value is repeated in a message. Focus goes to the first field to fix.", async () => { reset(); openList_(); openForm(null); Object.assign(LIST.values, { name: "DB1", host: "db1.example.com:2222", port: "022", user: "$HOME", key: "id_ed25519" }); drawForm(); save(); }],
+  ["reasons", "Reference: all 23 reasons and their messages", "One row for each (field, reason) pair of the contract's closed list, with the fixed message the form shows for it. The last one arises only when a connect is refused, and is shown in the list's strip or the pane's bar.", async () => { reset(); openReasons(); }],
+  ["edit", "Edit a server", "The form loads what the row holds. The identity file is not looked at while you type: only a save says whether the path names a file.", async () => { reset(); openList_(); openForm(rowById("s3")); }],
+  ["savedwarn", "After a save: the identity-file warning", "The saved path names nothing on disk. The save went through; the list says so once, on the saved row and in the strip. It is a warning, never a refusal, and it is not shown again when the list is next opened (only a save looks at the path).", async () => { reset(); openList_(); openForm(rowById("s3")); save(); }],
   ["cap", "The list is full (200)", "The count reads 200 of 200 and the list says so. Add server stays a button: pressing it gives the refusal, and no form opens.", async () => { const many = BASE(); for (let i = 5; i <= 200; i++) many.push({ id: "m" + i, name: "node-" + String(i).padStart(3, "0"), host: "node" + i + ".example.com", port: null, user: "ops", key: null }); reset(many); openList_(); fullMsg(); }],
-  ["unreadable", "The list could not be read", "A damaged or newer-version store is never overwritten. Add, Edit, Remove, Connect and Reconnect are off; the palette's connect entries are gone; only the entry that opens this list stays.", async () => { reset(); S.store = "unreadable"; openList_(); }],
-  ["notsaved", "The list could not be saved", "The disk is full or the folder is read-only: the form stays open with what was typed, and says nothing was changed.", async () => { reset(); S.store = "readonly"; openList_(); openForm(null); Object.assign(LIST.values, { name: "cache", host: "cache.example.com" }); drawForm(); save(); }],
-  ["remove", "Remove asks once", "One question that names the server, in today's ConfirmDialog: Cancel has focus, Enter confirms, Esc cancels and the list stays open. No remove request is made before the confirmation.", async () => { reset(); openList_(); askRemove(S.servers.slice().sort(byName)[1]); }],
-  ["palette", "The palette", "One entry opens the list and one per server connects. Each connect entry shows the name and the destination, and typing part of either finds it. Today's entries and their order are untouched; F7's follow them.", async () => { reset(); openPalette("db1"); }],
-  ["quick", "Connect: a quick hand-over", "A new tab named after the server. It reads “starting ssh” while your start-up files run, then “ssh running”: the word is not “connected”, because ssh may still be at a password prompt, as here.", async () => { reset(); $("#rc").value = "quick"; connect("s1"); }],
-  ["another", "Connecting: another program took the shell's place", "The start-up files ran tmux instead of ssh. The message and End appear at once. The pane stays a server session; nothing is ended unless you press End.", async () => { reset(); await connected("another"); }],
-  ["waiting", "Connecting: the shell is still waiting", "A start-up file asks a question. No message and no End for the first 30 s (3 s with the fast timer); then both appear. “Answer the start-up question” above makes ssh start: the pane turns live and the message goes.", async () => { reset(); $("#rc").value = "waiting"; connect("s1"); }],
-  ["live", "Live", "The tab, the switcher and the pane all say “ssh running”, with a mark that is a shape, not a colour. There is no bar, no End and no Reconnect.", async () => { reset(); await connected("quick"); }],
-  ["ended", "Ended, with Reconnect", "The pane keeps its output and today's [Process exited] line. Reconnect shows where it would go.", async () => { reset(); await connected("quick"); sshExits(); }],
-  ["before", "Ended before ssh was seen to start", "A function named exec that returns: the shell exits 0 and prints nothing. The pane says what it did and did not see, with the exit status.", async () => { reset(); await connected("silent"); }],
-  ["nossh", "No SSH client found", "Status 127 before ssh was seen: the message says what the status usually means and what to do on this OS.", async () => { reset(); await connected("nossh"); }],
-  ["changed", "Reconnect: the destination changed", "The saved server now points somewhere else. Both destinations are shown; Reconnect asks a second, separate question before anything starts.", async () => { reset(); await connected("quick"); sshExits(); editBehind(); }],
-  ["removed", "Reconnect: the saved server was removed", "No Reconnect. The pane says the saved server no longer exists and what it was last started for.", async () => { reset(); await connected("quick"); sshExits(); removeBehind(); }],
-  ["split", "A split of a server tab", "The new pane is a local shell in your home folder. The remote pane says SERVER; in a tab that holds a server pane, a local pane says LOCAL. File paths are links in the local pane only.", async () => { reset(); await connected("quick"); putLine(activePane(), "deploy@db1:~$ cat ", { path: "src/main.rs:12" }); split(); }],
-  ["write", "An ADE write is refused", "A Better Terminal feature tries to type into a server pane: nothing is typed, and today's “Not sent” toast says why, in the same words whichever feature it was (choose one above and press it). The file browser says the pane is on a server. The scratchpad with an image attached is refused by the same toast, and keeps its text.", async () => { reset(); await connected("quick"); toggleFb(true); adeWrite(); }],
-  ["closeconfirm", "Closing a live server pane asks", "The question says a connection will end. Cancel has focus and Enter confirms, as in every close question today. An ended pane closes without a question. End never asks.", async () => { reset(); await connected("quick"); closePane(); }],
-  ["restored", "After a restart", "Every server tab comes back ended, with its output and Reconnect. Nothing connects by itself. Quitting asked nothing.", async () => { reset(); await connected("quick"); quitRestart(); }],
-  ["reopened", "Reopen Closed Tab", "A closed server tab comes back as an ended server tab, with no output and with Reconnect; never as a local shell under the server's name.", async () => { reset(); await connected("quick"); sshExits(); closeTab(); reopenClosed(); }],
-  ["menu", "The tab's menu on a server tab", "No Duplicate and no Move to New Window, and a line that says why. The local tab's menu has both.", async () => { reset(); await connected("quick"); const b = tabbar.querySelector('[data-tab="' + S.active + '"]').getBoundingClientRect(); openMenu(activeTab(), b.left + 10, b.bottom + 2); }],
-  ["switcher", "The tab switcher", "A server tab's row carries the mark, the state in words and the destination, where a local tab shows its folder.", async () => { reset(); await connected("quick"); await connected("another", "s2"); openSwitcher(); }],
-  ["shell", "An unsupported login shell", "Connect opens no tab. The list says which shell it found, by its base name only. Choose “a name that cannot be shown” above and connect again for the other wording.", async () => { reset(); $("#shell").value = "fish"; connect("s1"); }],
-  ["failed", "A saved server that fails its checks", "A row changed outside Better Terminal. It is shown, marked, and Connect starts nothing: the list names the server and the field.", async () => { reset(BASE().concat(HOSTILE[1])); connect("h2"); }],
-  ["hostile", "Hostile text in the store", "Names, hosts and users as a hand-edited store could hold them: control characters, direction overrides, markup. All are shown as text, cleaned, and none is applied. A name that looks like a destination sits beside the real destination, in its own box.", async () => { reset(HOSTILE.concat(BASE().slice(0, 1))); S.tabs[0].name = HOSTILE[0].name; renderTabs(); openList_(); }],
-  ["long", "Long names and destinations", "A long host is cut in the middle: the end of the host and the port always show, so a cut never reads as a different host. Nothing wraps.", async () => { reset(LONGS.concat(BASE().slice(0, 2))); await connected("quick", "l1"); sshExits(); openList_(); }],
-  ["marks", "The marks side by side", "A plain tab (chevron), a tab with an agent dot, and three server tabs: starting ssh (dashed box), ssh running (box with lights), ended (struck through). Shape and words, never colour. Open the tab switcher (⌘K) for the same three in words.", async () => { reset(); S.tabs[0].agent = false; const a = addLocalTab("api", "~/work/api"); a.agent = true; await connected("quick", "s1"); await connected("quick", "s4"); sshExits(); $("#rc").value = "waiting"; connect("s2"); showTab(S.tabs[2].id); }],
-  ["child", "Connecting: ssh runs as a child of the shell", "A function named after a word of the instruction runs ssh without replacing the shell. The session works, and the pane can never be confirmed: it stays “starting ssh”, and at the bound the message says the session may be working and can go on being used.", async () => { reset(); $("#rc").value = "child"; connect("s1"); }],
-  ["spawn", "The shell could not be started", "“Could not start a terminal”, with the system's error number, which is all the kind carries. The tab is open and the pane is ended.", async () => { reset(); await connected("spawn"); }],
-  ["keychanged", "Reconnect: only the identity file changed", "The summary reads the same before and after, so each line also shows the identity file.", async () => { reset(); await connected("quick"); sshExits(); editKeyBehind(); }],
-  ["question", "Reconnect: the second question", "Reconnect… starts nothing. It turns the bar into a question with focus on Cancel; Enter presses the focused button only. No connect request is made until “Connect to the new destination”.", async () => { reset(); await connected("quick"); sshExits(); editBehind(); reconnect(activePane()); }],
-  ["refusedre", "Reconnect refused: an unsupported shell", "The pane stays ended and says why, in its bar. Nothing was started.", async () => { reset(); await connected("quick"); sshExits(); $("#shell").value = "fish"; reconnect(activePane()); }],
-  ["shellnoname", "An unsupported shell whose name is not shown", "The shell's base name is longer than 32 characters or holds a character outside the safe set, so the kind carries no name and the message names none.", async () => { reset(); $("#shell").value = "?"; connect("s1"); }],
-  ["workspace", "Saving a workspace (tab set) leaves server tabs out", "The status line under the save row says how many were left out.", async () => { reset(); await connected("quick"); await connected("another", "s2"); saveTabSet(); LAYERS[LAYERS.length - 1].el.querySelector('[data-act="ws-save"]').click(); }],
+  ["unreadable", "The list could not be read", "A damaged or newer-version file is never overwritten. The message names the file, saved-servers.json in Better Terminal's data folder, and no path. Add, Edit, Remove, Connect and Reconnect are off; the palette's connect entries are gone.", async () => { reset(); S.store = "unreadable"; openList_(); }],
+  ["notsaved", "The list could not be saved", "The disk is full or the folder is read-only: the form stays open with what was typed, and says nothing was changed, with the system's error number.", async () => { reset(); S.store = "readonly"; openList_(); openForm(null); Object.assign(LIST.values, { name: "cache", host: "cache.example.com" }); drawForm(); save(); }],
+  ["notsaved0", "The list could not be saved, no error number", "The same refusal when the failure carried no system error number: the sentence has a form without one.", async () => { reset(); S.store = "readonly0"; openList_(); openForm(null); Object.assign(LIST.values, { name: "cache", host: "cache.example.com" }); drawForm(); save(); }],
+  ["remove", "Remove asks once", "One question that names the server and its destination, drawn inside the list's dialog on the shared confirm dialog as story C1 leaves it: it has a role, traps Tab, Esc closes only the question, and focus returns to Remove. Cancel has focus, and Enter presses the focused button only, so a second Enter cancels.", async () => { reset(); openList_(); askRemove(rowById("s1")); }],
+  ["palette", "The palette", "One entry opens the list and one per server connects. Each connect entry reads “Connect to DESTINATION, saved as NAME”: the destination first, in its box, so no name can pose as it. Typing part of either finds it. Today's entries and their order are untouched; F7's follow them.", async () => { reset(); openPalette("db1"); }],
+  ["quick", "Connect: ssh is confirmed quickly", "A new tab named after the server. It reads “ssh not confirmed” until Better Terminal has seen ssh take the pane, then “ssh running”: the word claims only that ssh is the pane's program, because ssh may still be at a password prompt, as here.", async () => { reset(); $("#rc").value = "quick"; go("s1"); }],
+  ["another", "ssh not confirmed: a program Better Terminal does not recognise", "Here the start-up files replaced the shell with tmux. That is one case of this message, and the message does not say which case it is: it says only that the pane's program is not one Better Terminal recognises as ssh. Nothing is ended unless you press End.", async () => { reset(); await started("another"); }],
+  ["wrapper", "The same message over a session that works", "Here your own ssh wrapper is the pane's program and the session works (a password prompt is on screen). Better Terminal shows the same message, because it cannot tell this case from the one before. So the message never says that keys stay on this computer: it says to check the prompt.", async () => { reset(); await started("wrapper"); }],
+  ["waiting", "ssh not confirmed: the shell is still waiting", "A start-up file asks a question. No message and no End for the first 30 s (3 s with the fast timer); then both appear. “Answer the start-up question” above makes ssh start: the pane turns live and the message goes.", async () => { reset(); $("#rc").value = "waiting"; go("s1"); }],
+  ["live", "Live", "The tab, the switcher and the pane all say “ssh running”, with a mark that is a shape, not a colour. There is no bar, no End and no Reconnect.", async () => { reset(); await started("quick"); }],
+  ["ended", "Ended, with Reconnect", "The pane keeps its output and today's [Process exited] line. Reconnect shows where it would go. No key in the ended pane reconnects.", async () => { reset(); await started("quick"); sshExits(); }],
+  ["before", "Ended before ssh was seen to start", "A function named exec that returns: the shell exits 0 and prints nothing. The pane says what it did and did not see, with the exit status.", async () => { reset(); await started("silent"); }],
+  ["signal", "Ended before ssh was seen, no exit status", "A signal ended the pane's program, so there is no status: the title and the sentence have a form without the number.", async () => { reset(); await started("signal"); }],
+  ["nossh", "Possibly no SSH client", "Status 127 before ssh was seen. The title hedges as the body does: 127 usually means there is no ssh on the PATH, and Better Terminal cannot tell more.", async () => { reset(); await started("nossh"); }],
+  ["changed", "Reconnect: the destination changed", "The saved server now points somewhere else. Both destinations are shown; Reconnect… asks a second, separate question before anything starts.", async () => { reset(); await started("quick"); sshExits(); editBehind(); }],
+  ["removed", "Reconnect: the saved server was removed", "No Reconnect. The pane says the saved server no longer exists and what it was last started for.", async () => { reset(); await started("quick"); sshExits(); removeBehind(); }],
+  ["split", "A split of a server tab", "The new pane is a local shell in your home folder. The server pane says SERVER. The other pane's chip claims only what is known: it was not opened from a saved server (you may have typed ssh in it yourself). File paths are links in that pane only. ⌘← and ⌘→ move between the panes, as today.", async () => { reset(); await started("quick"); putLine(activePane(), "deploy@db1:~$ cat ", { path: "src/main.rs:12" }); split(); }],
+  ["write", "A Better Terminal write is refused", "A Better Terminal feature tries to type into a server pane: nothing is typed, and today's “Not sent” toast says why, in the same words whichever feature it was (choose one above and press it). The file browser says the pane is a server session. The scratchpad with an image attached is refused by the same toast, and keeps its text.", async () => { reset(); await started("quick"); toggleFb(true); adeWrite(); }],
+  ["closeconfirm", "Closing a live server pane asks", "The question says a connection will end, naming the destination first. Cancel has focus and Enter presses the focused button only (story C1), so ⌘⇧W then Enter does not end the connection. An ended pane closes without a question. End never asks.", async () => { reset(); await started("quick"); closePane(); }],
+  ["restored", "After a restart", "Every server tab comes back ended, with its output and Reconnect. Nothing connects by itself. Quitting asked nothing.", async () => { reset(); await started("quick"); quitRestart(); }],
+  ["reopened", "Reopen Closed Tab", "A closed server tab comes back as an ended server tab, with no output and with Reconnect; never as a local shell under the server's name.", async () => { reset(); await started("quick"); sshExits(); closeTab(); reopenClosed(); }],
+  ["menu", "The tab's menu on a server tab", "No Duplicate and no Move to New Window. The line that says why is the menu's description, so a keyboard or screen-reader user hears it on entering the menu. The local tab's menu has both items.", async () => { reset(); await started("quick"); const b = tabbar.querySelector('[data-tab="' + S.active + '"]').getBoundingClientRect(); openMenu(activeTab(), b.left + 10, b.bottom + 2); }],
+  ["switcher", "The tab switcher", "A server tab's row carries the mark, the state in words and the destination, where a local tab shows its folder.", async () => { reset(); await started("quick"); await started("another", "s2"); openSwitcher(); }],
+  ["shell", "An unsupported login shell", "Connect opens no tab. The list says which shell it found, by its base name only. Choose “a name that cannot be shown” above and connect again for the other wording.", async () => { reset(); $("#shell").value = "fish"; go("s1"); }],
+  ["shellnoname", "An unsupported shell whose name is not shown", "The shell's base name is longer than 32 characters or holds a character outside the safe set, so the kind carries no name and the message names none.", async () => { reset(); $("#shell").value = "?"; go("s1"); }],
+  ["spawn", "Connect: the shell could not be started", "The connect request is rejected, so no tab opens (SV-2 AC7): the list says so, with the system's error number when there is one. Choose the other “could not start a terminal” cases above for their wordings.", async () => { reset(); $("#rc").value = "spawn"; go("s1"); }],
+  ["spawnre", "Reconnect: could not start a terminal, no error number", "The pane stays ended and its bar says why. This is the form without a number; Reconnect stays, because the saved server itself is fine.", async () => { reset(); await started("quick"); sshExits(); $("#rc").value = "spawn0"; reconnect(activePane()); }],
+  ["failedrows", "Rows that failed their checks", "A file changed outside Better Terminal. The page is never sent a value that failed its rule, so nothing hostile can be drawn: a failed name reads “Unnamed server”, a destination with a failed part reads “destination not shown”, and each such row says which fields failed and why, and which entry of the file it is, so two unnamed rows can be told apart.", async () => { reset(BASE().concat(FAILING())); openList_(); }],
+  ["failed", "Connect on a row that failed its checks", "Connect starts nothing and opens no tab: the list names the row and lists each failing field with its message.", async () => { reset(BASE().concat(FAILING())); openList_(); go("f2"); }],
+  ["failededit", "Edit a row that failed its checks", "Each failing field is EMPTY, with its reason under it: what the file held is not shown and cannot be recovered here. A name that is only “already used” is shown, since it passed the character rule.", async () => { reset(BASE().concat(FAILING())); openList_(); openForm(rowById("f2")); }],
+  ["homeunknown", "Refused at the start: no home folder for a ~/ path", "The one reason a form never gives. The row is fine in the list; the start is refused because there is no home folder to put in place of ~/. The path is shown in its ~/ form everywhere.", async () => { reset(); await started("quick"); sshExits(); $("#nohome").checked = true; reconnect(activePane()); }],
+  ["heldlist", "Connect: the row changed since the list showed it", "Another program rewrote the file while the list was open. The Connect press reads the list again, finds a different destination, starts nothing, and shows what the row was showing and what it holds now. Connecting needs a second, separate press. Focus is on Cancel.", async () => { reset(); openList_(); silently(editBehind); connect("s1", shownOf(rowById("s1"))); }],
+  ["heldpalette", "A palette entry whose server changed", "The same check runs for a palette entry. Its press was held: the list opens on that row with both destinations, and nothing was started.", async () => { reset(); openPalette("db1"); const shown = shownOf(rowById("s1")); silently(editBehind); closeAllLayers(false); connect("s1", shown); }],
+  ["heldkey", "Connect held: only the identity file changed", "The summaries read the same, so each line also shows the identity file.", async () => { reset(); openList_(); silently(editKeyBehind); connect("s1", shownOf(rowById("s1"))); }],
+  ["heldreconnect", "Reconnect: the server changed as you pressed", "The bar offered Reconnect to the old destination; another program then rewrote the file. The press starts nothing. The bar turns into the question, says that the server changed as you pressed, and shows what the pane was last started for and what the server holds now. Focus is on Cancel.", async () => { reset(); await started("quick"); sshExits(); silently(editBehind); reconnect(activePane()); }],
+  ["heldthree", "Reconnect…: changed again as you pressed", "The bar already showed a changed destination; the file was then rewritten once more. Three lines: what the pane was last started for, what Reconnect was showing, and what the server holds now.", async () => { reset(); await started("quick"); sshExits(); editBehind(); silently(editBehind); reconnect(activePane()); }],
+  ["heldgone", "Reconnect: the server was removed as you pressed", "The press read the list again and the server was gone: nothing was started, and the bar becomes the removed-server bar, with no Reconnect.", async () => { reset(); await started("quick"); sshExits(); silently(removeBehind); reconnect(activePane()); }],
+  ["heldproblem", "Reconnect: the server now fails its checks", "The press found the row failing its checks: nothing was started, and the bar lists each failing field with its message. There is no Reconnect until it is fixed.", async () => { reset(); await started("quick"); sshExits(); silently(breakBehind); reconnect(activePane()); }],
+  ["keychanged", "Reconnect: only the identity file changed", "The summary reads the same before and after, so each line also shows the identity file.", async () => { reset(); await started("quick"); sshExits(); editKeyBehind(); }],
+  ["question", "Reconnect: the second question", "Reconnect… starts nothing. It turns the bar into a question with focus on Cancel; Enter presses the focused button only. No connect request is made until “Connect to the new destination”.", async () => { reset(); await started("quick"); sshExits(); editBehind(); reconnect(activePane()); }],
+  ["refusedre", "Reconnect refused: an unsupported shell", "The pane stays ended and says why, in its bar. Nothing was started. Reconnect stays: the saved server itself is fine.", async () => { reset(); await started("quick"); sshExits(); $("#shell").value = "fish"; reconnect(activePane()); }],
+  ["hostile", "Hostile text in the file", "Names, hosts and users as a hand-edited file could hold them. A value that fails its rule never reaches the page; a name that passes is still cleaned before it is drawn. A name that looks like a destination sits beside the real destination, which is in its own box.", async () => { reset(HOSTILE.concat(BASE().slice(0, 1))); S.tabs[0].name = HOSTILE[0].name; renderTabs(); openList_(); }],
+  ["long", "Long names and destinations", "A destination box holds at most 40 characters: an ellipsis and the END of the summary, so the end of the host and the port always show. Press the box (it is a button, reachable with the arrow keys in the list) to see the whole. Nothing is clipped.", async () => { reset(LONGS.concat(BASE().slice(0, 2))); await started("quick", "l1"); sshExits(); openList_(); }],
+  ["narrow4", "Four panes: the destination keeps its end", "At 294 px the destination takes a row of its own under the chip and the state. Nothing is cut off: the pane header grows by a line and the terminal starts under it.", async () => { await narrow(4, "quick"); }],
+  ["narrow5", "Five panes, with the message showing", "At 235 px the destination wraps inside its box sooner than lose a character. The bar is bounded: it never takes more than two fifths of the pane, and its details scroll inside it.", async () => { await narrow(5, "another"); }],
+  ["barclosed", "The bar, closed", "“Less” closes the bar to its title and its buttons; “More” opens it again. A bar also closes when its tab is shown again after being hidden, so a session that works behind an unconfirmed mark does not carry five lines for hours. End stays in both forms.", async () => { await narrow(4, "another"); const p = activePane(); p.barClosed = true; updatePane(p); }],
+  ["marks", "The marks side by side", "A plain tab (chevron), a tab with an agent dot, and three server tabs: ssh not confirmed (dashed, empty box), ssh running (box with lights), ended (struck through). Shape and words, never colour, and nothing moves. Open the tab switcher (⌘K) for the same three in words.", async () => { reset(); S.tabs[0].agent = false; const a = addLocalTab("api", "~/work/api"); a.agent = true; await started("quick", "s1"); await started("quick", "s4"); sshExits(); $("#rc").value = "waiting"; go("s2"); showTab(S.tabs[2].id); }],
+  ["child", "ssh not confirmed: ssh runs as a child of the shell", "A function named after a word of the instruction runs ssh without replacing the shell. The session works, and the pane can never be confirmed: it stays “ssh not confirmed”, and at the bound the message says the session may be working and can go on being used.", async () => { reset(); $("#rc").value = "child"; go("s1"); }],
+  ["workspace", "Saving a workspace (tab set) leaves server tabs out", "The status line under the save row says how many were left out.", async () => { reset(); await started("quick"); await started("another", "s2"); saveTabSet(); LAYERS[LAYERS.length - 1].el.querySelector('[data-act="ws-save"]').click(); }],
   ["unavailable", "Not available: Windows, or an engagement", "The palette has none of F7's entries and there is no list. Typing “server” finds only today's MCP entry.", async () => { reset(); S.available = false; openPalette("server"); }],
-  ["closedremote", "Closing the remote pane of a split tab", "After the question, the tab keeps its local pane, is renamed “Terminal” and is a local tab again: its menu has Duplicate and Move to New Window.", async () => { reset(); await connected("quick"); split(); const t = activeTab(); t.activePane = t.panes[0].id; showTab(t.id); closePane(); }],
+  ["closedremote", "Closing the server pane of a split tab", "After the question, the tab keeps its other pane, is renamed “Terminal” and is a local tab again: its menu has Duplicate and Move to New Window.", async () => { reset(); await started("quick"); split(); const t = activeTab(); t.activePane = t.panes[0].id; showTab(t.id); closePane(); }],
 ];
 async function runScenario(id) {
   const sc = SCENARIOS.find((s) => s[0] === id); $("#scn").value = id;
@@ -1242,9 +1503,9 @@ $("#theme").addEventListener("change", (e) => setTheme(Number(e.target.value)));
 $("#rm").addEventListener("change", (e) => win.classList.toggle("rm", e.target.checked));
 const ACTS = [["Palette (⌘P)", () => openPalette()], ["Tab switcher (⌘K)", openSwitcher], ["Saved servers", () => openList_()], ["Split (⌘D)", split], ["Close pane (⌘⇧W)", () => closePane()], ["Close tab (⌘W)", () => closeTab()], ["Reopen closed tab (⌘⇧T)", reopenClosed],
   ["Quit and restart", quitRestart], ["Answer the start-up question", () => answerStartup()], ["The server closes the session", () => sshExits()], ["Press it (a Better Terminal write)", () => adeWrite()], ["Scratchpad, text only", () => toggleScratch(false)], ["Scratchpad, image attached", () => toggleScratch(true)],
-  ["File browser (⌘B)", () => toggleFb()], ["Save a workspace (tab set)", saveTabSet], ["Change db1's host", editBehind], ["Change db1's identity file", editKeyBehind], ["Remove db1", removeBehind]];
+  ["File browser (⌘B)", () => toggleFb()], ["Save a workspace (tab set)", saveTabSet], ["Change db1's host", editBehind], ["Change db1's identity file", editKeyBehind], ["Remove db1", removeBehind], ["Break db1's host", breakBehind], ["Make the file unreadable, or readable", unreadableBehind], ["All 23 reasons", openReasons]];
 for (const [label, run] of ACTS) $("#acts").append(h("button", { type: "button", on: { mousedown: (e) => e.preventDefault(), click: run } }, label));
-window.__mock = { get S() { return S; }, get LIST() { return LIST; }, LAYERS, PANES, SCENARIOS, runScenario, reset, connect, connected, openList_, openForm, openPalette, openSwitcher, closePane, closeTab, endPane, sshExits, answerStartup, reconnect, split, quitRestart, reopenClosed, adeWrite, toggleScratch, toggleFb, editBehind, editKeyBehind, removeBehind, saveTabSet, refreshPanes, setTheme, activePane, activeTab, paneDom, cleanText, cleanName, fullDest, summary, check, HOSTILE, LONGS, THEMES, wait, get counts() { return counts; } };
+window.__mock = { get S() { return S; }, get W() { return W; }, get LIST() { return LIST; }, LAYERS, PANES, SCENARIOS, MSG, ORDER, LABEL, FAILING, NARROW, runScenario, reset, go, connect, started, requestConnect, loadList, rowById, shownOf, rowWho, serversChanged, openList_, openForm, save, askRemove, openPalette, openSwitcher, openReasons, closePane, closeTab, endPane, sshExits, answerStartup, reconnect, split, quitRestart, reopenClosed, adeWrite, toggleScratch, toggleFb, editBehind, editKeyBehind, removeBehind, breakBehind, unreadableBehind, saveTabSet, setTheme, activePane, activeTab, paneDom, updatePane, focusBar, cleanText, cleanName, fullSum, summary, check, failures, HOSTILE, LONGS, THEMES, wait, get counts() { return counts; } };
 runScenario("list");
 </script>
 </body>
