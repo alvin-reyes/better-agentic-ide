@@ -12,6 +12,7 @@ approval, and the change is noted in that section's history.
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
 | F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10; opener folder from a non-terminal tab (F3.1, VV-11 AC2), approved by the owner 2026-11-10 |
+| F7 | [Saved servers (SSH)](#f7-saved-servers-ssh) | Draft, revision 7 (2026-11-18): **not approved; pending the owner's approval**. Revision 7 is a wording pass that answers the delta check of revision 6, which **passed S1 with five minors (answered)** and **blocked S1b on one blocker (answered, with two small decisions of the product manager's flagged for the owner; awaiting a re-check, not run)**. The owner is asked to approve S1 (SV-1 to SV-9), and separately whether to approve S1b (SV-13) now or hold it. Revision 6 recorded the owner's two decisions of 2026-11-18: an open ade-brain hub's recorded SSH server is offered in the server list, read-only and marked as the hub's (a new slice, S1b, SV-13, with criteria; not buildable before F4 slice S1 and F7 S1 are on `main`), and the roles in ade-setup are told about the feature (follow-up work in that repository, F7.11). **S1 is unchanged in substance.** Before it, the final delta check, of revision 4, found S1 blocked on one blocker (1 blocker, 2 majors, 14 minors; every finding a text change) and the stored-password gate complete; revision 5 answered every finding (F7.12, fourth table), and the delta check of revision 6 found each resolved. **Every owner question is answered** (OQ-1 to OQ-22, F7.10): none is open. **S1, the saved list and the terminal, stores no password or passphrase**; a stored password is a later slice (S2), gated on the architect's spike, with no criteria yet and not buildable; key passphrases are not stored by ADE. Not available inside an engagement for now. Five slices (S1, S1b, S2, S3, S4); not sharded. F2 (PR #98), F4 (PR #113), F5 (PR #115) and F6 (`prd-token-cost`) add their rows when they merge |
 
 ---
 
@@ -3686,3 +3687,4208 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
   both skip it, S1 stays testable today, and no requirement is dropped.
   **Answered 2026-11-10:** yes, the merges-second rule (D14, F3.8).
 <!-- F3 ends -->
+
+---
+
+<!-- F7 begins -->
+
+## F7: Saved servers (SSH)
+
+- **Status:** Draft, revision 7 (2026-11-18). **Not approved: pending the owner's
+  approval.** Revision 7 is a wording pass that answers the delta check of revision
+  6 (F7.12, sixth table). **That check passed S1 with five minors, which are
+  answered here,** so S1 (SV-1 to SV-9) goes to the owner. **It blocked S1b (SV-13)
+  on one blocker,** with one major and eight minors, all text changes; they are
+  answered here, with two small decisions of the product manager's that are flagged
+  for the owner (F7.11, item 11), and **S1b's answers await a re-check, which has
+  not been run.** Revision 7 itself has not been reviewed. The owner is asked two
+  things, separately (F7.11): to approve S1, and whether to approve S1b now or hold
+  it. Revision 6 recorded the owner's two decisions of 2026-11-18 (F7.10, OQ-21 and
+  OQ-22). **First: when an ade-brain hub is open, the SSH server its `hub.conf`
+  records is offered in the server list, read-only and marked as the hub's** (D16).
+  It is a slice of its own after the list and the terminal, **S1b** (SV-13): it has
+  criteria, and it is **not buildable before F4 slice S1 and F7 S1 are on `main`**.
+  **Second: the roles in ade-setup are told about the feature**, as follow-up work
+  in that repository and outside every F7 slice's Definition of Done (D17, F7.11).
+  **S1 is unchanged in substance:** no S1 criterion is added, moved or renumbered,
+  and S1's text changes only by three cross-references to SV-13 (in SV-5 AC4, SV-7
+  AC5 and SV-9 AC3) and by the wording fixes of the end-to-end read (F7.12, fifth
+  table); revision 7 touches S1 only for the five minors (F7.12, sixth table). What
+  stood at revision 5 stands. The final delta check, run on revision 4, found S1
+  **blocked on one blocker** (1 blocker, 2 majors, 14 minors; every finding a text
+  change, none a redesign and none a new owner question) and found the
+  stored-password gate (SV-12) still complete; revision 5 answered every one of
+  those findings (F7.12, fourth table), and the delta check of revision 6 found each
+  of them resolved. **Every question put to the owner is answered** (F7.10, OQ-1 to
+  OQ-22). **No question is open.** Two rules are written at a stricter reading than
+  the owner's words, and are flagged for the approval: "Remote server" for every
+  server tab in the export and on the phone, renamed or not (SV-5 AC2, AC7; F7.10,
+  OQ-13), and the removal of every inherited variable that has a vault secret's name
+  from a connection's environment (SV-2 AC8; F7.10, OQ-15); both are in F7.11, with
+  what the product manager decided in specifying S1b (D18). By the owner's
+  split-and-spike decision (D14, which answers OQ-18 and amends OQ-3): **S1, the
+  saved list and the terminal, is built first and stores no password and no
+  passphrase; a stored password is a later slice (S2), gated on the architect
+  proving its mechanism safe against a real test server, with no acceptance criteria
+  yet and not buildable; key passphrases are not stored by ADE at all.** What the
+  owner is asked to approve, and what approval does not cover, is listed in F7.11.
+  Not sharded.
+- **Number:** F2 is the PRD for agentic-environment onboarding (PR #98, branch
+  `onboarding-prd`), F4 workspaces (PR #113, `prd-workspaces`), F5 prompt templates
+  (PR #115, `prd-prompt-templates`) and F6 token cost guardrails (branch
+  `prd-token-cost`); F1 and F3 are on `main`. Every `origin/prd-*` and
+  `origin/onboarding-*` branch and every local branch was checked on 2026-11-18 and
+  none holds a number above F6, so this is F7. Each of those branches adds its own
+  row to the feature index at the top of this file and its own delimited section;
+  whichever merges after another must rebase and keep every row and every section,
+  in number order (the index table and the section order are the only conflict). If
+  one of them is withdrawn, this stays F7.
+- **Source:** the owner, 2026-11-18, verbatim: *"let's also add a server viewer so
+  on the ADE I can use it to go into a server (ssh putty) with the ability to save
+  server confi"*. The message was cut off at "confi", read as "configurations".
+  Read as: a place in ADE that lists saved servers and connects to one over SSH in an
+  ADE terminal, the way PuTTY's saved sessions do, with saving, editing and removing
+  of server configurations. The owner's answers of the same day are recorded in
+  F7.10. Everything else is a decision those imply (F7.6) or a question (F7.10).
+  Later the same day the owner added, verbatim: *"make sure to incorporate
+  ade-brain and ade-setup"*, and, asked what that means for F7, chose the two
+  answers recorded as OQ-21 and OQ-22 (D16, D17).
+- **Builds on:** F1's isolation rule (F1.1, PE-4), F3's per-view panels, F4's sync
+  decisions (WS-7 on `origin/prd-workspaces`, revision 3.12: folder paths stay out
+  of ADE sync's export; the owner's "strip all paths" of 2026-11-15), ADR 0008 (one
+  shell quoter), ADR 0014 and `.ade/context/terminal-open.md` (`ade open`). **S1
+  changes no public statement:** ADE's README says it "never handles, stores or
+  syncs private keys", and S1 stores no credential of any kind. Approved F1 is
+  unchanged: by the owner's answer to OQ-14 the feature is not available inside
+  an engagement for now (D15). The stored-password slice, if it passes its gate,
+  will add one statement beside the README's (SV-12, "Carried"). **S1b only**
+  builds on two features that are not on `main`: F2's finished hub and its reader
+  of `hub.conf` (OB-6 AC2, `origin/onboarding-prd`), and F4's workspaces (when a
+  hub is open, the finished-hub check, the bounds of WS-9; `origin/prd-workspaces`,
+  revision 3.12). S1 builds on neither.
+- **History:**
+  - 2026-11-18, revision 1: first draft, from the owner's sentence above.
+  - 2026-11-18, revision 2: the owner's answers to OQ-1 (list and terminal only),
+    OQ-2 (the machine's own `ssh`), OQ-4 (local only, no export file) and OQ-3
+    (**store passwords and passphrases in the OS keychain**, reversing revision 1's
+    D3) applied. The review's findings answered (F7.12): the User rule narrowed to
+    a safe set (B1); one model for starting the SSH client, the user's own shell
+    replacing itself with `ssh` (B2, D4, SV-2 AC2); the "Remote server" name keyed
+    on the tab's own record, with Duplicate, Reopen, rename, remove and tab sets
+    specified (B3); every criterion given an owning side and a positive assertion.
+    New: SV-12 (the stored secret), F7.12, and OQ-15 to OQ-19. Slices renumbered:
+    the stored secret is S2, revision 1's S2 and S3 are now S3 and S4.
+  - 2026-11-18, revision 3: the delta review of revision 2 (blocked) answered, and
+    the owner's later answers applied: OQ-15 (the SSH client gets neither vault
+    nor `ADE_*` variables), OQ-14 (not available inside an engagement for now),
+    OQ-16 (a stored secret only after the host key is verified and only to the
+    destination it was saved for), OQ-17 (the keychain's limit accepted, with
+    disclosure), and the **split-and-spike** decision (D14): S1 is built now;
+    stored secrets become a later slice, **passwords only**, gated on an
+    architect's spike; key passphrases are left to the operating system and the
+    user's agent. **S1:** every rule that guards a server's name is keyed on the
+    tab's own record, and a tab whose remote pane is closed stops being a server
+    tab (N-B1); a pane is live only once ADE has confirmed its process is the SSH
+    client (N-M1); the property the shell start must have, the supported shells
+    and the fixture cases are stated (N-M2); every S1 criterion has an automated
+    test or is moved out of the criteria (N-M9); S1 holds no reference to a stored
+    secret (N-m7). **SV-12** is restated as a gated slice: the owner's decisions,
+    the outcomes promised, and the questions the spike must answer; its eleven
+    criteria of revision 2 are withdrawn. New: D14, D15, OQ-20, SV-2 AC9 and AC10,
+    SV-3 AC9.
+  - 2026-11-18, revision 4: the delta review of revision 3 (S1 blocked on one
+    blocker; the gate complete) answered (F7.12, third table), and the owner's third
+    round of answers applied: OQ-5 to OQ-13, OQ-19 and OQ-20 (1) accepted at their
+    recommendations, and OQ-20 (2) answered **"keep it, offer End"**. **S1:** a
+    rename commit whose text equals the tab's current name is not a rename and
+    leaves the server-named mark (R3-B1); every server tab, renamed or not, is
+    "Remote server" in the export and on the phone (the stricter reading, flagged);
+    the hand-over rule is stated over time, with what counts as `ssh` and the
+    wrapper case decided (R3-M1); a start that does not hand over is **kept, never
+    ended by ADE**: the pane stays connecting with a message and an End control, and
+    the 30 s bound only times that message (R3-M4, OQ-20 (2)); a third kind, "ended
+    before ssh was seen to start", with the exit status (R3-M5); the environment
+    rule is worded as what ADE passes and removes (R3-M2); the engagement and phone
+    criteria name their carrying tickets, their gates and an "until it lands" rule
+    (R3-M3); the seventeen minors. **SV-12:** which build two keychain answers must
+    be shown with, a conditional disclosure line, and where the disposable test
+    server lives (G-m1 to G-m3). Attribution corrected in D14, D15, OQ-3 and OQ-14:
+    each states the decision, and a consequence is labelled as one (R3-m15). No
+    criterion number is added or moved.
+  - 2026-11-18, revision 5: the final delta check, of revision 4 (S1 blocked on one
+    blocker, 2 majors, 14 minors; the gate complete), answered (F7.12, fourth
+    table). A wording pass: no criterion number is added or moved, no decided matter
+    is reopened and no question is raised. **S1:** what closing a terminal does
+    today is stated as it is (no signal; a newline and the end-of-file byte typed
+    into the terminal), and **End, a confirmed close, a close of the tab, a close of
+    the main window and quitting write nothing into a remote pane and leave no
+    process of it alive**, with a test that records every byte (R4-B1); a job that
+    ignores a hangup is killed after 2 s (R4-m7); **ADE also removes every inherited
+    variable whose name is a vault secret's name**, read from the vault's list of
+    names with no keychain call, which is the stricter reading of the owner's
+    "neither" and is flagged (R4-M1); the "accept knowingly" list is completed
+    (R4-M2); the judging rule says what it reads (the argument list) and which
+    interpreters count, and G3 and G6 claim only what ADE can observe (R4-m1 to
+    R4-m3); a twelfth kind, "the server list could not be saved" (R4-m8); the other
+    minors.
+  - 2026-11-18, revision 6: the owner's fourth round applied: **a hub's server shows
+    up** (OQ-21, D16) and **roles learn the feature** (OQ-22, D17). New: slice
+    **S1b** and its requirement SV-13 (eight criteria), G8, J6, D16 to D18, OQ-21
+    and OQ-22, the facts read from ade-brain, from F2 and F4 and from ade-setup
+    (F7.0), the follow-up list for ade-setup (F7.11), and seven statements in the
+    "accept knowingly" list. F7 names the hub template, `ade-brain`, which the owner
+    made public on 2026-11-18. **S1:** no criterion number is added or moved and no
+    requirement is changed; three cross-references to SV-13 are added (SV-5 AC4,
+    SV-7 AC5, SV-9 AC3). The end-to-end read of the whole section that revision 5
+    left undone was done, and what it caught is in F7.12 (fifth table). Not
+    reviewed.
+  - 2026-11-18, revision 7: the delta check of revision 6 answered (F7.12, sixth
+    table). It **passed S1 with five minors** and **blocked S1b on one blocker** (1
+    blocker, 1 major, 8 minors; all text, with one small decision asked of the
+    product manager). A wording pass: nothing is restructured or renumbered, and
+    S1's substance is unchanged. **S1b:** what `bin/init` writes on a Mac is stated
+    as the check ran it (bash 3.2 writes a leading `~` bare, and some non-ASCII text
+    in bytes that are not valid UTF-8), and revision 6's "checked" claim is
+    corrected (R6-B1); **two decisions, flagged:** a bare leading `~/` is accepted
+    in `HUB_REMOTE_KEY` only, one stated addition to F2's reader, and only the lines
+    that name the four keys must be valid UTF-8 (D18 (a), (l)); **a tab opened from
+    a hub's server shows its source**, and the row and the palette entry apply the
+    tab name's character rule to the hub's label (R6-M1); the "bad line" rule is
+    F2's design rule, with the rows that pin it (R6-m6); the other minors. **S1:**
+    the fourth limit of the environment rule where the owner reads (R6-m1); a wiring
+    assertion for the quit and window-close teardown, and the wait it implies
+    (R6-m2); three lines for the design (R6-m3 to R6-m5). Not reviewed; S1b's
+    answers await a re-check.
+
+### F7.0 What exists today (checked on `origin/main` at 84389eb)
+
+Checked again for revision 2 unless a line says otherwise. For revision 3 the lines
+about tabs, tab sets, the detached window, the palette, `classify` and CI were read
+again, and the facts marked V1 to V11 are taken from the delta review of revision 2,
+which established them on this machine (OpenSSH 10.3p1, zsh 5.9, bash 3.2.57; V1
+to V9 by experiment, V10 by reading the code and V11 from the man pages) without
+contacting a host or touching the user's real `~/.ssh`, keys, agent
+or keychain. For revision 4 the facts marked **W1 to W11** are taken from the delta
+review of revision 3, established the same way (macOS 26, zsh 5.9, bash 3.2.57; a
+scratch home and `ZDOTDIR`, a stub `ssh`, no host contacted), and these were read
+again at 84389eb: the two rename boxes and `renameTab`, the closed-tab record,
+`hasShell` and the close confirm's fallback, the terminal's writer thread and its
+two feeders, the exit event, `pty_foreground_job`, the environment `create_pty_core`
+builds, `env_for_terminals`, the palette's entry fields, F1's tickets e19, e20, e29
+and e30, and phone-watch ticket 8. For revision 5 the facts marked **X1 to X9** are
+taken from the final delta check, of revision 4, which established X1, X2 and X5 by
+running code on this machine (the terminal library ADE uses, portable-pty 0.9.0; no
+host contacted, a scratch home, a stub `ssh`) and X3, X4 and X6 to X9 by reading the
+code and the tickets at 84389eb; and these were read again at 84389eb: `kill_pty`,
+`remove` and the reader and writer threads (`pty.rs`), `read_index` (`vault.rs`) and
+the main window's close handler (`App.tsx`). For revision 6 three things outside
+`main` were read, and **nothing was run from a hub and no host was contacted**:
+ade-brain, at its public `main` (commit 8ffac3d); F2's and F4's PRDs and designs, on
+their branches; and ade-setup, at v1.0.4 and at its local checkout. They are the
+last three items below. For revision 7 the facts cited as the delta check of
+revision 6's (what bash 3.2's `printf %q` writes, what `ssh -i` does with a literal
+`~/`, the keychain library's stand-in, the missing exit handler) are taken from that
+check, which ran or read them; one, the leading `~`, was run again by the product
+manager.
+
+- **Every terminal is the user's login shell.** `create_pty` (`src-tauri/src/pty.rs`)
+  always spawns the shell from `shell_from` (`src-tauri/src/platform.rs`): `$SHELL -l`
+  on macOS and Linux, PowerShell on Windows. The webview cannot name another
+  program. `create_pty_core`'s `NewPty.shell` is a program and its arguments, so the
+  core can spawn something else, but nothing in the app asks it to. The only spawn
+  call in the webview is `invoke("create_pty")` when a terminal mounts
+  (`src/hooks/useTerminal.ts`); a tab that is not shown has no process yet.
+- **A terminal's environment** starts from **ADE's whole environment** (the PTY
+  library's `CommandBuilder::new` copies it; W11). To that `create_pty_core`
+  (`pty.rs`) adds `TERM=xterm-256color`, `HOME`, `USER`, `PATH` and `LANG` again
+  (`passthrough_vars`, `platform.rs`), a default locale on macOS, every Secrets
+  vault value as a variable (`vault::env_for_terminals`, `src-tauri/src/vault.rs`;
+  `NewPty.vault` is a parameter of the core) and the `ADE_HOOK_*` / `ADE_PTY_ID`
+  variables (`apply_hook_env`; `.ade/context/agent-events.md`). The shell's start-up
+  files then add their own. **So when ADE is itself started from an ADE terminal**
+  (every development run from one), the outer terminal's `ADE_*` variables and vault
+  values are already in ADE's own environment; for a terminal `apply_hook_env`
+  overwrites the hook ones (W11).
+- **Commands ADE starts in a terminal are typed into its shell,** each word quoted by
+  the one quoter (`src/lib/shellQuote.ts`, ADR 0008), with characters outside
+  `0x20`-`0x7e` collapsed first (`UNTYPEABLE`, `src/lib/agentCommand.ts`). `ade open
+  -- COMMAND` does the same in a new sub-terminal or split
+  (`.ade/context/terminal-open.md`); it is macOS and Linux only, and every `/open` is
+  refused on Windows. `/open`'s body refuses unknown fields already
+  (`#[serde(deny_unknown_fields)]`, `src-tauri/src/terminal_open.rs`).
+- **Who writes to a terminal today.** In the webview every app-level write goes
+  through `writePty` (`src/lib/terminalCommands.ts`), and the terminal's own input
+  (keys, paste, and the terminal emulator's replies to a program's queries)
+  through `writePtyInput`, called only by `wireInput` (`useTerminal.ts`). The
+  callers of `writePty`:
+  - `sendToActiveTerminal` (the shown view's active pane), called by the Tokens
+    panel (`TokensPanel.tsx`), the anti-slop tab's "ask to fix" (`AntiSlopTab.tsx`),
+    a notification's action button (`Toast.tsx`; the context guard's "Type
+    /compact", `src/hooks/useContextGuard.ts`), the Contracts panel's "New Foundry
+    project" (`ContractsPanel.tsx`) and its typed actions
+    (`src/lib/contractRunner.ts`). None checks what the pane is running.
+  - `typeWhenReady`, called by the agent picker's "This terminal"
+    (`AgentPicker.tsx`, which first refuses a pane that `paneBusy` reports as
+    running a program) and by the orchestrator, into its own agent tab
+    (`OrchestratorTab.tsx`); and by `runInNewTabPane`, which types into a tab it
+    just opened (the agent picker's "New tab", `src/lib/agentLaunch.ts` for the
+    board, `ContractsWorkbench.tsx`, `AntiSlopTab.tsx`, `contractRunner.ts`).
+  - the sub-terminal notice's "Insert command" (`SubTerminalNotice.tsx`), into the
+    sub-terminal `ade open` made.
+  - the user's own sends: the scratchpad's send and chain steps and the two "Send
+    Enter" actions (`Scratchpad.tsx`, `App.tsx`). The scratchpad appends the local
+    temp paths of attached images to the text it sends.
+
+  No `writePty` call was found for the BMAD switch. **Rust-side writers:** each
+  terminal has one writer thread (`pty.rs`), fed through one queue by exactly two
+  callers: the `write_pty` command (every webview write above) and `type_line`,
+  which `/open` uses to type into the pane it just opened (`terminal_open.rs`). A
+  search for sends into that queue at 84389eb finds those two and no other (W11).
+- **`paneBusy` already counts `ssh` as a running program.** `pty_foreground_job`
+  (`pty.rs`) reads the terminal's **foreground process group leader**, not the
+  pane's own process id, and `classify` judges it by its name and arguments ("an
+  `exec tmux` keeps the shell's pid"); only a shell in an interactive invocation
+  with no command is "not busy", so a shell given a command with `-c` is busy (W11).
+  Its own tests include a shell replaced by `ssh` and one replaced by `tmux`. So
+  today's close confirm (`src/hooks/useGuardedClose.ts`) asks before closing a pane
+  running `ssh`. It skips only a pane with neither a terminal instance nor a process
+  id (`hasShell`); a pane that has been shown has an instance, is sampled, and when
+  the sample is unknown or fails the decision falls back to a text heuristic: a line
+  mentioning "claude" that is not a prompt, in the pane's last 50 lines
+  (`hasActiveProcess`, `useTerminal.ts`; `.ade/context/pane-busy.md`; W11).
+- **SSH today:** there is no saved-server feature and no SSH code in the app beyond
+  ADE sync's own `git` calls (`GIT_SSH_COMMAND`, `src-tauri/src/sync.rs`) and the
+  command guard's reading of `ssh host CMD` (`src-tauri/src/cli_guard/unwrap.rs`). A
+  user who wants a remote shell types `ssh` in a tab. That tab is then treated as a
+  local one in every way: its folder is the local folder `ssh` was started in
+  (`get_pty_cwd`, `pty.rs`), the file browser follows that local folder every 3 s
+  (`src/components/FileBrowser.tsx`), and a file path printed by the server is a
+  link read as a **local** path (`registerFileLinks`, `useTerminal.ts`).
+- **Finding a program:** `find_command` (`src-tauri/src/lib.rs`) looks in a fixed
+  list of folders first (`~/.local/bin`, `~/.cargo/bin`, `~/.foundry/bin`,
+  `~/.avm/bin`, the Solana install folder, `~/bin`, `~/.nvm/versions/node/*/bin`,
+  `/usr/local/bin`, `/opt/homebrew/bin`, `/usr/bin`, `/bin`) and only then asks a
+  login shell. It is not the order of the user's `PATH`. F7 does not use it (SV-8
+  AC1).
+- **The Secrets vault** keeps values in the OS keychain under one service
+  (`com.betterterminal.vault`) and names in app data (`vault-index.json`), and
+  exports **every** secret into **every** new terminal's environment. It has no
+  per-item scope, and it can hand a value back to the webview (`vault_get`). It
+  calls the keychain library directly (`keyring::Entry`), with no seam a test can
+  count calls on. `valid_name` refuses names starting `LC_` when a secret is saved,
+  but `env_for_terminals` exports whatever names are in `vault-index.json` without
+  checking them again. **The names can be read without the keychain:** `read_index`
+  reads `vault-index.json`, a plain file, makes no keychain call, and reads a
+  missing or unparseable file as an empty list (X9).
+- **Tabs:** a new tab is named "Terminal". Duplicate opens a new local tab named
+  after the original (with " (copy)" unless the name is a default one) in the
+  original's folder (`src/components/TabBar.tsx`). Closing a tab remembers its
+  name, folder and colour only (`closedTabs`, `src/stores/tabStore.ts`), and Reopen
+  Closed Tab opens a new local shell from those. **Closing one pane of a tab that
+  has several removes that pane and keeps the tab, name included** (`closePane`,
+  `tabStore.ts`; V10). **Saving a tab set writes every tab's name and split
+  direction** into `better-terminal-workspaces` (`saveCurrentWorkspace`,
+  `src/components/SettingsPanel.tsx`; V10), and loading one opens one new local
+  tab per saved name. Move to New Window (offered only for a tab without
+  sub-terminals, `TabBar.tsx`, and through `detachTabToWindow` only) keeps the
+  tab's processes running and re-attaches the new window to them
+  (`src/lib/detachWindow.ts`), and removes the tab from the main window's store
+  (`detachTab`), **so a detached tab is in no saved session** (V10). **Closing
+  that window ends its processes without asking** (`src/DetachedApp.tsx` kills
+  each on the window's destroy event and has no close confirm; V10). A detached
+  window shows the tab's name as its title, its panes and the scratchpad; it has
+  no tab bar and no command palette, and it is another webview with its own
+  store.
+- **Renaming a tab:** the tab bar's rename box opens on a double-click, from the
+  tab's menu and from the rename shortcut, and commits **on blur and on Enter with
+  whatever text is in the box, changed or not**, whenever it is not empty
+  (`commitRename`, `TabBar.tsx`); Settings has a second rename box with the same
+  commit (`SettingsPanel.tsx`). Both call the store's `renameTab`, which sets the
+  name and nothing else (W11).
+- **The command palette** lists its entries in a fixed order, keeps those whose
+  label, category or shortcut contains the typed text (case-insensitive), and
+  selects the first (`src/components/CommandPalette.tsx`). It has no ranking, and an
+  entry is a label, a category and an optional shortcut: there is no second line of
+  text that is shown and not matched.
+- **Session save and restore:** `saveSession` (`tabStore.ts`) writes each terminal
+  tab's name, colour, splits, sub-terminals and, per pane, its scrollback
+  (`serializedBuffer`) and local folder (`savedCwd`) to `ade-session`, in plain
+  text under app data. `loadSession` brings the tabs back; each pane starts a new
+  login shell under its saved scrollback when it is first shown.
+- **Local snapshots:** every persisted key except recordings is copied into a
+  snapshot at start and every 10 minutes, and the newest 20 are kept
+  (`src-tauri/src/state.rs`, `src/lib/persistence.ts`). So a pane's scrollback can
+  sit in up to 21 files on this machine.
+- **ADE sync** exports `SHARED_KEYS` to every machine and `DEVICE_KEYS`
+  (`ade-session`, `ade-scratchpad-draft`) per device (`sync.rs`). From
+  `ade-session` it strips only `serializedBuffer`; tab names are exported. Tab sets
+  (`better-terminal-workspaces`) and the scratchpad's sent-prompt history
+  (`better-terminal-prompt-history`) are shared keys. Import takes shared keys
+  only.
+- **Logs:** the webview sends the text of any uncaught error or unhandled promise
+  rejection to `ade.log` (`src/main.tsx`, `log_error`).
+- **When a terminal's process ends,** the pane prints `[Process exited]` and stays
+  (`ptyChannel`, `useTerminal.ts`). Nothing offers to start it again. The exit event
+  Rust sends carries **no exit status** (`PtyEvent::Exit {}`, `pty.rs`; W11).
+- **What closing a pane does today: it sends no signal, and it types into the
+  terminal** (X1). `kill_pty` (`pty.rs`) only forgets the terminal: it removes the
+  instance from ADE's table (`remove`) and signals no process; the only calls that
+  kill a terminal's process are test helpers. Dropping the instance ends the writer
+  thread, and the terminal library's writer, when dropped, **writes a newline and
+  the terminal's end-of-file byte into the terminal** (portable-pty 0.9.0, `impl
+  Drop for UnixMasterWriter`). The reader thread holds its own handle on the
+  terminal, so the terminal is not closed and no hangup is sent. Run on the real
+  library with the same threads and drop order: a program in raw mode, which is
+  what `ssh` is, received exactly those two bytes (Enter and Ctrl-D) and was still
+  alive 1.5 s later (X1). **So today, closing a tab in which `ssh` was typed by
+  hand sends Enter to the server and may leave the connection running** until ADE
+  quits. That is a defect in today's code, for any terminal, outside F7 (F7.11);
+  SV-2 AC3 says what F7 requires for a remote pane instead. A terminal that is
+  truly closed (every handle on it) does hang up its session: the shell and a
+  child `ssh` are gone 1 s later, and **a child that ignores the hangup survives**
+  (X2). **Not run:** that a real `ssh` forwards the two bytes to the server before
+  anything else happens (the experiment used `cat` in raw mode), and Linux, where
+  the end-of-file byte in raw mode differs.
+- **Closing the main window, today:** the close handler saves the session, runs a
+  sync bounded at 4 s, and destroys the window (`App.tsx`). It asks nothing and
+  calls no `kill_pty`. **Not checked:** what a terminal's processes receive when
+  ADE then quits.
+- **Off the machine:** the phone remote's tab payload (`remote_tabs_set`,
+  phone-watch story 8) is not built; the phone is specified to see a tab's title,
+  project, state and age (F3 VV-12 AC3).
+- **OpenSSH on the machine checked (10.3p1), from `man ssh`, `man ssh_config` and
+  `ssh -G` (which prints the resolved configuration and connects to nothing):**
+  - `ssh [options] -- host` is accepted; a host starting `-` is refused.
+  - `-l USER` refuses `;`, `|`, `&`, `<`, `(`, `{`, a backtick, both quotes and
+    `${HOME}`, and **accepts** `$HOME`, `*`, `?`, `~`, `#`, `!`, `=`, `[`, `^`, `,`,
+    `/`, `+`, `:` and `%h`. `ssh` puts the user name into `%r` of the user's own
+    `ProxyCommand`, `Match exec`, `LocalCommand` and `RemoteCommand`, which a shell
+    runs; `man ssh_config` (TOKENS): "ssh(1) performs no filtering or escaping of
+    characters that have special meaning in shell commands".
+  - A host `db1.example.com:2222` is taken whole as the host name (the port stays
+    22); `2130706433` and `0x7f.1` resolve to `127.0.0.1`; `-p` accepts `022`,
+    `+22` and ` 22` as 22.
+  - `IdentityFile` accepts `%` tokens and `${VAR}` (TOKENS, ENVIRONMENT VARIABLES).
+  - `SSH_ASKPASS` names a program `ssh` runs to obtain a passphrase or password;
+    `SSH_ASKPASS_REQUIRE` set to `prefer` makes `ssh` use it "instead of the TTY
+    when requesting passwords", `force` "for all passphrase input", `never` not at
+    all. Defaults: `numberofpasswordprompts 3`, `stricthostkeychecking ask`.
+  - **Established by the delta review's experiments (no host contacted; throwaway
+    keys and agent):** with `SSH_ASKPASS_REQUIRE=force`, every prompt goes to the
+    helper program even on a terminal, with the prompt's text as its only
+    argument (V1); a helper that declines gives an empty answer and the prompt
+    does **not** fall back to the terminal (V2); the helper can open the terminal
+    itself (V3); a `ProxyCommand` or `Match exec` program inherits the askpass
+    variables and can run the helper itself with a forged prompt, before `ssh`
+    asks anything (V4), and then has `ssh` as its parent, exactly as a genuine
+    call does (V5); the prompt texts differ by tool and are built from resolved
+    values (V6); `ssh -G` prints the resolved host name, user, port and host key
+    settings for an alias, and runs `Match exec` programs while doing so (V7).
+    These are why the stored password is gated (SV-12); S1 uses none of it.
+  - **macOS's own client already stores key passphrases:** `UseKeychain` in
+    `ssh_config`, and `ssh-add --apple-use-keychain` (V11; from the man pages).
+  - **Not checked:** anything that needs a connection; any OpenSSH older than
+    10.3p1; Linux; Windows.
+- **Shells, checked locally with `ssh -V` (no connection):** in `zsh`, `exec ssh`
+  runs a shell function named `ssh` if one is defined, and `exec command ssh` runs
+  the program; in `bash`, `exec ssh` runs the program. A login, interactive `zsh`
+  given a command (`-l -i -c`) reads the user's start-up files and prints whatever
+  they print before the command runs.
+- **Shells, from the delta review's experiments (V8: `SHELL -l -i -c`, a scratch
+  home, a stub `ssh` first on `PATH`):** in `zsh`, `exec command ssh` runs the
+  stub even with a function and an alias named `ssh`; a function named `command`,
+  an alias or function named `exec`, a global alias named `ssh` and `hash
+  ssh=/bin/echo` each run something else; a global alias on the host's text or on
+  `--` rewrites the arguments when the words are unquoted, and no longer applies
+  when every word is single-quoted (`src/lib/shellQuote.ts` quotes every word); a
+  function named `command` still runs when the word is quoted. In `bash`, an
+  alias or function named `exec` runs in place of `exec ssh`, and a function
+  named `builtin` in place of `builtin exec ssh`. A start-up file that replaces
+  an interactive shell with another program (a stand-in for a `tmux`
+  auto-attach line) means `ssh` never runs, and one that reads input blocks the
+  start at its own prompt. **Not checked:** `fish`, `nu` or any other shell.
+- **Shells, from the delta review of revision 3 (W1 to W10; the pane's process
+  sampled with `ps`):** with every word of the instruction single-quoted the base
+  start works in both shells: one stub record with exactly the grammar, the stub's
+  process id equal to the pane's, the scratch home as its folder, the start-up
+  file's `SSH_AUTH_SOCK` present, and the history files empty (W1). With every word
+  quoted, an alias named `exec` no longer applies, in either shell, always; a
+  function named `exec`, `command` or `builtin` still runs, and when it simply
+  returns the shell exits 0 with no output and no `ssh`; `hash ssh=/bin/echo` makes
+  `echo` the pane's process, which prints the arguments and exits 0 (W2). **On macOS
+  a script named `ssh` is a process named after its interpreter**: the stub shows as
+  `/bin/sh .../ssh ARGUMENTS`, and the name `ssh` appears only as the base name of
+  the script argument (W3). **A wrapper script named `ssh` passes through several
+  images under one process id**: `#!/usr/bin/env bash` followed by `exec /real/ssh
+  -o ControlMaster=auto "$@"` shows, in order, `/usr/bin/env bash .../ssh
+  ARGUMENTS`, `bash .../ssh ARGUMENTS`, then the real client with the added option
+  (W4). A function named `command` that passes its arguments on runs `ssh` **as a
+  child of the shell**, with exactly the grammar, and the pane's process stays the
+  shell for as long as the child runs (W5). With no `ssh` on `PATH` both shells exit
+  with status 127 (W6). A start-up file that replaces an interactive shell with
+  another interactive shell (a stand-in for `exec fish`) leaves the pane at that
+  shell's prompt, and the instruction is never run (W7). A start-up file that reads
+  a line blocks, and a line supplied through the terminal lets the start go on (W8).
+  Quoting holds for a path full of shell metacharacters under `zsh` and `bash`
+  option sets that change expansion (W9). In one `.zshrc`, `alias ssh=...` followed
+  by `ssh() {...}` is a parse error, so the function is never defined; `function ssh
+  {...}` before the alias works (W10). **Not checked:** Linux (the process name of a
+  script named `ssh` there, reading another process's arguments under `hidepid`),
+  bash 5, other `zsh` versions.
+- **CI:** Rust tests run on Linux (`ubuntu-22.04`) and on macOS; the Frontend job
+  installs `zsh` and `fish` on Linux for the quoter's tests, which fail without
+  them, and the Linux Backend job installs neither (`.github/workflows/ci.yml`).
+- **Platforms:** installers are built for macOS (Apple Silicon and Intel) and Linux
+  x64 (`.github/workflows/release.yml`). F1 requires Windows; no Windows installer
+  ships today. macOS ships OpenSSH at `/usr/bin/ssh`. **Not checked:** that every
+  Linux desktop ADE runs on has an `ssh` client installed, and that Windows has
+  the OpenSSH client present by default.
+- **The hub template is the public repository `ade-brain`**
+  (`alvin-reyes/ade-brain`; its README says "Formerly `ai-agent-hub-template`"). The
+  owner made it public on 2026-11-18, so F7 names it. Read at its `main`, commit
+  8ffac3d; the lines cited below were checked again at f3fb64e, `main` on the day of
+  the delta check of revision 6, and match (R6-m13). None of it is in this
+  repository, and ADE bundles a copy only with F2.
+  - **What a hub records.** `bin/init --remote user@host[:port]`, `--remote-key
+    <path>` and `--remote-dir <dir>` set "the box `bin/remote` reaches over SSH"
+    (README, the options table). `bin/init` accepts `--remote` only when it matches
+    `^(([A-Za-z0-9._-]+)@)?([A-Za-z0-9.-]+)(:([0-9]+))?$` (line 79) and writes five
+    lines into the hub's top-level `hub.conf` (lines 110 to 114): `HUB_REMOTE_HOST`,
+    `HUB_REMOTE_USER`, `HUB_REMOTE_PORT`, `HUB_REMOTE_KEY` and `HUB_REMOTE_DIR`. The
+    port is 22 when the option gives none, and is written as 22 even when no remote
+    is given (line 77). `--remote-key` and `--remote-dir` are written as given,
+    unchecked. `--staging-url` writes `HUB_STAGING_URL`, a URL that `bin/doctor`
+    checks; it is not an SSH setting.
+  - **The format, and what bash 3.2 writes.** Each value is written with bash's
+    `printf %q` (`bin/init`, line 92), and what that writes depends on the bash that
+    runs it. `bin/init`'s first line is `#!/bin/bash`, which on macOS, the only
+    platform S1b ships on, is bash 3.2.57. As the delta check of revision 6 ran it
+    there (R6-B1): an empty value is `''`; a plain one is bare (`deploy`, `2222`,
+    `/Users/dev/.ssh/acme`); a space or a `$` is escaped with a backslash
+    (`/Users/dev/my\ keys/id`); **a leading `~` is written bare, not escaped**:
+    `--remote-key '~/.ssh/acme'` gives the line `HUB_REMOTE_KEY=~/.ssh/acme`, and
+    sourcing that line gives the expanded path, so the hub's scripts work. **And
+    under a UTF-8 locale some non-ASCII text is written as a raw lead byte followed
+    by an octal escape**: `Ørsted` is written as `$'`, the byte 0xC3, then
+    `\230rsted'`, and likewise `Łukasz`, `O’Neil` and most CJK text. **That is not
+    valid UTF-8** (`iconv` rejects the file). Other text is written raw and valid
+    (`Café`), and under the C locale all of it is written in octal and valid.
+    `bin/init` writes `HUB_NAME`, `HUB_CLIENT` and `HUB_OWNER` this way (lines 95 to
+    99), so a hub made on a Mac whose name, client or owner holds such a character
+    has a `hub.conf` that is not valid UTF-8, although nobody edited it.
+  - **Corrected in revision 7.** Revision 6 said here that a leading `~` is escaped
+    (`\~/.ssh/acme`) and called that "checked by running `printf %q`". The check was
+    run on bash 5.3, which does write `\~`; it was not run on macOS's `/bin/bash`,
+    and the statement was false for the platform S1b ships on. Run again by the
+    product manager on `/bin/bash` 3.2.57 for revision 7: `printf %q '~/.ssh/acme'`
+    prints `~/.ssh/acme`, `'~dev/.ssh/acme'` prints `~dev/.ssh/acme`, and under
+    `en_US.UTF-8` `Ørsted` prints the bytes above.
+  - **How a `~` gets into the file.** The README's example passes `--remote-key
+    ~/.ssh/acme` unquoted, so the engineer's shell expands it and `hub.conf` holds
+    an absolute path. A `~` that is quoted, or passed as an argument by a program
+    (suspected for F2's question 12, which hands the answer to `--remote-key`;
+    inferred by the delta check from F2's options table, not run), is recorded as
+    typed. No example `hub.conf` ships; `tests/test_init.sh` sources a generated
+    one.
+  - **`hub.conf` is a shell file.** The hub's scripts source it (`bin/lib.sh`: `.
+    "$(hub_root)/hub.conf"`), and the README has the engineer edit it by hand and
+    commit it. The scripts take each remote value from an `AGENT_REMOTE_*`
+    environment variable when one is set, else from the `HUB_REMOTE_*` value, with
+    the port defaulting to 22; an empty host means no remote is configured
+    (`bin/lib.sh`, lines 115 and 120 to 126).
+  - **How the hub itself connects: `bin/remote <command...>`** (the whole script is
+    10 lines). It needs a command, and exits 2 without one or without a host. It
+    runs `ssh -p PORT -o BatchMode=yes -o ConnectTimeout=10 [-i KEY] [USER@]HOST
+    COMMAND`, with `cd DIR &&` put before the command when `HUB_REMOTE_DIR` is set.
+    So it never opens an interactive session; it always changes folder first when a
+    folder is recorded; and with `BatchMode=yes` the SSH client asks nothing ("user
+    interaction such as password prompts and host key confirmation requests will be
+    disabled", `man ssh_config`). It passes no option that names host key checking.
+    Its header says read-only use is fine for any agent, and that anything that
+    writes runs only on the owner's say-so. `tests/test_remote.sh` drives it through
+    `AGENT_REMOTE_*` variables and a stub `ssh`.
+  - **Not checked:** any connection; what the SSH client does with a host key it has
+    not seen under `BatchMode=yes`. **Checked by the delta check of revision 6, with
+    no connection made:** `ssh -i` expands a literal leading `~/` itself (`ssh -F
+    /dev/null -G -i '~/no-such-key' -- host.invalid`, which only prints, warns with
+    the path expanded).
+- **How ADE knows that a hub is open is not on `main`.** It is defined by F2
+  (agentic-environment onboarding; PRD on `origin/onboarding-prd`, design on
+  `origin/onboarding-arch`, PR #101) and F4 (workspaces; PRD on
+  `origin/prd-workspaces`, revision 3.12; design on `origin/arch-f4`, revision 5,
+  with its contract `.ade/context/workspaces.md` there). Neither is built; F4's
+  revisions 3.11 and 3.12 are pending the owner's approval and its design is not
+  approved. What S1b takes from them, as they stand:
+  - **A finished hub** is a folder that is the top level of its own git repository,
+    with a `hub.conf` at its top that the current commit holds (F2.5, F4.1). Only a
+    finished hub has a **workspace**, and a workspace is **open** while any of its
+    workspace tabs is open in this instance (F4 WS-1 AC8); the design keeps the open
+    hubs in one registry and announces changes to it.
+  - **Nothing of the hub's is run to find any of this out.** F4 never sources
+    `hub.conf`, runs no hub script, and decides whether a hub is finished without
+    running anything the hub's git configuration names (F4 D3, WS-1 AC6, WS-2 AC8).
+    F4 reads no value out of `hub.conf` at all.
+  - **F2 already reads two `hub.conf` values without running the file** (OB-6 AC2;
+    the design's `hubconf` reader): `HUB_CLAUDE` and `HUB_CLAUDE_CONFIG_DIR`, as
+    literal values in the forms `bin/init` writes, one plain `KEY=value` line each,
+    the last one winning. A value that is not such a literal (an unescaped `$`,
+    quote, space or leading `~`, a command substitution, `export`) is not used.
+    **The design's rule is about every line that names the key** (6.6,
+    `hubconf::read_literal`): "every line that names the key as a word must be a
+    plain assignment `KEY=<value>` at the start of the line; the last one wins". So
+    a comment that names the key, an indented assignment and a `+=` each make the
+    key not a literal, as a second word after the value does. The accepted forms are
+    `''`, a bare run with every shell metacharacter escaped, and `$'...'` with a
+    fixed list of escapes. The design says nothing of a byte-order mark, of CRLF
+    line ends or of a backslash that ends a line, and the reader is a design only:
+    unapproved and unbuilt (the delta check of revision 6).
+  - **The bounds.** F4 reads a hub's files as regular files only, opened so that the
+    open never blocks, at most 1 MB each (WS-9 AC2) and only when the whole file is
+    valid UTF-8 (its contract), every call off the UI thread under a 2-second bound
+    (WS-9 AC3), through one bounded pool that the contract says new code reading a
+    hub must use. Its finished-hub check takes `hub.conf` to be a regular file
+    without following a link, so a hub whose `hub.conf` is a link or a FIFO is not a
+    finished hub.
+  - **A hub's name.** F4 names a hub by its folder's name and reads nothing from
+    `hub.conf` for it (WS-2 AC5); same-named folders are told apart by the shortest
+    part of the parent path that differs (WS-4 AC1). F2 keeps a hub's name and path
+    out of the agent tracker, recent projects and the phone (OB-14).
+  - **A hub that is removed** leaves a "Hub removed" tab, which carries neither F2's
+    hub-tab flag nor F4's workspace mark (F2 OB-5 AC4, F4 WS-2 AC7). **A hub tab
+    keeps no scrollback** (F2 OB-14 AC1).
+  - **Both are macOS only** (F2.4; F4.8, S1), and F4 S1 depends on F2 slice 1.
+- **ade-setup holds the role definitions** (`alvin-reyes/ade-setup`). ADE carries a
+  pinned copy in `vendor/ade-setup/` (release v1.0.4, `vendor/ade-setup/VERSION`),
+  which is not edited here (`CONTRIBUTING.md`) and is replaced by `npm run
+  sync:agents` (`scripts/syncAgents.mjs`, which copies `agents` and `templates` at a
+  named tag). In ade-setup a push to `main` that touches shipped content is
+  validated, tagged and published by CI, and an edit to existing definitions is a
+  patch release; nothing pulls a release automatically, and a project keeps the
+  definitions it was set up with until someone updates it (`RELEASING.md`). **What
+  the roles say today about servers, SSH, remote access and secrets** (read at
+  v1.0.4's `agents/`, which the local checkout's later commit does not change):
+  DevOps owns "configuration and secrets management" and must supply secrets
+  "without leaking secrets into code, logs, or artifacts"; the security engineer
+  asks "what a leaked credential would unlock"; SRE, support engineer, solutions
+  engineer and release manager say nothing about any of the four; and `rules.md`
+  says nothing about them. **No role tells an agent to open a session on a server,
+  and none forbids it.**
+
+### F7.1 Terms
+
+- **Saved server:** one named SSH destination the engineer saved in ADE: the fields
+  of SV-1 and nothing else.
+- **Server list:** the saved servers of one ADE profile on one machine, and the
+  place in the UI that shows them (SV-9).
+- **Destination:** a saved server's Host, Port, User and Identity file, as saved.
+  The **destination summary** is the one line built from them (SV-9 AC1).
+- **The SSH client:** the program the user's own shell runs for the name `ssh` in an
+  ADE terminal: the first `ssh` on that shell's `PATH`, unless the user's own
+  start-up files point the name at another program (SV-8 AC1). Normally OpenSSH. ADE
+  ships none and embeds none (D2).
+- **The grammar:** the only argument list ADE ever gives the SSH client (SV-2 AC1).
+- **Supported shell:** `zsh` or `bash` (SV-2 AC10). Everything D4 promises is
+  promised under these two only.
+- **Connect / Reconnect:** the two user actions that start the SSH client. Nothing
+  else in ADE does (SV-2 AC6).
+- **Connect request:** what the webview sends to start a connection: a saved
+  server's identifier and the pane it is for. It carries no host, no user and no
+  argument. In a webview test this is the thing counted.
+- **Client start:** one start, by ADE's Rust side, of the user's shell told to
+  replace itself with the SSH client, for one connect request (D4). In a Rust
+  test it is observed through the **stub `ssh`**.
+- **Stub `ssh`:** in a Rust test, an executable named `ssh` in a fixture folder
+  that a fixture shell start-up file puts first on `PATH`. It records its
+  arguments, environment, folder and process id to a file, then exits with the
+  status the test chose, at once or when the test tells it to.
+- **Connection:** one client start and the process it made. It is **connecting**
+  from the client start until ADE has confirmed that the pane's process was handed
+  over to the SSH client (SV-2 AC9), **live** from that confirmation until the
+  process ends, and **ended** after. A connection that is never confirmed is never
+  live: it stays connecting until its process ends, the engineer ends it or the pane
+  is closed. **"Live" means the `ssh` process is running**, which is true from
+  before it has reached the server, through the host key question and the password
+  prompt; it does not mean "logged in" (SV-3 AC2).
+- **Remote pane:** a terminal pane whose record says its program is, or was, a
+  connection (the **remote record**: which saved server, the destination at the
+  last client start, and connecting, live or ended). A pane where the user typed
+  `ssh` by hand in a local shell is not a remote pane (F7.5). In S1 a tab has at
+  most one remote pane: the first pane of the tab Connect opened (D11).
+- **Server-named:** a mark on a tab's own record: ADE gave the tab its name from a
+  saved server. Connect sets it. It is cleared when the user **renames** the tab,
+  which means commits a name that differs from the tab's current name (SV-3 AC1),
+  and when the tab's remote pane is closed (SV-3 AC9), and by nothing else. A rename
+  box committed with its text unchanged is not a rename.
+- **Server tab:** a tab that is server-named **or** holds a remote pane. Every
+  rule about what Duplicate, Move to New Window, Reopen Closed Tab, tab sets, the
+  session's export and the phone do is written for a server tab or for the
+  server-named mark, both read from the tab's own record; none is written for
+  "a tab that holds a remote pane" alone (review N-B1). By SV-3 AC9 a
+  server-named tab always holds a remote pane in a session ADE wrote; the rules
+  do not rely on that.
+- **Remote mark:** what shows the user that a pane or tab is remote, and whether
+  its connection is connecting, live or ended (SV-3 AC2).
+- **SSH config alias:** a `Host` name in the user's own `~/.ssh/config`. Typed in a
+  saved server's Host field it works as it does after `ssh` on a command line,
+  because the SSH client reads that file itself (D5).
+- **Marker:** in a test, a unique string placed in a field so its absence from an
+  output can be asserted.
+- **V1 to V11:** the facts the delta review of revision 2 established on this
+  machine (OpenSSH 10.3p1, zsh 5.9, bash 3.2.57; no host contacted): V1 to V9 by
+  experiment, V10 by reading the code at 84389eb, V11 from the man pages. They are
+  summarised in F7.0 and cited by number.
+- **W1 to W11:** the facts the delta review of revision 3 established the same way
+  (macOS 26, zsh 5.9, bash 3.2.57; a scratch home, a stub `ssh`; W11 is a reading of
+  the code at 84389eb), summarised in F7.0 and cited by number.
+- **X1 to X9:** the facts the final delta check, of revision 4, established: X1, X2
+  and X5 by running code on this machine, X3, X4 and X6 to X9 by reading the code
+  and the tickets at 84389eb. X1, X2 and X9 are summarised in F7.0; the others are
+  cited by number where they are used (X3 the rename routes, X4 the two feeders, X5
+  the hand-over probes, X6 F1's tickets, X7 phone-watch ticket 8, X8 `shell_from`).
+- **Image:** what a process is running at one moment: its argument list, whose
+  first word is taken as its program (SV-2 AC9). A process that replaces itself
+  (`exec`) keeps its process id and changes image (W4).
+- **Hand-over message / End:** what a connecting pane shows when its start-up files
+  have not handed over to `ssh`, and the control beside it with which the engineer
+  ends what is running in that pane (SV-2 AC9). ADE ends nothing of its own accord.
+- **A process of the pane:** a process attached to the pane's terminal: its
+  session's shell, or whatever replaced it, and the terminal's foreground job. A
+  process that a start-up file put in a session of its own (`setsid`, a daemon) is
+  not one (SV-2 AC3, AC4, AC9).
+- **Hub, finished hub, hub folder, workspace, open** (S1b): F2's and F4's terms,
+  used unchanged (F2.5, F4.1; summarised in F7.0). **The hub's label** is the hub
+  folder's name, as F4 names a hub; where F7 shows it, it is shown only when it
+  passes the character rule of SV-13 AC2, and otherwise as the fixed text "Hub
+  server".
+- **Hub's server** (S1b): the one SSH destination that an open hub's `hub.conf`
+  records, as ADE reads it (SV-13 AC1). It is **usable** or **not usable**. It is
+  not a saved server: it is never in the server list's store, and ADE cannot change
+  it.
+- **Hub connect request** (S1b): what the webview sends to connect to a hub's
+  server: the hub, the read the pressed row was showing, and the pane it is for.
+  Like a connect request it carries no host, no user and no argument (SV-13 AC4).
+
+### F7.2 Problem
+
+The engineer reaches client and own servers over SSH many times a day. Today in ADE
+that means remembering and retyping `ssh -p 2222 deploy@db1.example.com -i ...` in a
+tab, and typing the server's password or the key's passphrase each time, or keeping
+a separate tool (PuTTY, a notes file) for the list. And once inside, ADE still
+treats the tab as a local one: a clicked path opens the wrong (local) file, the file
+browser shows a local folder, and nothing on the tab says "this is a server". S1
+solves the list, the retyping of the command and the wrong-machine mistakes. It
+does not type a password or passphrase for the engineer: that is the operating
+system's or the agent's job for passphrases (D3), and S2's, if it passes its
+gate, for passwords.
+
+### F7.3 Users and jobs
+
+- **The engineer with several servers** (own machines, client staging and
+  production hosts):
+  - **J1.** Save a server once and get into it again without retyping the command
+    or looking anything up. (Not having to type a server password either is S2,
+    gated; SV-12.)
+  - **J2.** Keep, correct and remove those saved servers.
+  - **J3.** See at a glance which tabs are on a server, and not mistake a remote
+    shell for a local one or the reverse.
+  - **J4.** Keep using the SSH setup they already have (keys, agent, hardware key,
+    `~/.ssh/config`, known hosts, jump hosts) without ADE asking for any of it.
+  - **J5.** Keep client host names, user names and key locations on the machine.
+  - **J6** (S1b). Reach the server a hub already records without saving it a
+    second time, and see that it is the hub's and not their own.
+
+### F7.4 Goals (measurable)
+
+G1 to G6 are S1's, G7 is withdrawn and G8 is S1b's. None depends on the
+stored-password slice, and none of G1 to G6 depends on S1b.
+
+- **G1. A saved server is three key actions away, in the main window.** The three
+  actions are: the palette's shortcut, typed text, Enter. With the command palette
+  open and text typed that the palette's **existing** match rule (F7.0) matches
+  for one entry only, that server's connect entry, that entry is the selected one,
+  and Enter makes exactly one connect request (webview test) and exactly one
+  client start whose arguments equal the grammar for that server (Rust test)
+  (SV-9 AC2, SV-2 AC1). F7 changes neither the palette's match rule nor the order
+  of the entries it has today. Connect is offered in the main window only (SV-2
+  AC7).
+- **G2. ADE holds no credential.** In S1 there is no field and no place in any
+  store for a password or a key passphrase, 0 bytes of any key file are read, F7
+  makes 0 keychain calls, and ADE sets no askpass variable (SV-1 AC2, AC5, SV-2
+  AC8, SV-7 AC4). Whatever the SSH client asks, it asks the engineer in the pane.
+- **G3. ADE adds nothing to what the user's SSH setup does.** For a connection ADE
+  starts exactly one program, the user's shell, with one instruction: replace
+  yourself with `ssh`, given the grammar. That instruction holds nothing outside
+  the grammar, ADE builds 0 options that touch host key checking, and ADE writes 0
+  files under `~/.ssh` (SV-2 AC1, AC2, SV-7 AC1 to AC3). **Stated limits** (review
+  R4-m3): what the shell and its start-up files then run is theirs, and ADE claims
+  only what it observes of it (G6, SV-2 AC9); and what else runs, is forwarded or
+  is sent during a connection is decided by the user's and the system's own SSH
+  configuration (F7.9), which ADE neither reads nor changes.
+- **G4. Nothing leaves the machine.** 0 saved-server names, hosts, users or key
+  paths in ADE sync's export, tab sets, ADE's logs, the agent tracker, recent
+  projects or the phone relay, over fixtures that include a server tab whose server
+  was renamed or removed, a server tab the engineer renamed, one whose rename box
+  was opened and committed unchanged, and a tab whose remote pane was closed (SV-5,
+  SV-3 AC1). **With one qualifier** (review R4-m10): a name the engineer typed onto
+  a tab is theirs. It stays on the machine for as long as that tab holds its remote
+  pane; once the remote pane is closed, the tab is a local tab and its typed name is
+  exported and relayed as any tab's is, even when what was typed is the server's
+  name (F7.9; SV-5 AC2's own test exports it). What stays **on** the machine, and
+  where, is stated in F7.9.
+- **G5. Nothing connects by itself, and no local shell is left under a server's name
+  as an ordinary tab.** 0 connect requests and 0 client starts from session
+  restore, Reopen Closed Tab, Duplicate, Move to New Window, loading a tab set, app
+  launch, `ade open` or `/open`; and after each of those, after an unchanged rename
+  commit, and after the remote pane of a tab is closed, 0 tabs are server-named
+  without holding a remote pane (SV-2 AC6, SV-3 AC1, AC9, SV-4 AC2, AC3). **With one
+  qualifier** (review R4-M2; owner, OQ-20 (2)): a **connecting** pane that the
+  engineer's start-up files never handed over may hold their local shell or their
+  local `tmux` under the server's name, for as long as they leave it. It is not an
+  ordinary tab: it carries the connecting mark and the hand-over message, and it is
+  a remote pane throughout, so file links, the folder and ADE's own writes are off
+  in it (SV-2 AC9, SV-6).
+- **G6. No wrong-machine action.** In a remote pane, 0 local files opened from a
+  clicked path (SV-6 AC1), 0 ADE-initiated writes, and **0 bytes written into it by
+  ending or closing it** (SV-2 AC3, SV-6 AC4); and 0 panes shown
+  as live unless **an image ADE observed of the pane's own process was named `ssh`,
+  or was an interpreter given a script so named, and held exactly the grammar**
+  (SV-2 AC9). That is what ADE can observe. It is not a claim about why the shell
+  ran that program, nor about what the program is (review R4-m3).
+- **G7.** Withdrawn from the goals in revision 3. It measured the stored secret;
+  what a stored password must achieve is now the list of outcomes in SV-12, and
+  becomes a goal again only when that slice has criteria.
+- **G8 (S1b). A hub's server is offered while its hub is open, and nothing of the
+  hub's runs or connects by itself.** While a finished hub's workspace is open, its
+  usable recorded server is exactly one row of the server list and one palette
+  entry, each marked as the hub's (SV-13 AC2), and a tab opened from it shows that
+  its source is a hub (SV-13 AC5). 0 hub connect requests and 0 client starts come
+  from opening, restoring or refreshing a hub, from Open Hub, or from opening the
+  list; ADE starts 0 programs from the hub and sources 0 bytes of `hub.conf` to read
+  it (SV-13 AC1, AC4). Every client start for a hub's server is given exactly the
+  grammar, built from four values that passed SV-1 AC1's rules, with 0 arguments
+  taken from `HUB_REMOTE_DIR` or any other key (SV-13 AC4). 0 of the hub's values
+  are in the server list's store, ADE sync's export, a tab set, ADE's logs or the
+  phone payload (SV-13 AC3, AC6).
+
+### F7.5 Non-goals (deliberately out)
+
+- **A PuTTY replacement, feature for feature.** No serial, telnet, rlogin or raw
+  connections; no terminal-emulation, keyboard, bell or window settings per server;
+  no session logging to a file; no PuTTY `.ppk` keys, no reading PuTTY's saved
+  sessions, no `plink`.
+- **Keys.** No key generation, no key conversion, no adding keys to an agent, no
+  copying a public key to a server (`ssh-copy-id`), no certificate handling. ADE
+  never reads, stores or copies a private key file.
+- **Credentials.** In S1 ADE stores and enters none: no password, no key
+  passphrase, no one-time code, no hardware-key PIN, no answer to a host key
+  question, and no remembering of anything typed in a terminal. A **key
+  passphrase** is never stored by ADE, in any slice (owner, D14). A server
+  password is S2, gated (SV-12).
+- **An SSH implementation inside ADE** (D2).
+- **Remote files** (an SFTP or SCP browser, upload, download, editing a remote file
+  in ADE's editor), **port forwards and tunnels**, and **a status view of the
+  server** (load, disk, services). Out by the owner's answer to OQ-1.
+- **Quick connect:** typing a host and connecting without saving it. Every
+  connection ADE starts is from a saved server or, in S1b, from an open hub's
+  recorded server (SV-13).
+- **Free-text SSH options, a remote command, and a proxy command** in a saved
+  server (D6).
+- **Writing `~/.ssh/config`, `known_hosts`, or any file under `~/.ssh`** (D5), and
+  a "forget this host key" action.
+- **Anything installed or run on the server by ADE:** no agent install, no shell
+  integration, no Agent status from a remote Claude Code, no `ade` CLI there.
+- **Sharing:** no sync of saved servers, no team list, no export or import file
+  (D7; the owner's answer to OQ-4).
+- **Anything more of a hub than the four values of its recorded server** (S1b; D16,
+  D18). Not the folder (`HUB_REMOTE_DIR`), not the staging URL, not the
+  `AGENT_REMOTE_*` overrides, and not the options the hub's own `bin/remote` passes.
+  ADE never runs `bin/remote` or anything else from a hub for this, never writes
+  `hub.conf`, and offers no way to edit a hub's server. A hub's server is not
+  stored, not synced and, in S1b, not copied into the engineer's own list (a "Save a
+  copy" action is listed under S3, SV-10). No server from a hub that is not open,
+  from an unfinished hub, or from any file but the hub's top-level `hub.conf`.
+- **Detecting an `ssh` the user typed by hand** in a local tab. That tab stays as it
+  is today (F7.0); only connections ADE starts are remote panes.
+- **Mosh, Tailscale SSH wrappers, cloud provider CLIs** (`gcloud compute ssh`,
+  `aws ssm`), containers and Kubernetes `exec`.
+- **A login shell other than `zsh` or `bash`** in S1 (SV-2 AC10, OQ-20).
+- **A server tab in its own window** in S1 (SV-3 AC8, OQ-19).
+- **Inside an engagement,** for now (owner, D15).
+- **Windows** (SV-8 AC3, OQ-12).
+
+### F7.6 Decisions
+
+D1, D2, D3, D7, D14 and D15 are the owner's answers (F7.10), and D9's environment
+rule is the owner's answer to OQ-15. On 2026-11-18, third round, the owner accepted
+the recommendations behind D5 (OQ-8), D6 (OQ-7), D8 (OQ-5), D9 (OQ-6), D10 (OQ-10),
+D11 (OQ-9), D12 (OQ-12) and D13 (OQ-19). D4 is the product manager's model for
+carrying out D2; its two owner decisions are OQ-20's. D16 and D17 are the owner's
+decisions of 2026-11-18, fourth round (OQ-21, OQ-22), recorded as given; D18 is
+what the product manager decided in specifying D16. Where a decision records a
+consequence, it is labelled as a consequence and is not a reason the owner gave.
+
+- **D1. The first version is the saved list plus a terminal** (owner, OQ-1). A
+  list, and Connect opens an SSH session in an ADE terminal. A remote file browser,
+  a status view and port forwards are out.
+- **D2. ADE runs the machine's own SSH client in an ADE terminal** (owner, OQ-2).
+  The user's `~/.ssh/config`, agent, known hosts, jump hosts, hardware keys and
+  their OS's security updates all apply as they already do. *Rejected:* an SSH
+  library inside ADE.
+- **D3. Credentials** (owner: OQ-3 of 2026-11-18, as amended the same day by
+  D14). **S1 stores none and enters none:** every password, passphrase, code and
+  host key question is the SSH client's own prompt in the pane, answered by the
+  engineer. **A server password** may later be stored in the OS keychain, opt-in
+  per server, and entered by ADE: that is S2, gated (SV-12). **A key passphrase
+  is never stored by ADE:** the operating system's own support (on macOS,
+  `UseKeychain` in the user's SSH configuration and `ssh-add
+  --apple-use-keychain`; V11) or the user's SSH agent does that. ADE never reads
+  or stores a private key. History: revision 1's D3 stored nothing; revision 2's
+  D3 stored passwords and passphrases.
+- **D4. A connection is the pane's program: the user's own shell, replacing itself
+  with the SSH client.** For a client start ADE starts the same shell it starts
+  for every terminal, as a login and interactive shell, with one instruction: run
+  `ssh` with the grammar **in place of yourself**. The shell reads the same
+  start-up files as in any ADE terminal, so the agent socket, `PATH` and whatever
+  else the user exports there apply, and the `ssh` that runs is the one their
+  shell would run. Because the shell is replaced, no local prompt can follow in
+  that pane when the SSH client ends (SV-2 AC4). The command is given to the shell
+  as an argument, not typed, so it is in no history file and ADE writes nothing
+  into the pane (SV-2 AC3, SV-7 AC3). *Rejected:* (a) typing `ssh ...` into the
+  tab's login shell and leaving the user in that shell afterwards: the same pane
+  would be a server one moment and the local machine the next, which is the
+  mistake J3 is about, and the line would go into the shell's history; (b) ADE
+  starting `ssh` itself with an environment captured from a separate shell run: it
+  is two runs, ADE has to choose which start-up files count (a login shell that is
+  not interactive does not read `.zshrc`, where many users export
+  `SSH_AUTH_SOCK`), and ADE has to resolve `ssh` itself (`find_command`'s folder
+  order is not the user's `PATH`, F7.0).
+
+  **What the model costs, stated** (reviews N-M1, N-M2, R3-M1, R3-M4; V8, W2 to W8):
+  - The user's start-up files run before the SSH client, as in every ADE terminal.
+    Anything they print appears in the pane first, and anything they ask, the
+    engineer answers there.
+  - A start-up file can keep the SSH client from ever running: it can replace the
+    shell with another program (a line that attaches to `tmux` in every interactive
+    shell does exactly this, and so does one that hands over to another shell, W7),
+    or wait. So "the pane's process is the SSH client" is **not assumed: it is
+    confirmed** before the pane is shown as live. A start that is not confirmed is
+    **kept, not ended by ADE of its own accord** (owner, OQ-20 (2)): the pane stays
+    connecting, says that the
+    start-up files have not handed over to `ssh`, and offers End. A start whose
+    process ends before `ssh` was seen says so, with the exit status (SV-2 AC9).
+  - The arguments pass through a shell, so every word is quoted, always (SV-2 AC2,
+    SV-7 AC3).
+  - A start-up file is the user's own code, and it can define a function named after
+    the very words the instruction uses (`exec`, `command`, `builtin`). No
+    invocation prevents the shell from running that function instead (V8, W2). SV-2
+    AC9's confirmation is the backstop: such a start is never shown as live.
+  - The user's `ssh` may be a wrapper script that passes through several images and
+    adds arguments of its own (W4). It is confirmed on what the shell handed it;
+    what it passes on is the user's (SV-2 AC9, SV-8 AC1).
+  - It is promised under `zsh` and `bash` only (SV-2 AC10; owner, OQ-20 (1)).
+
+  The exact invocation per supported shell is the architect's; if the architect
+  finds that SV-2's property cannot be met under one of them, that comes back as
+  a question, not as a silent second model.
+- **D5. ADE and `~/.ssh/config` stay separate; ADE never writes it.** ADE keeps its
+  own list. The SSH client still reads the user's config on every connection, so an
+  alias works in the Host field and every option the user set there applies
+  (**including ones that run programs**, F7.9). Importing aliases from that file,
+  read-only, is a later slice (S4). *Rejected:* writing saved servers into
+  `~/.ssh/config`; and showing the file's hosts live as the list (OQ-8).
+- **D6. Five fields, no free text for options.** Name, Host, Port, User, Identity
+  file. Anything more advanced goes in the user's own `~/.ssh/config` under an
+  alias, which the Host field accepts. *Rejected:* an "extra options" or "remote
+  command" field (OQ-7). A jump host is a field of its own in S3, not free text.
+- **D7. Saved servers stay on this machine, per profile; no sync, no export or
+  import file** (owner, OQ-4). They are in no store ADE sync exports, in no tab
+  set, log or relay payload.
+- **D8. Only Connect and Reconnect start the SSH client.** Restore, Reopen Closed
+  Tab, Duplicate, loading a tab set and app launch never do. A restored remote
+  pane comes back ended, with Reconnect (OQ-5).
+- **D9. No route for agents through ADE, and ADE puts nothing of its own into the
+  connection's environment.** `ade open` and `/open` get no server option, and no
+  ADE interface lists the saved servers to a program in a terminal (owner, OQ-6). To
+  the shell it starts for a connection, **ADE passes no Secrets vault variable and
+  no `ADE_*` variable, and from what it inherited in its own environment it removes
+  every `ADE_*` variable and every variable whose name is a vault secret's name**
+  (owner, OQ-15, 2026-11-18: neither; SV-2 AC8). The second removal is the product
+  manager's stricter reading of that answer, taken in revision 5 and flagged for the
+  approval (F7.11): the names are read from the vault's list of names, with no
+  keychain call (X9). This is a rule about what ADE passes and removes. It is not a
+  promise about everything the SSH client receives. **Four things it does not
+  cover** (reviews R3-M2, R4-M1, R6-m1): a secret's value held in a variable under
+  another name; whatever the user's start-up files export, which run in between and
+  are the user's; a secret that was removed from the vault after ADE started, whose
+  name is then no longer in the list; and a list of names that is missing or
+  damaged, which is read as empty, so that nothing is removed by name. **Nor is it a
+  claim that the list is hidden:** it is a file in the user's own app data, and any
+  program running as the user, an agent in an ADE terminal included, can read or
+  rewrite it; SV-7 AC5 says what ADE does about a rewritten row. An agent that runs
+  `ssh` itself in its own shell is unchanged by F7. *Rejected for now:* `ade open
+  --server NAME` (OQ-6).
+- **D10. A remote pane has no local folder, and ADE initiates no write into it.**
+  File-path links are off, the file browser and the panels that follow a folder
+  get none from it, and every ADE feature that types something refuses there
+  (SV-6) (OQ-10).
+- **D11. A new connection opens in a new tab in the main window.** Splits and
+  sub-terminals of a server tab are local shells, as today, and carry no remote
+  mark. Opening a connection as a split or sub-terminal, duplicating a
+  connection, and moving one to its own window are S3 (OQ-9, OQ-19).
+- **D12. macOS and Linux only.** They are what ADE ships on. Windows is specified
+  with F1's Windows work (OQ-12).
+- **D13. Additions the owner's sentence did not ask for, kept by the owner** (OQ-19,
+  2026-11-18: all six): a limit of 200 saved servers (SV-1 AC4); and five changes to
+  what existing actions do for a server tab: Duplicate is not offered; Move to New
+  Window is not offered (SV-3 AC8); Reopen Closed Tab brings the tab back as an
+  ended server tab instead of a local shell (SV-4 AC3); saving a tab set leaves
+  server tabs out (SV-5 AC3); and closing a tab's remote pane gives the tab a new
+  tab's name (SV-3 AC9). All five exist so that no action leaves a local shell under
+  a server's name, copies a server's name into a synced store, or ends a live
+  connection unasked. The 30 s hand-over bound is kept, and only times a message
+  (owner, OQ-20 (2); SV-2 AC9). Decisions of the same kind that revisions 4 and 5
+  took, and that no question asked, are listed for the owner's approval in F7.11.
+- **D14. Split and spike** (owner, 2026-11-18). (1) **S1, the saved list and the
+  terminal, is built now.** (2) **Stored secrets become a later slice, S2, and
+  passwords only**; key passphrases are not stored by ADE (D3). (3) **S2 is gated**:
+  it is not specified, not sharded and not built until the architect has shown,
+  against a real and disposable test server, that the outcomes the owner was
+  promised can hold (SV-12). (4) **Nothing in S1 depends on S2.** This answers OQ-18
+  and amends the owner's answer to OQ-3. The decision is recorded as given; the
+  owner stated no reasons. What the reviews established about the helper mechanism
+  (V1 to V5, V11) is in F7.0 and SV-12, as the reviews' facts.
+- **D15. Not available inside an engagement, for now** (owner, OQ-14, 2026-11-18:
+  option (a)). Approved F1 is unchanged (SV-5 AC8). **Consequence, stated by the
+  product manager and not a reason the owner gave** (the question as asked did not
+  state it; it is listed for the owner's approval in F7.11): client-server work then
+  happens in the default profile, or by a hand-typed `ssh` inside the engagement,
+  which has none of F7's protections.
+- **D16. A hub's server shows up** (owner, OQ-21, 2026-11-18). When an ade-brain hub
+  is open, ADE reads the SSH server recorded in the hub's `hub.conf`, read-only and
+  with nothing run from the hub, and offers it in the saved-servers list, marked as
+  the hub's. It is added to F7 as its own slice after the list and the terminal
+  (S1b, SV-13). The decision is recorded as given; the owner stated no reasons.
+- **D17. Roles learn the feature** (owner, OQ-22, 2026-11-18). Role updates are
+  planned in ade-setup for what F7 adds; the owner's example is the DevOps and SRE
+  roles told that saved servers exist and that agents may not open them. They are
+  listed in this PRD as follow-up work, released from ade-setup and re-vendored into
+  ADE (F7.11). The decision is recorded as given; the owner stated no reasons.
+- **D18. How S1b is specified: the product manager's decisions.** None of these is
+  the owner's. Each is written into SV-13 and listed for the approval in F7.11, with
+  its alternative where there is one.
+  - (a) **Read by F2's reader, with one stated addition** (revision 7; review
+    R6-B1). The four values are read as literals by the rule F2 already has for
+    `hub.conf` (OB-6 AC2): the forms `printf %q` writes, and nothing else. A value
+    that would need expansion, or that someone wrote by hand in quotes, is shown as
+    not usable and is never guessed. **The addition, for `HUB_REMOTE_KEY` only: a
+    value that begins with a bare `~/` is accepted as the literal it is.** That is
+    what `bin/init` writes on a Mac for a key path given with `~` (F7.0); the
+    Identity file rule already allows a path starting `~/` (SV-1 AC1); and ADE
+    replaces it with the home folder as for a saved server (SV-2 AC1). A `~user/`
+    form, and a `~` anywhere else, stay "not a literal". **So this is no longer F2's
+    reader unchanged:** it is F2's reader and this one rule for this one key.
+    *Alternative:* no exception, at the cost that a key path which `bin/init` itself
+    recorded with `~` shows as not usable on a Mac, the remedy being an absolute
+    path in `hub.conf`. *Also rejected:* a second, wider reader in F7, which would
+    be two readings of one file.
+  - (b) **Every value goes through SV-1 AC1's rules, unchanged,** and one value that
+    fails makes the whole hub's server not usable: the row is shown without Connect
+    and says which setting and why.
+  - (c) **Only host, user, port and key are used** (D6). `HUB_REMOTE_DIR` is not
+    applied, so the session opens in the remote account's default folder, and
+    nothing else the hub's own script does is copied.
+  - (d) **Shown while the hub's workspace is open in this instance** (F4's meaning
+    of open, which counts every window), in the main window's list, and read again
+    each time it is shown or used. *Alternative:* only while a tab of the hub is
+    open in the main window.
+  - (e) **Never merged.** Two open hubs give two rows; a hub's server with the same
+    destination as a saved server gives both rows.
+  - (f) **Connect is one press, with no second question,** as for a saved server;
+    the destination the row showed is the one connected to, or nothing connects.
+    *Alternative:* a confirmation naming the hub and the destination before every
+    connection to a hub's server.
+  - (g) **Not editable, and no "Save a copy" in S1b.** The engineer who wants the
+    server in their own list adds it as today.
+  - (h) **The tab it opens is a server tab by every S1 rule,** named with the hub's
+    label, **and it shows that its source is a hub** (revision 7; review R6-M1). It
+    is neither an F4 workspace tab nor an F2 hub tab, so it keeps its scrollback on
+    this machine as any server tab does (OQ-11), where a hub tab keeps none.
+  - (i) **A dependency, not a merges-second item.** S1b is sharded only after F4
+    slice S1 and F7 S1 are both on `main`; no mirror is written into an F4 or F2
+    story.
+  - (j) **macOS only,** as F2 and F4 are.
+  - (k) **The hub is named by its folder's name,** as F4 names it; `HUB_NAME` is not
+    read.
+  - (l) **Only the lines that assign the four keys must be valid UTF-8** (revision
+    7; review R6-B1). The validity check applies to the lines that name one of the
+    four keys ADE reads, not to the whole file; bytes elsewhere in the file are not
+    interpreted and cannot make a hub's server not usable. On a Mac `bin/init`
+    itself can write a `hub.conf` that is not valid UTF-8, on the lines for the
+    hub's name, client and owner (F7.0). *Alternative:* the whole-file check, which
+    F4 applies to the files it reads, at the cost that a hub whose client, owner or
+    name holds certain characters has no usable server, and no hand edit caused it.
+
+### F7.7 Requirements
+
+Each numbered criterion of S1 (SV-1 to SV-9) and of S1b (SV-13) is decidable by an
+automated test, which it states, or names the criteria whose tests cover it; nothing
+is "checked by review" (`.ade/rules.md`, section 3). A statement that cannot be
+tested is not a criterion and sits in F7.9. S2, S3 and S4 (SV-12, SV-10 and SV-11)
+have no criteria. Each criterion names the side that owns it. ADE has no GUI
+end-to-end harness, so there are three kinds:
+
+- **Rust** owns everything that decides what is run or stored: the field rules, the
+  grammar, the client start and its confirmation, the server list's store, the
+  session's export, and what is logged. Rust tests are pure functions, or use a
+  fixture home folder, a fixture shell start-up file and the stub `ssh` (F7.1).
+  They run on macOS and Linux, under `zsh` and `bash` where a shell is involved,
+  and never skip for a missing shell. There is **one** implementation of the
+  rules and the grammar, in Rust; the webview asks Rust and never builds or sees
+  an argument list.
+- **TypeScript (pure or store)** owns what the webview decides from records it
+  already holds: whether a pane is remote and connecting, live or ended, whether a
+  tab is a server tab, what a tab reports as
+  its folder, which palette entries exist, and which writes are refused. A store
+  test stubs `invoke` and counts **connect requests** and `write_pty` calls. It
+  cannot see an argument list, and no criterion asks it to.
+- **Component** tests (testing-library, as `closeConfirm.test.tsx` does) own what
+  is shown and offered: a mark's text or accessible name, a button's presence, a
+  message, a confirmation, keyboard use.
+
+A criterion about something that must **not** happen also asserts the state that
+must hold instead. UI copy says "Better Terminal", never "ADE". Host names and
+addresses in examples are invented and use documentation ranges.
+
+#### SV-1. Saved servers: add, edit, remove (S1)
+
+1. **Fields and rules.** A saved server has exactly these fields. The rules are one
+   Rust function, used when saving and again at every client start (SV-2 AC5):
+
+   | Field | Required | Rule |
+   |---|---|---|
+   | Name | yes | trimmed; 1 to 64 code points; no control (Cc), format (Cf: bidi overrides, zero-width characters) or line and paragraph separator (Zl, Zp) characters, the rule `ade open --name` uses; unique in the list, compared after Unicode NFC normalisation and Unicode lowercase mapping (`DB1` and `db1` are the same name; `Straße` and `Strasse` are different names) |
+   | Host | yes | a host name, an IPv4 or IPv6 address, or an SSH config alias; 1 to 253 characters, each one of `A-Z a-z 0-9 . - _ :`; the first is a letter, a digit or `:` (so never `-`). **And:** (a) a value containing `:` must **parse as an IPv6 address** in its standard text form (RFC 4291, section 2.2: at most one `::`, at most eight groups of one to four hexadecimal digits, an optional dotted IPv4 tail; the standard library's IPv6 parser is the reference), and must not be the unspecified address `::`; (b) a value of only digits and dots must be four decimal numbers 0 to 255 with no leading zero; (c) no dot-separated part starts `0x` or `0X`. An internationalised name is entered in its `xn--` form. No brackets, no `%` (so a link-local IPv6 address with a zone, `fe80::1%en0`, cannot be saved in S1; put it in `~/.ssh/config` under an alias) |
+   | Port | no | after trimming, 1 to 5 digits with no leading zero and no sign, value 1 to 65535. Stored as a number and passed in that canonical decimal form. Empty means ADE passes no port, and the SSH client's own default or the user's config decides |
+   | User | no | 1 to 64 characters, each one of `A-Z a-z 0-9 . _ - @`; the first is not `-`. Empty means ADE passes no user. A user name outside this set (a Windows `DOMAIN\user`, a machine account ending `$`) is set in `~/.ssh/config` under an alias |
+   | Identity file | no | a **path**, absolute or starting `~/`; 1 to 1024 characters, each in `0x20`-`0x7e`; no `%` and no `${` (the SSH client expands `%` tokens and `${VAR}` in an identity file, F7.0). `..` is allowed: it is the user's own path |
+
+   **Why User is this narrow (review B1):** the SSH client puts the user name into
+   the user's own `ProxyCommand` and similar settings as `%r`, and a shell runs
+   those (F7.0). Every character of the set is inert in a POSIX shell, so no saved
+   User value can be expanded or run there, on any OpenSSH version.
+
+   Test (Rust, pure): a table of accepted and refused values per field, with the
+   refusal naming the field. Accepted: `db1.example.com`, `192.0.2.7`,
+   `2001:db8::7`, `::ffff:192.0.2.7`, `staging-db` (an alias),
+   `xn--bcher-kva.example`; users `deploy`,
+   `svc.backup_1`, `deploy@corp.example`; ports `22`, `2222`, ` 2222 ` (stored
+   `2222`); identity file `~/.ssh/id_ed25519`, `/home/dev/keys/../keys/id`.
+   Refused: an empty host, `-oProxyCommand=x`, `host name`,
+   `deploy@db1.example.com` in Host, `db1.example.com;id`,
+   `db1.example.com:2222` (the message says to use Port), `2130706433`, `127.1`,
+   `0x7f.1`, `010.0.2.7`, `fe80::1%en0`, `[2001:db8::7]`, `a:b:c`, `1::2::3`, `::`,
+   `2001:db8::12345`, a 254-character host;
+   ports `0`, `65536`, `22x`, `022`, `+22`; users `$HOME`, `$GITHUB_TOKEN`, `%r`,
+   `%h`, `a*`, `a?`, `~root`, `a#b`, `a!`, `a=b`, `a[b`, `a^`, `a,b`, `a/b`,
+   `a+b`, `a:b`, `a b`, `-l`, `DOM\user`, `svc$`; identity files `id_ed25519` (not
+   absolute), `~/.ssh/%h`, `${HOME}/.ssh/id`; a name holding a right-to-left
+   override; and a second server named `DB1` when `db1` exists.
+2. **What a saved server never holds.** There is no field, and no place in the
+   list's stored record, for a password, a key passphrase, the contents of a key,
+   SSH options, a remote command or a proxy command. The stored record has the
+   five fields, an identifier, a format version and nothing a user typed besides.
+   A record that carries any other
+   member (written by hand, or by another program) is loaded without it, the
+   member never reaches the SSH client, and the next save of the list writes the
+   record without it. Test (Rust): a record with added `password`, `options`,
+   `command` and `proxyCommand` members loads to the five fields; the grammar built
+   from it has none of their values; after one save through ADE the store holds
+   none of those member names or values.
+3. **Add, edit, remove.** The engineer can add a server, change any field of one,
+   and remove one. Each save applies AC1's rules and refuses the whole save,
+   changing nothing, when one fails. Removing asks once, removes only ADE's record,
+   and touches no open tab and no file outside ADE's store. Tests: (Rust) after an
+   add, an edit and a remove the list holds what was asked, and a refused save
+   leaves the store byte-identical; (component) Remove shows one confirmation naming
+   the server, and sends no remove request until it is confirmed.
+4. **Limits and a store ADE cannot read.** The list holds at most 200 servers; the
+   201st add is refused with a message (**an addition, D13, OQ-19**). A store that
+   does not parse, or whose format version is newer than this build knows, is
+   never overwritten: the list shows that it could not be read, and Add, Edit,
+   Remove, Connect and Reconnect are refused until it can. Test (Rust): with a
+   corrupt store and with a newer-version store, every write action leaves the
+   file byte-identical and returns the "could not be read" kind. **A list that
+   cannot be written** (a full disk, a folder without permission; review R4-m8):
+   Add, Edit and Remove are refused with the kind "the server list could not be
+   saved" (SV-5 AC4), the list ADE shows is the one on disk, and the store on disk
+   is whole: what it was before the action, never a part-written file. Test (Rust,
+   Unix): with the store's folder made read-only, an add, an edit and a remove each
+   return that kind, the file is byte-identical, and a load afterwards gives the
+   list as it was.
+5. **The identity file is never opened.** ADE may look at the path's file-system
+   entry (does it exist, is it a regular file) to warn, not refuse, when it is not
+   an existing regular file. It never opens it. Test (Rust, Unix): with the identity
+   file a FIFO that has no writer (opening it for reading would block for ever), and
+   again with a regular file of mode `000`, save, the warning check and the client
+   start each **return**; the FIFO case warns "not a regular file", and the grammar
+   holds the path. The test is about not blocking, so its bound is a generous one
+   that a login shell's start on a slow CI runner never reaches (30 s; a pass
+   finishes far inside it), not a tight one (review R3-m13).
+
+#### SV-2. Connect (S1)
+
+AC1 to AC8 keep revision 2's numbers; AC9 and AC10 are new in revision 3. Revisions
+4, 5 and 6 add and move no number.
+
+1. **The grammar.** The SSH client's arguments are these and only these, in this
+   order:
+
+   ```
+   [-p PORT] [-l USER] [-i IDENTITY_FILE] -- HOST
+   ```
+
+   Each bracketed pair is present only when its field is set. Each value is one
+   argument, exactly as saved (a leading `~/` in the identity file is replaced by
+   the user's home folder). `--` is always present and `HOST` is always the last
+   argument. ADE passes no `-o`, `-F`, `-J`, `-A`, `-X`, `-t`, `-v`, `-L`, `-R`,
+   `-D`, no `user@host` form, and no remote command. Test (Rust, pure): for a table
+   of records the argument list equals the expected one, for example
+   `{host: "db1.example.com", port: 2222, user: "deploy"}` gives
+   `["-p", "2222", "-l", "deploy", "--", "db1.example.com"]`; and for every valid
+   record the list has at most 8 arguments and ends `"--", HOST`.
+2. **How the SSH client is started, and whose it is** (D4). Under a supported shell
+   (AC10) a connect request makes exactly one client start: ADE starts the user's
+   shell (the one every ADE terminal gets), as a login and interactive shell, in the
+   user's home folder, with one instruction: replace yourself with `ssh` run with
+   AC1's arguments. **Every word of that instruction is quoted** by ADR 0008's
+   rules: the instruction's own words (`exec`, `command`, `ssh`, or whatever the
+   architect's invocation uses) as well as each argument. Unquoted, a `zsh` global
+   alias rewrites the host or adds an option, and an alias named `exec` replaces the
+   instruction; quoted, neither applies (V8, W1, W2). The start-up files that take
+   effect are exactly those a new ADE terminal's shell reads.
+
+   **The property the start must have.** Whatever the user's start-up files define
+   or do, exactly one of two things happens:
+
+   - **(i)** the shell runs the program it finds for the name `ssh` (SV-8 AC1's
+     program: the first on its `PATH`, or the one the user's own start-up files
+     point the name at), as the pane's own process, handing it exactly AC1's
+     arguments, and the pane becomes live (AC9); or
+   - **(ii)** the pane never becomes live: it stays connecting, or it ends (AC9).
+
+   There is no third outcome: no pane is shown as live unless an image ADE observed
+   of the pane's own process was named `ssh`, or was an interpreter given a script
+   so named, and held exactly AC1's arguments (AC9). An alias or a function
+   named `ssh`, and an alias named `exec`, must give (i): none of them changes which
+   program runs (nor does `find_command`'s answer, F7.0).
+
+   **Stated limit.** A function named `exec` or `command` (`zsh`), or `exec` or
+   `builtin` (`bash`), is run by the shell in place of the instruction, and a `hash
+   ssh=...` entry sends the shell to another program; no invocation prevents that
+   (V8, W2). For those the required outcome is (i) or (ii), and never a live pane on
+   anything that was not handed the grammar: AC9's check is the backstop, and AC9
+   says what the engineer is shown. A `hash` entry or a start-up file that makes
+   another program answer to the name `ssh` is the user's own choice of SSH client,
+   the same case as another `ssh` earlier on `PATH` (SV-8 AC1; review R3-m3): when
+   that program is started with the grammar the pane is live, and ADE cannot and
+   does not tell it from the first `ssh` on `PATH`.
+
+   Test (Rust, Unix; **under `zsh` and under `bash`, both always**: on the two
+   Backend CI jobs a missing `zsh` or `bash` fails the test and never skips it).
+   **The fixture sets `HOME` and `ZDOTDIR` to the fixture home, and removes
+   `BASH_ENV` and `ENV`,** so that no test run reads the start-up files of the
+   developer who runs it (review R3-m2). With a fixture home whose start-up files
+   (for `zsh`, `.zshrc`; for `bash`, `.bash_profile`) export `SSH_AUTH_SOCK=/marker`
+   and put the stub `ssh` first on `PATH`, one connect request gives exactly one
+   stub record; its arguments equal AC1's; its environment has
+   `SSH_AUTH_SOCK=/marker`; its folder is the fixture home; its process id equals
+   the pane's process id; and the pane is live. Then, once per row, with the row's
+   lines added to the same start-up file, each added definition written so that it
+   creates a marker file and runs something other than the stub. **Each row also
+   asserts that its definition is in effect** when the instruction runs (the
+   start-up file records, as its last line, what the shell reports for the row's
+   name), so that no row passes because its definition was never made: in one
+   `.zshrc` an alias named `ssh` followed by `ssh() {...}` is a parse error and
+   defines nothing (W10), so the first row defines the function first, in the
+   `function ssh {...}` form, and the alias after it.
+
+   | Shell | Added to the start-up file (V8's and W2's cases) | Required outcome |
+   |---|---|---|
+   | `zsh`, `bash` | a function named `ssh`, then an alias named `ssh` | (i) |
+   | `zsh` | a global alias named `ssh` | (i) |
+   | `zsh` | a global alias whose name is the Host value (`alias -g db1.example.com=evil.example.net`) | (i): the stub's last argument is `db1.example.com` |
+   | `zsh` | a global alias named `--` (`alias -g -- --=-oProxyCommand=x`) | (i): the stub's arguments are exactly AC1's, with no `-o` |
+   | `zsh`, `bash` | an alias named `exec` | **(i)** (with the word quoted the alias never applies, W2; review R3-m1) |
+   | `zsh`, `bash` | a function named `exec` | (i) or (ii) |
+   | `zsh` | a function named `command` | (i) or (ii) |
+   | `bash` | a function named `builtin` | (i) or (ii) |
+   | `zsh`, `bash` | a `hash` entry sending `ssh` to `/bin/echo` (`hash ssh=/bin/echo`; in `bash`, `hash -p /bin/echo ssh`) | (i) or (ii) |
+
+   For every row: at no moment is the pane reported live unless a stub record with
+   exactly AC1's arguments and the pane's process id exists; and there is no stub
+   record with any other arguments. What each "(i) or (ii)" row shows the engineer
+   is AC9's, and AC9's tests fix it for a function that returns.
+3. **ADE initiates no write into a connection, and ending or closing one writes
+   nothing and leaves nothing running** (review R4-B1). From the client start until
+   the pane's terminal is gone, **the ending and the closing themselves included**,
+   nothing in ADE writes to that pane's terminal input except (a) the terminal's own
+   input path: the user's keys and paste, and the terminal emulator's protocol
+   replies to queries the remote program sends (`wireInput`, F7.0); and (b) the
+   user's own sends that SV-6 AC4 names. ADE writes no banner, no command and no
+   answer to a prompt into it. Test (TypeScript, store): with a live remote pane
+   active, and again with a connecting one, each ADE-initiated writer SV-6 AC4 lists
+   is driven once; the count of `write_pty` calls for that pane is 0, and each
+   returned its refusal.
+
+   **Ending and closing a remote pane.** Five actions end a remote pane's terminal:
+   **End** (AC9), **a confirmed close of the pane** (SV-3 AC6), **a close of its
+   tab**, **a close of the main window**, and **quitting Better Terminal**. For a
+   remote pane that is **connecting or live**, each of them:
+
+   - **writes nothing into the pane**: 0 bytes reach the pane's terminal input from
+     ADE or from anything ADE's own code runs, the terminal library's writer
+     included; and
+   - **leaves no process of the pane alive** (F7.1: the session's shell, or what
+     replaced it, and the terminal's foreground job, a child `ssh` included).
+
+   What a closed terminal does today is neither (F7.0, X1): it signals nothing, the
+   library types a newline and the end-of-file byte into the terminal, and the
+   program is left to end by itself. In a remote pane that would send Enter to the
+   server, which runs a half-typed command line, takes the default of a waiting
+   `[Y/n]` or makes an empty password attempt, and it could leave the connection
+   running with no pane. **So a remote pane's terminal is not ended the way a
+   terminal is today.** The outcome is the requirement; the mechanism is the
+   architect's (F7.11).
+
+   **A job that ignores a hangup is killed** (decided; review R4-m7). A true
+   hangup ends a shell and a child `ssh`, and a job that ignores it survives (X2).
+   So ending escalates: any process of the pane still alive **2 s** after the action
+   is ended with a kill that a program cannot catch or ignore, and **within 5 s of
+   the action no process of the pane is alive**. The limit that stays: a process a
+   start-up file put in a session of its own (`setsid`, a daemon) is not a process
+   of the pane and is left, as it is when any terminal is closed. And a crash or a
+   forced quit of ADE runs none of ADE's code: the operating system then closes the
+   terminal, which hangs up its session, and a job that ignores the hangup stays.
+
+   Whether an action asks first is not changed here: a close of the pane or the tab
+   asks (SV-3 AC6), End asks nothing (AC9), and a close of the main window and a
+   quit ask nothing today for any terminal (F7.0), which F7 leaves as it is. **A
+   quit and a close of the main window wait for the ending** (review R6-m2): when a
+   process of a remote pane is still alive they wait for the escalation, up to its 2
+   s, before ADE is gone, and with no such process they wait for nothing.
+
+   Tests. (Rust, Unix, under `zsh` and `bash`) with a **recording stub**: a stub
+   `ssh` that puts its terminal in raw mode, as `ssh` does, appends every byte it
+   reads from the terminal to its record as it arrives, and stays running. It is
+   run three ways: as the pane's own process, so the pane is **live**; as a child
+   of the shell (AC9's child fixture), so the pane is **connecting**; and with its
+   hangup signal ignored, both ways. A fixture program that records the same way,
+   put in the shell's place by the start-up file (AC9's replaced-shell fixture),
+   gives a second **connecting** case. For each case that the action applies to,
+   after **End** (the connecting cases; a live pane has no End), and again after
+   the **close** the webview requests for a pane or a tab, and again after the
+   teardown ADE runs for its terminals when **the main window closes** and when it
+   **quits**: the record holds **0 bytes**; the stub, the fixture program and the
+   shell are **not alive** 5 s after the action, the ones that ignore the hangup
+   included; and a fixture process that a start-up file started in a session of its
+   own is still alive. (TypeScript, store) a confirmed close of a remote pane and a
+   close of its tab each make exactly one request to end that pane's terminal and 0
+   `write_pty` calls.
+
+   **And that the quit and the window close reach it** (Rust, static; review R6-m2).
+   Today no Rust code runs for terminals when the main window is destroyed or ADE
+   exits (`lib.rs` has no exit handler and no window-destroyed handler; `App.tsx`
+   only destroys the window), so a build in which the teardown exists, passes the
+   test above and is never called on those two paths would be green. A test lists
+   every call site of the teardown routine under `src-tauri/src/` outside tests and
+   compares it with a checked-in list, as SV-6 AC4 does for its call sites: the list
+   holds the handler for ADE's exit and the handler for the main window's
+   destruction, and a build that lacks either call fails.
+4. **No fall-through to a local shell.** When the SSH client ends, for any reason,
+   the pane's process has ended and no local shell prompt follows in that pane. Test
+   (Rust, Unix, stub `ssh` exiting 0, and again exiting 255, each after the pane was
+   live): the pane reports an exit with the stub's status; no process of that pane
+   is alive afterwards; and the output after the stub's last byte is empty. (The
+   exit event carries no status today, F7.0; the status is a shared contract the
+   architect records, F7.11.)
+5. **Checked again at every client start.** The record is run through SV-1 AC1's
+   rules when the client start is built. A record that fails makes no client start,
+   and the message names the server and the field. The kind carries the field's name
+   only (SV-5 AC4); **the server's name in the message is put there by the webview,
+   from the identifier it sent and the list it already shows**, and never travels in
+   the kind or into the log (review R4-m8). **From Connect, no tab is
+   opened** (AC7) and the list shows the message; **from Reconnect, the pane stays
+   ended** and shows it there (review R3-m6). Tests: (Rust) with a stored record
+   edited on disk to `host: "-oProxyCommand=touch /tmp/x"`, and again with `user:
+   "$HOME"`, a connect request gives 0 stub records, starts no process, and returns
+   the "failed its checks" kind naming the field; (TypeScript, store) with that kind
+   returned, Connect leaves the tab count unchanged, and Reconnect leaves the pane
+   remote and ended.
+6. **Only Connect and Reconnect start the SSH client** (D8, D9). App launch,
+   session restore, Reopen Closed Tab, Duplicate, Move to New Window, loading a tab
+   set, closing a pane, and opening or editing the server list make no connect
+   request, and each leaves the state named here:
+
+   | Action | State afterwards |
+   |---|---|
+   | App launch and session restore of a session holding a server tab, once every pane has been shown | the remote pane is remote and ended, has no process of any kind, and offers Reconnect (SV-4 AC2) |
+   | Close of a server tab, then Reopen Closed Tab | a server tab whose pane is remote and ended, with no process (SV-4 AC3) |
+   | Duplicate | not offered for a server tab (SV-4 AC3) |
+   | Move to New Window | not offered for a server tab, and refused for one by the action itself (SV-3 AC8) |
+   | Loading a tab set | no tab of the set is a server tab; none is named after a server (SV-5 AC3) |
+   | Connect, split, then close of the remote pane (review N-B1) | the tab is a local tab: named as a new tab is, not server-named, holding no remote pane (SV-3 AC9) |
+
+   `ade open` and `POST /open` gain no option that names a saved server; `/open`
+   already refuses unknown fields (F7.0), so no new test is asked for it. Tests:
+   (TypeScript, store) for each row, 0 connect requests, and the state in the
+   table, asserted on the tab's and the pane's records and on the count of
+   `create_pty` calls for a remote pane after it is mounted (0); and after every
+   row, no tab in the store is server-named without holding a remote pane;
+   (component, `TabBar`) the menu of a server tab has no Duplicate item and no
+   Move to New Window item, and the menu of the tab in the last row has both.
+7. **Where it opens.** Connect is offered in the main window. Unless it is refused
+   before any start, it opens a new tab there and shows it. The refusals before any
+   start, none of which opens a tab or starts a process, are the kinds SV-5 AC4
+   marks so: a record that fails its checks (AC5), an unsupported shell (AC10), a
+   list that could not be read (SV-1 AC4), a saved server that no longer exists, and
+   "not available in an engagement" (SV-5 AC8). Test (TypeScript, store): the tab
+   count rises by one, the new tab is active, server-named, and its first pane is
+   remote and connecting; and for each refusal named here the tab count is
+   unchanged.
+8. **The connection's environment: what ADE passes and what it removes** (owner,
+   OQ-15: neither; review R3-M2). This criterion is about what **ADE** hands the
+   shell it starts for a client start. It is not about everything the SSH client
+   ends up with: the start-up files run in between and export what they like, and
+   that is the user's. ADE hands that shell what it hands a new terminal's shell
+   (F7.0: ADE's own environment, `TERM`, the default locale), with these
+   differences:
+
+   - **(a) no Secrets vault variable.** The client start is built with no vault
+     value at all, and does not call `vault::env_for_terminals`, which reads the OS
+     keychain when its cache is cold (V10). The one thing of the vault's it uses is
+     the list of names, for (e).
+   - **(b) no `ADE_*` variable of ADE's making.** ADE does not set `ADE_HOOK_*`,
+     `ADE_PTY_ID` or any other variable whose name starts `ADE_`.
+   - **(c) every inherited `ADE_*` variable is removed.** When ADE is itself started
+     from an ADE terminal, its own environment holds the outer terminal's
+     `ADE_HOOK_TOKEN` and `ADE_PTY_ID` (F7.0, W11); a start that merely skipped
+     setting them would pass the outer ones through. ADE removes every variable
+     whose name starts `ADE_` from what it hands the shell.
+   - **(d) nothing set or changed whose name starts `SSH_`.** ADE sets and changes
+     none, and removes one only under (e): in S1 ADE never sets `SSH_ASKPASS` or
+     `SSH_ASKPASS_REQUIRE`, and the user's own values reach the SSH client
+     unchanged.
+   - **(e) every inherited variable whose name is a vault secret's name is removed**
+     (revision 5; review R4-M1). When ADE is itself started from an ADE terminal,
+     its own environment holds every vault value of that terminal (F7.0, W11), and
+     without this rule each of them would reach `ssh`, the local programs the user's
+     SSH configuration runs for the connection, and any `SendEnv`. At every client
+     start ADE reads **the vault's list of names** (`vault-index.json`, a plain file
+     in app data) and removes every variable with one of those names from what it
+     hands the shell. It reads names only: **no keychain call is made and no
+     secret's value is read** (X9). A listed name that starts `SSH_` is removed like
+     any other: it is a vault secret first.
+
+   **The stricter reading, flagged** (F7.10, OQ-15; F7.11). The owner's answer is
+   "neither": no vault variable and no `ADE_*` variable. Revision 4 left an
+   inherited variable with a vault secret's name in place, on the ground that
+   telling it apart needed a vault read. The final delta check showed that the
+   names are in a plain file read with no keychain call (X9), so the ground did not
+   hold, and revision 5 takes the reading that matches the answer. **The
+   alternative** is revision 4's: leave such a variable, so that the vault secrets
+   of the terminal ADE was started from do reach `ssh`. Going back to it removes
+   (e), its test rows and the index reader from SV-7 AC4, and changes nothing else.
+   **Its cost:** ADE removes by name, because telling whether a value came from the
+   vault would need the keychain. So a variable the engineer set outside ADE under
+   the same name as a vault secret is removed too, unless a start-up file exports
+   it. **What (e) does not cover** (stated limits, F7.9): a secret's value held in a
+   variable under **another name**; anything **the start-up files export**; a secret
+   **removed from the vault after ADE started**, whose name is no longer in the
+   list while its variable is still in ADE's environment; and a list of names that
+   is missing or does not parse, which the vault itself reads as empty (X9), so
+   that nothing is removed by (e). An ADE started from the desktop inherits no
+   vault value, and (e) then removes nothing.
+
+   Test (Rust, Unix): the function that builds a client start **takes its base
+   environment and the list of names to remove as inputs, and has no input for a
+   vault value**. With a fixture `vault-index.json` listing `F7_SECRET_ONE` and
+   `SSH_F7_SECRET`; the base seeded with `ADE_HOOK_TOKEN`, `ADE_PTY_ID`, `ADE_X`,
+   `F7_SECRET_ONE`, `SSH_F7_SECRET` and `KEEP_ME`, each holding a marker; and the
+   fixture start-up file exporting `SSH_AUTH_SOCK=/marker`,
+   `SSH_ASKPASS=/own/askpass` and `ADE_FROM_RC=1`: the stub's environment has none
+   of the three seeded `ADE_` names, neither of the two indexed names, and none of
+   their markers; has `KEEP_ME` with its marker; has `SSH_AUTH_SOCK` and
+   `SSH_ASKPASS` unchanged and no `SSH_ASKPASS_REQUIRE`; and has `ADE_FROM_RC=1`,
+   because what a start-up file exports is the user's. **And a variable set in the
+   test process's own environment and absent from the base** (`ADE_ONLY_IN_PROCESS`
+   and `F7_ONLY_IN_PROCESS`, each with a marker) **is absent from the stub's**: a
+   builder that starts from the process's environment and lays the filtered base
+   over it passes every other line here on a CI runner, whose own environment
+   holds no `ADE_*` variable (review R4-m4). With the fixture index missing, and
+   again unparseable, the client start is still made and `F7_SECRET_ONE` is in the
+   stub's environment (the stated limit). **The keychain:** the whole test runs
+   with a recording stand-in in place of the OS keychain, and it records **0
+   calls**; and `vault-index.json` is byte-identical afterwards. That nothing else
+   of the vault's is used is SV-7 AC4's text test, which covers the files that
+   build and make the client start.
+9. **The hand-over is confirmed before the pane is live; a start that does not hand
+   over is kept, and ADE ends nothing of its own accord** (reviews N-M1, R3-M1,
+   R3-M4, R3-M5, R4-m9; owner, OQ-20 (2): keep it, offer End). After a client start
+   the pane is **connecting**.
+   It becomes **live** only by the rule below.
+
+   **The rule, over time** (review R3-M1). ADE watches the pane's **own process**:
+   the process id it started, not the terminal's foreground job, which is what
+   today's `pty_foreground_job` reads (F7.0). That process begins as the shell
+   exactly as ADE started it, with the same argument list. A process can replace
+   itself several times and keep its process id (W4), so the rule says which image
+   is judged:
+
+   - **While the process is still that shell, nothing is judged** and the pane stays
+     connecting, for however long. A start-up file that runs the same shell again
+     with the same arguments cannot be told from the shell ADE started, and need not
+     be: nothing is judged, and the start goes on (X5).
+   - **The first image ADE observes that is not that shell is judged, once.**
+   - **What is read: the process's argument list, its first word included, and
+     nothing else** (decided; review R4-m1). The "program" of an image is the first
+     word of its argument list. The path of the executable file is not consulted.
+     The reasons: every form below is an argument list; on macOS a script shows
+     under its interpreter, so the executable never says `ssh` for a script (W3);
+     and one input keeps the rule one pure function with one answer on both
+     platforms, where the executable would answer differently for a link named
+     `ssh` to another binary. **What follows, stated:** a start-up file can give a
+     process any first word (`exec -a ssh ...`), and a link named `ssh` shows under
+     the link's name (X5). Such a process, if it holds exactly the grammar, is
+     judged the SSH client. That is the user's own code choosing what answers to
+     the name `ssh`, the case SV-8 AC1 already states, and it is why G6 claims what
+     ADE observed and not what the program is.
+   - **It is the SSH client** when (a) the first word's base name is `ssh` and the
+     words after it are exactly AC1's; or (b) the first word names an interpreter,
+     reached through `env` or not, the next word is a script whose base name is
+     `ssh`, and the words after the script are exactly AC1's. As argument lists,
+     with `P` a path whose base name is `ssh`, `I` one word naming an interpreter
+     and `G` the grammar: `[P, G]`, `[I, P, G]` and `[env, I, P, G]` (the base name
+     of the first word being `env`). **`I` is a word whose base name is exactly one
+     of `sh`, `bash`, `zsh`, `dash` or `ksh`** (decided; review R4-m2): the shells a
+     wrapper script named `ssh` is written in. It is a closed list, not "any word":
+     `nice`, `sudo`, `env` and `echo` are not interpreters, so `[nice, ssh, G]` and
+     its like are **not** the SSH client. A wrapper written for another interpreter
+     (`python3`, `perl`) is "not" as well: its pane stays connecting with the
+     hand-over message while the session in it works, which is the safe direction;
+     a name is added to the list only with a fixture for it. The base name is
+     compared exactly: `sshd` and `ssh-wrapper` are not `ssh`.
+   - **It is not** in every other case: a first word named `ssh` with any other
+     arguments, an interpreter given anything but a script named `ssh` followed by
+     exactly AC1's arguments, a word that is not a listed interpreter placed before
+     `ssh` (`[nice, ssh, G]`, `[sudo, ssh, G]`, `[env, ssh, G]`, `[echo, ssh, G]`),
+     another shell, any other program. A function that runs `ssh` through such a
+     word (`exec nice "$@"`) usually passes that image faster than ADE observes, and
+     the pane is then live on the real client (X5); if the image is observed, the
+     pane is never live for that start. An interpreter line
+     that carries an option of its own (`#!/bin/sh -e`) is placed on one side or the
+     other by the architect and recorded with the decision (F7.11); a form that is
+     not listed as the SSH client is not.
+   - **Judged the SSH client: the pane is live, and later images of that process are
+     not judged.**
+   - **Judged not: the pane is never live for that client start,** whatever the
+     process becomes afterwards.
+
+   How ADE observes the image, and how often, is the architect's; the rule itself is
+   one pure function of two argument lists: the one ADE started the shell with, and
+   the one observed. **No gap in timing makes a pane live on a process not so
+   named:** an image ADE misses only ever gives "live on a later image that itself
+   passes the rule" or "connecting while the session works" (review R4-m3).
+
+   **A `$SHELL` that is itself a wrapper** (suspected, not run; review R4-m14). The
+   pane's process is "still that shell" while its argument list is the one ADE
+   started. If the user's `$SHELL` is a script that then runs the real shell with
+   other arguments, the first image that differs is that real shell: it is judged,
+   it is "another program", and every Connect shows the hand-over message while the
+   session, if `ssh` does start, works. A stated limit (F7.9), in the safe
+   direction; the architect confirms or corrects it with a fixture (F7.11).
+
+   **A wrapper named `ssh` that adds arguments: SV-8 AC1 holds, and "exactly AC1's
+   arguments" is about what the shell hands over** (decided; review R3-M1). A user's
+   own `ssh` may be a script that then replaces itself with the real client and adds
+   options of its own (W4). It is confirmed on its own image, which carries exactly
+   the grammar; what it passes on is the user's choice, as their SSH configuration
+   is (F7.9). So "live" means: an image ADE observed of the pane's own process was
+   named `ssh`, or was a listed interpreter given a script so named, and held
+   exactly the grammar. It does not mean that every later image of
+   that process carries only those arguments. **Stated limit:** ADE judges the first
+   image it *observes*. A wrapper that replaces itself with a differently-argued
+   client before ADE has observed the wrapper is judged on the later image, is
+   "not", and its pane stays connecting with the hand-over message while the session
+   in it works. That error is in the safe direction, and since ADE ends nothing of
+   its own accord the session is not lost. The other direction cannot happen: no
+   pane is live unless an observed image passed the rule above.
+
+   **While connecting,** the pane is a remote pane in every respect (SV-6: no
+   ADE-initiated write, no file links, no folder; SV-3 AC6: closing it asks), shows
+   the connecting mark (SV-3 AC2), shows whatever the start-up files print, and
+   takes the engineer's keys, so a start-up file that asks something can be
+   answered. **Of its own accord, ADE ends, signals and stops nothing in a
+   connecting pane, at any time** (owner, OQ-20 (2); review R4-m9). What ends one is
+   the engineer's action: End, a close of the pane or its tab, a close of the main
+   window, or quitting (AC3).
+
+   **The hand-over message and End.** A connecting pane shows the hand-over message,
+   with an **End** control beside it, from the first of these moments:
+
+   - the judged image was not the SSH client: **at once** (kind "not handed over:
+     another program is running"); or
+   - **the hand-over bound, 30 s after the client start,** passes with the process
+     still the shell ADE started (kind "not handed over yet").
+
+   **The 30 s is kept, and it only times that message.** Nothing is ended, stopped,
+   refused or changed at the bound; the pane is as much a connecting remote pane
+   after it as before. The message says that the shell's start-up files have not
+   handed over to `ssh`, that whatever is running in the pane is still running, that
+   the pane is treated as a server session meanwhile, and that `ssh` typed in a
+   terminal still works. **End appears only with the message.** For a shell that is
+   still waiting there is therefore no End during the first 30 s: the way out then
+   is to close the pane, which asks first (SV-3 AC6), while End, once it is there,
+   asks nothing (review R4-M2; listed for the approval, F7.11).
+
+   **If `ssh` is confirmed after the message appeared** (a start-up file's question
+   answered after 40 s; possible only for "not handed over yet", since a judged
+   image is judged once): the pane becomes live, the message and End go away, and
+   nothing else happens.
+
+   **A working `ssh` running as a child of the shell** (W5: a function named
+   `command` that passes its arguments on; the same for anything a start-up file
+   runs without replacing the shell, such as `tmux` started without `exec`). The
+   pane's own process stays the shell, so nothing is ever judged and the pane is
+   never live: ADE confirms only the pane's own process. The session works and **is
+   left running**. The pane stays connecting, and from the bound on shows the
+   message and End, until the engineer ends or closes it or the shell ends. It is a
+   remote pane throughout, so the protections of SV-6 apply to it.
+
+   **What End does, and exactly what it ends** (reviews R3-M4, R3-m5, R4-B1,
+   R4-m7). End is the engineer's action, one press on a control whose name says it
+   ends what is running in the pane; it asks no second question. It **ends the
+   pane's terminal by AC3's rule**: it writes nothing into the pane, and no process
+   of the pane is alive afterwards: the shell or whatever replaced it, and a child
+   it is running in the foreground, a child `ssh` included, and one that ignores a
+   hangup, which is killed after 2 s. The pane itself stays, **ended**, with its
+   output and Reconnect (SV-3 AC3). "A process of the pane", here and in AC3 and
+   AC4, is F7.1's: a process attached to that terminal, its session's shell and
+   foreground job. A process a start-up file put in a session of its own (`setsid`,
+   a daemon) is not attached and stays, as it does when any terminal is closed.
+   **End is not what closing a terminal does today:** that sends no signal and
+   types a newline and the end-of-file byte into the terminal (F7.0, X1), which for
+   End on a kept pane would type Enter into the engineer's local shell or into the
+   active window of an attached `tmux`. The outcome is the requirement; how it is
+   reached is the architect's (F7.11).
+
+   **What can happen to a connecting pane** (review R4-m9). The first and the last
+   two rows end the connecting state. The second and third do not: the pane stays
+   connecting. After the second row only the last two can follow, since a judged
+   image is judged once; after the third, any other row can.
+
+   | What happens | The pane then | Kind reported |
+   |---|---|---|
+   | the judged image is the SSH client | is live; a message that was showing goes | none |
+   | the judged image is not the SSH client | stays connecting, with the message and End at once; never live | "not handed over: another program is running" |
+   | the bound passes and the process is still the shell | stays connecting, with the message and End; ADE keeps watching | "not handed over yet" |
+   | the pane's process ends while the pane is connecting | is ended, with the exit status where there is one and whatever was printed | "ended before ssh was seen to start", with the status; "no SSH client found" when the status is 127 (SV-8 AC2) |
+   | the engineer presses End, closes the pane or its tab, closes the main window or quits (AC3) | is ended (End); gone (a close of the pane or its tab); saved, and restored ended at the next start (a close of the window, a quit; SV-4 AC2) | none |
+
+   **"Ended before ssh was seen to start"** (review R3-M5) is the third kind, so
+   that a start that silently did nothing says why. With a function named `exec`,
+   `command` or `builtin` that simply returns, the shell exits 0 with no output, and
+   a `hash` entry to another program runs that program and ends (W2): the engineer
+   would otherwise see a connection that ended at once for no stated reason, and
+   again on every Reconnect. The message says that Better Terminal did not see `ssh`
+   start in this pane, gives the exit status, and says that `ssh` typed in a
+   terminal still works. It is worded as "did not see", not "did not run": an `ssh`
+   that started and ended between two observations is reported this way too, with
+   its own status and its own error text above the message. An ended pane offers
+   Reconnect (SV-3 AC3).
+
+   Tests (Rust, Unix, under `zsh` and `bash`, with the bound set by the test to 2 s
+   and the stub told to stay running unless a line says otherwise; "alive" is asked
+   of the operating system; "never ended by ADE of its own accord" is asserted by
+   the process being alive at twice the bound; "after End" and "then End" assert
+   AC3's outcome, not alive 5 s after the press, and AC3's own test asserts the 0
+   bytes. **Where a fixture needs the shell to run a function in place of a word of
+   the instruction, it is "a function named after a word of the instruction"**: the
+   words are the architect's (F7.11), and the names given below, `command` in `zsh`
+   and `exec` in `bash`, are those of the candidate invocations V8 and W2 tested,
+   to be replaced by the chosen invocation's own words; review R4-m12):
+   - **base:** the pane's reported states are connecting, then live, in that order;
+     live is reported only after the stub's record exists; no kind is reported;
+   - **the forms of a script named `ssh`:** with the stub written as a `#!/bin/sh`
+     script, and again as a `#!/usr/bin/env bash` script: live in both (W3, W4);
+   - **a wrapper that adds an argument:** an `ssh` first on `PATH` that records its
+     arguments, sleeps until the test has seen the pane live, then replaces itself
+     with a second stub given one more argument: the pane is live once the wrapper's
+     record exists and is still live after the second stub's record exists; the
+     wrapper's record holds exactly AC1's arguments; no kind is reported;
+   - **a start-up file that replaces the shell** (`exec` of a fixture program that
+     stays running; and again `exec` of an interactive shell with no command, which
+     sits at a local prompt, W7): the pane is never reported live; "another program
+     is running" is reported without waiting for the bound; at twice the bound the
+     pane is still connecting and the fixture program is alive; 0 stub records. Then
+     End: no process of the pane is alive, and the pane is ended;
+   - **a start-up file that waits for a line of input, and gets none:** the pane is
+     connecting and never live; at the bound "not handed over yet" is reported; at
+     twice the bound the shell is alive and the pane still connecting; 0 stub
+     records. **Then the line is supplied through the pane's terminal input:**
+     exactly one stub record, the pane becomes live, and the kind is reported as
+     cleared;
+   - **the same, with the line supplied before the bound:** exactly one stub record,
+     the pane is live, and no kind was ever reported;
+   - **`ssh` as a child of the shell** (W5; a function named after a word of the
+     instruction that runs the rest of the instruction without replacing the shell:
+     with the candidate invocations, in `zsh` `function command { builtin command
+     "$@"; }` and in `bash` a function named `exec` that runs its arguments): exactly
+     one stub record, with AC1's arguments and a process id that is **not** the
+     pane's; the pane is never live; "not handed over yet" is reported at the bound;
+     at twice the bound the stub is alive. Then End: neither the stub nor the shell
+     is alive, and the pane is ended;
+   - **a child that ignores a hangup** (review R4-m7; X2): the same fixture, with
+     the stub ignoring the hangup signal. At twice the bound the stub is alive. Then
+     End: the stub is **not alive 5 s after the press**, nor is the shell, and the
+     pane is ended. A fixture process
+     that the start-up file started in a session of its own is still alive then;
+   - **a function named `exec` that returns** (review R3-M5; both shells): the pane
+     is never live and is ended with "ended before ssh was seen to start" and status
+     0; 0 stub records;
+   - **a stub that exits at once with status 255:** the pane is ended with status
+     255 and with neither "not handed over" kind; and either it was reported live
+     first, or its kind is "ended before ssh was seen to start". Both pass: which
+     one happens depends on whether ADE observed the stub before it ended;
+   - **a program named `ssh` with other arguments as the pane's own process** (the
+     fixture revision 3 left ambiguous, now fixed in form: a function named after a
+     word of the instruction that **replaces the shell** with the stub given another
+     host; with the candidate invocations, in `zsh` `function command { exec "$STUB"
+     -- other.example.net; }` and in `bash` the same body in a function named `exec`
+     using `builtin exec`; the stub stays running): the pane
+     is never live; "another program is running" is reported; the one stub record
+     holds the other host; the stub is alive at twice the bound, and not after End.
+
+   (Rust, pure) the judging function over a table of argument lists, `G` being a
+   valid grammar. The SSH client: `[ssh, G]`, `[/usr/bin/ssh, G]`, `[/bin/sh,
+   /x/ssh, G]`, `[bash, /x/ssh, G]`, `[/usr/bin/env, bash, /x/ssh, G]`, and `[I,
+   /x/ssh, G]` for each of the five listed interpreters. Not: `[ssh]`, `[ssh, G,
+   extra]`, `[ssh, -o, X, G]`, `[sshd, G]`, `[/bin/sh, /x/notssh, G]`, `[/bin/sh,
+   /x/ssh, G, extra]`, `[/usr/bin/env, bash, /x/ssh, -v, G]`, `[echo, G]`, `[tmux]`,
+   `[bash, -l, -i]`; **a word that is not a listed interpreter before `ssh`**
+   (review R4-m2): `[nice, ssh, G]`, `[sudo, ssh, G]`, `[env, ssh, G]`, `[echo, ssh,
+   G]`, `[python3, /x/ssh, G]`, `[/usr/bin/env, nice, /x/ssh, G]`. The function is
+   given argument lists only, so the table also fixes that a first word `ssh` with
+   the grammar is the SSH client whatever the executable is (review R4-m1).
+
+   (Component) each kind shows its message; the hand-over message has the End
+   control and says that `ssh` typed in a terminal still works; a pane that becomes
+   live after the message was showing shows neither the message nor End; "ended
+   before ssh was seen to start" shows the exit status.
+10. **Under an unsupported shell, Connect is refused** (review N-M2; owner, OQ-20
+    (1): refused with a message). The supported shells are **`zsh` and `bash`**,
+    decided by the base name of the shell ADE starts for a terminal (`shell_from`,
+    `platform.rs`: `$SHELL`, or `/bin/zsh` when unset). **The base name must be
+    exactly `zsh` or `bash`.** A versioned name such as `/usr/local/bin/zsh-5.9`,
+    which some package managers install beside `zsh`, is therefore refused, and the
+    engineer sets `$SHELL` to the plain name (review R3-m11). Under any other shell
+    (`fish`, `nu`, `tcsh`, `xonsh`, `ksh`, `dash`, `sh`, anything else) Connect and
+    Reconnect make no client start and start no shell: Connect opens no tab, and the
+    list (for Reconnect, the ended pane) says that saved servers need `zsh` or
+    `bash` as the login shell, names the shell found, and says that `ssh` typed in a
+    terminal works as before. **The message and the log carry the shell's base name,
+    never its path:** a path can hold the user's name (SV-5 AC4). **And they carry
+    the base name only when it is 1 to 32 characters, each one of `A-Z a-z 0-9 . _ +
+    -`** (review R4-m8): `$SHELL` is text ADE did not write. A base name that is
+    longer, or holds a control character or any other character, is not carried:
+    the kind then carries nothing, and the message says that the login shell is
+    not `zsh` or `bash` without naming it. The list still
+    opens, and add, edit and remove still work. `fish` is not supported in S1: D4's
+    property was not checked under it (it is not installed on the machine the facts
+    were checked on), and a shell is listed only when SV-2 AC2's and AC9's tests run
+    under it in CI, always. This decision reads `$SHELL` only: a `zsh` or `bash`
+    login shell whose start-up file hands over to another shell is not seen here and
+    is AC9's "another program is running" case (F7.9). Tests: (Rust) with `SHELL`
+    set to `/usr/bin/fish`, `/bin/tcsh`, `/opt/homebrew/bin/nu`, `/bin/sh` and
+    `/Users/marker/bin/zsh-5.9`, a connect request returns the "shell not supported"
+    kind carrying the base name and not the marker, 0 processes were started and
+    there are 0 stub records, and an add still saves; with `SHELL` set to a path
+    whose base name is 200 characters long, and again to one whose base name holds
+    an ESC character and a marker, the kind carries no name and no marker; with
+    `/bin/zsh`, `/opt/homebrew/bin/bash` and an unset `SHELL` it is not refused;
+    (TypeScript, store) a refused Connect leaves the tab count unchanged;
+    (component) the kind shows the message with the shell's name, and without one
+    when the kind carries none.
+
+#### SV-3. A server tab: name, mark, ending, Reconnect (S1)
+
+1. **Name, and what a rename is** (review R3-B1). Connect names the tab after the
+   server (its Name) and marks the tab server-named, in one store update. The
+   engineer can rename the tab as any tab. **A rename is a commit whose text,
+   trimmed as today, differs from the tab's current name:** it sets the typed name
+   and clears server-named. **A commit whose text equals the tab's current name is
+   not a rename: it changes nothing, and the mark stays.** Today both rename boxes
+   commit on blur and on Enter with whatever text is in the box, changed or not
+   (F7.0, W11), so without this rule opening the box on a server tab and clicking
+   elsewhere would clear the mark by a gesture, and the server's name would then be
+   exported as a "typed" name and kept by a local tab. The rule is on the store's
+   rename action, so every route has it: the tab bar's box, opened by double-click,
+   from the menu or by the shortcut, and the box in Settings. Besides a rename, only
+   AC9 clears the mark. Tests: (TypeScript, store) after Connect the tab has the
+   name and the mark; the rename action called with the tab's current name leaves
+   the tab's record unchanged, mark included; called with another name it gives the
+   typed name and no mark; (component, `TabBar`) on a server tab, the box opened by
+   double-click and **blurred with its text unchanged** keeps the mark; opened by
+   the rename shortcut and **committed with Enter unchanged** keeps the mark; a
+   different name typed and committed clears it; (component, `SettingsPanel`) an
+   unchanged commit there keeps the mark; (TypeScript, store, and Rust for the
+   export) with a marker as the server's name, after an unchanged commit on blur and
+   again on Enter, and then AC9's sequence (split, close the remote pane): the tab
+   is named "Terminal", and the marker is in none of the session's export (SV-5
+   AC2), a tab set saved then (SV-5 AC3) and the record a close of the tab leaves
+   for Reopen.
+2. **The remote mark.** A tab holding a remote pane shows the remote mark wherever
+   its name is shown in the tab bar and the tab switcher, and the remote pane shows
+   it in the pane, so that in a tab with splits the remote pane can be told from a
+   local one. The mark says whether the connection is **connecting, live or ended**,
+   in text or an accessible name, never by colour alone; a connecting pane is never
+   shown with the live mark (SV-2 AC9). **The live mark does not say "connected"**
+   (review R3-m12): live means the `ssh` process is running, which is true while it
+   is still reaching the server, asking about a host key or waiting for a password
+   (F7.1). The words are the designer's. Whether a pane is remote, and connecting,
+   live or ended, is one pure function of the pane's record. Tests: (TypeScript,
+   pure) a local pane and a connecting, a live and an ended remote pane give four
+   different results; a tab with a remote pane and a local split gives "remote" for
+   the tab and "local" for the split; (component, on `TabBar`, the tab switcher and
+   the pane) the mark is present with a different accessible name for connecting,
+   live and ended, the live one's does not contain "connected", and the mark is
+   absent for a local tab and a local split.
+3. **Ending.** When the connection ends the pane keeps its output, prints today's
+   `[Process exited]` line, changes its mark to ended, and offers **Reconnect**.
+   Tests: (TypeScript, store) after the process exit event the pane's record is
+   remote and ended and the tab is still open; (component) the ended pane shows a
+   Reconnect control with the destination summary beside it (AC4); a live one shows
+   no Reconnect; a connecting one shows no Reconnect, and shows End only with the
+   hand-over message (SV-2 AC9).
+4. **Reconnect** starts the SSH client again in the same pane, by SV-2, from the
+   saved server's **current** record. The Reconnect control always shows the
+   current record's destination summary. When that destination differs from the
+   one in the pane's remote record (the destination at the last client start),
+   whatever changed it, the control shows both, says the destination changed, and
+   Reconnect needs a second, separate confirmation. If the server was removed,
+   Reconnect is not offered and the pane says the saved server no longer exists.
+   Tests: (TypeScript, store) Reconnect on an unchanged server makes one connect
+   request; on a changed one, none until confirmed, then one; on a removed one,
+   none; (component) the changed case shows both summaries; (Rust) the client
+   start after an edit has the edited values.
+5. **Splits and sub-terminals** of a server tab are local shells started as today,
+   in the user's home folder, with no remote mark (D11). Test (TypeScript, store):
+   a split of a remote pane makes a `create_pty` request and no connect request,
+   and the new pane's record is local.
+6. **Closing** (review R3-m8). Whether closing a remote pane asks is decided **from
+   the pane's remote record**, before and in place of today's sampling: a connecting
+   or live one asks before closing; an ended one closes without asking. Closing a
+   tab asks when any of its panes would. A local pane of the same tab is decided as
+   today. **What a confirmed close then does to a connecting or live remote pane is
+   SV-2 AC3's:** it writes nothing into the pane and leaves no process of the pane
+   alive, which is not what closing a terminal does today (F7.0, X1; review R4-B1).
+   The reason for deciding from the record is what today's confirm does (F7.0): it
+   samples the foreground program, and when the sample is unknown or fails it falls
+   back to a text heuristic over the pane's last 50 lines. A restored, ended remote
+   pane that has been shown has a terminal and no process, so with the word "claude"
+   in its scrollback it would ask, labelled "Claude"; and a live pane whose sample
+   failed would not ask at all. Test (TypeScript, `useGuardedClose`): with
+   `paneBusy` stubbed to answer "not busy", the close of a live and of a connecting
+   remote pane asks and ends no process until confirmed; with `paneBusy` stubbed to
+   answer "Claude" and "claude" in the pane's last lines, the close of an ended
+   remote pane does not ask; `paneBusy` is called for no remote pane in any of the
+   three; and a local split of the same tab is asked about exactly as today. What
+   the close writes and leaves running is tested by SV-2 AC3's tests.
+7. **When the saved server is renamed or removed while a tab is open.** The tab
+   keeps the name it has and its server-named mark. A rename of the saved server
+   does not rename open tabs. After a remove, the pane is still a remote pane
+   (live if its connection is; ended otherwise), and AC4's removed case applies.
+   Test (TypeScript, store): rename and remove of the server leave the tab's name
+   and mark unchanged.
+8. **Move to New Window is not offered on a server tab** (**a change to an
+   existing action, D13, OQ-19**; review N-m5). The reasons are today's facts
+   (F7.0, V10): a detached window has no tab bar and no palette; closing it ends
+   its processes without asking, so a live connection would end unasked; and a
+   detached tab is in no saved session, so it would not come back ended after a
+   restart. The tab's menu has no Move to New Window item for a server tab, and
+   the action itself refuses one, so no other route detaches it. A local tab is
+   unaffected. "Move a connection to its own window" is S3 (SV-10). Tests:
+   (component, `TabBar`) SV-2 AC6's menu test; (TypeScript, on
+   `detachTabToWindow`, `src/lib/detachWindow.ts`) called for a server tab it
+   opens no window, the tab is still in the main window's store, and its pane's
+   process id is unchanged. Because no server tab reaches a detached window, no
+   S1 criterion needs a test inside the detached window's own webview.
+9. **When the remote pane of a tab is closed, the tab stops being a server tab**
+   (review N-B1). The sequence: Connect, split (a local pane, AC5), close the remote
+   pane (asked first while its connection is connecting or live, AC6). `closePane`
+   keeps the tab (F7.0). At that moment, if the tab is server-named, the mark is
+   cleared and the tab's name becomes the name a new tab gets ("Terminal" today),
+   **both in one store update**, together with the pane's removal: a session save
+   reads one snapshot of the store, so one update can never be saved half-done and
+   two can (W11; review R3-m10). A tab the engineer had renamed (AC1) keeps its
+   typed name. The tab is then a local tab in every respect: no remote mark;
+   Duplicate and Move to New Window offered; saved, exported, reopened and relayed
+   as any local tab, with the server's name nowhere in its record. So in a session
+   ADE wrote, no tab is server-named without holding a remote pane. Tests:
+   (TypeScript, store) after the sequence, the tab's name is "Terminal", it is not
+   server-named, it holds no remote pane, and `tabCwd` is the local split's folder;
+   a subscriber to the store never sees a state in which the remote pane is gone and
+   the tab still has the mark or the server's name; with the tab renamed before the
+   close, the typed name is kept; and with a marker as the server's name, after the
+   sequence the marker is in none of: the saved session, a tab set saved then, the
+   record a close of the tab leaves for Reopen, and the name Duplicate gives its
+   copy. AC1's tests run the same sequence after an unchanged rename commit. (Rust)
+   SV-5 AC2's export test over the session saved after the sequence.
+
+#### SV-4. Session save and restore (S1)
+
+1. **Saved.** A remote pane is saved with its tab's name and server-named mark,
+   its remote record (which saved server, the destination at the last client
+   start, and its state), and its scrollback, on this machine, as any terminal's
+   is today (OQ-11 states where that text then sits). It is saved with no local
+   folder. Test (TypeScript, store): the saved session holds the pane's remote
+   record and no `savedCwd` for it.
+2. **Restored ended.** After a restart a remote pane comes back ended, whatever
+   state it was saved in: its scrollback, the ended mark and Reconnect. No SSH
+   client and no local shell is started in it, when the session loads or when the
+   pane is first shown. Test (TypeScript, store plus a mount of each pane): for a
+   session with one remote pane saved live, one saved connecting and one local
+   pane, after every pane has been mounted there is exactly one `create_pty`
+   request, for the local pane, and 0 connect requests; each remote pane's record
+   is remote and ended with no process id.
+3. **Reopen Closed Tab and Duplicate** (**changes to existing actions, D13; kept by
+   the owner, OQ-19**). Closing a **server tab** remembers its name, its
+   server-named mark and its remote pane's **remote record without its state**:
+   which saved server, and the destination at the last client start (review R3-m9).
+   It remembers no scrollback, as for any closed tab today, and the record is in
+   memory only, as today's is. Reopen Closed Tab then opens a server tab with the
+   name and mark it had, whose pane is remote and **ended**, whose remote record
+   holds that same server reference and that same destination, and which offers
+   Reconnect; SV-3 AC4's changed-destination check therefore works after a Reopen as
+   after any ending. Duplicate is not offered on a server tab in S1 ("duplicate a
+   connection" is S3). Both rules are read from the tab's own record: they hold for
+   a server tab the engineer renamed (it holds a remote pane), and for a tab that is
+   server-named without a remote pane, which only a session not written by this
+   build can contain (SV-5 AC2). Tests: (TypeScript, store) after close and reopen
+   of a server tab, and again of a renamed one, the reopened tab's pane is remote
+   and ended, has the same server reference, destination and mark, and 0
+   `create_pty` and 0 connect requests were made for it; with the saved server's
+   Host edited between the close and the reopen, Reconnect on the reopened pane
+   makes no connect request until SV-3 AC4's second confirmation; (component) SV-2
+   AC6's menu test, and the same with the hand-built tab of SV-5 AC2's test.
+4. *(Moved in revision 3 to F7.9, "An older build": it is a stated limit, not a
+   criterion.)*
+
+#### SV-5. Saved servers stay on this machine (S1)
+
+1. **Not in ADE sync.** The server list is in no store ADE sync exports (neither
+   `SHARED_KEYS` nor `DEVICE_KEYS` in `src-tauri/src/sync.rs`, nor a field of a key
+   in them). Test (Rust): with markers in a server's name, host, user and identity
+   file, ADE sync's export holds none of them.
+2. **The session's export.** `ade-session` is exported per device with tab names
+   (F7.0). The rule is decided from the tab's own record in that JSON, its mark and
+   its panes' records, with no look at the server list: **for every server tab,
+   which is a tab that is server-named or holds a remote pane, the export carries
+   the name "Remote server" in place of its name, renamed or not;** and every pane's
+   remote record is left out. This machine keeps and restores its own. Once a tab's
+   remote pane is closed it is a local tab (SV-3 AC9), and its name, "Terminal" or
+   the name the engineer typed, is exported as any tab's is.
+
+   **The stricter reading, flagged** (review R3-B1; F7.10, OQ-13; F7.11). Revision 3
+   exported a renamed server tab's typed name. The owner's answers are "local only,
+   never synced" for saved servers (OQ-4) and "Remote server" for a server-named tab
+   (OQ-13); neither says what a name typed onto a tab that holds a connection may
+   do, and such a name is often the server's own or the client's. Revision 4 takes
+   the reading under which nothing shown as the name of a server tab leaves the
+   machine. Its cost: on another device, and on the phone (AC7), several server tabs
+   all read "Remote server" and cannot be told apart, even after the engineer named
+   them. This is one of the two places where F7 takes the stricter reading of an
+   owner answer (the other is SV-2 AC8 (e), taken in revision 5); relaxing it to "a
+   typed name is exported" is a change to this criterion and AC7 alone.
+
+   Test (Rust, on `ade-session` JSON alone): with a marker as the name of a
+   server-named tab, of a second whose saved server was since renamed, of a third
+   whose saved server was removed, of a fourth, built by hand, that is server-named
+   and holds **no** remote pane, and of a fifth that the engineer **renamed** to a
+   typed marker and that holds a remote pane, and with markers in each pane's remote
+   record, the export holds none of them and holds "Remote server" five times; a
+   local tab's typed name is still there; for the session saved after SV-3 AC9's
+   sequence, the export holds no marker and the tab's name in it is "Terminal"; and
+   for the fifth tab after the same sequence, its typed name is exported.
+3. **Tab sets** (**a change to an existing action, D13; kept by the owner, OQ-19**).
+   Today a tab set is every tab's name and split direction (F7.0, V10). A tab set
+   never holds a **server tab**: saving a tab set leaves every server tab out and
+   says how many were left out. So a loaded tab set has no entry that could open a
+   local shell under a server's name, and loading never connects. Tests:
+   (TypeScript, store) a tab set saved from two local tabs, one server tab, one
+   renamed server tab, one server tab whose rename box was committed unchanged, and
+   the hand-built tab of AC2's test holds two entries and no marker; a tab set saved
+   after SV-3 AC9's sequence holds that tab as "Terminal" and no marker; (component)
+   the save shows the left-out count.
+4. **Logs, and the fixed list of kinds** (review R3-m7). No saved server's name,
+   host, user or identity file, and no argument of a client start, is written to
+   ADE's log (`ade.log`) by either side. Every F7 outcome that is not a success, in
+   Rust and as the value a webview call rejects with or a pane reports, is a
+   **kind** from this fixed list, carrying at most what the list says and never a
+   field's value:
+
+   | Kind | May carry | When |
+   |---|---|---|
+   | "a saved server failed its checks" | the field's name | a save; before any start (SV-2 AC5) |
+   | "the server list could not be read" | nothing | any action; before any start (SV-1 AC4) |
+   | "the server list could not be saved" | the operating system's error number | an add, an edit or a remove whose write failed (SV-1 AC4) |
+   | "the server list is full" | nothing | the 201st add (SV-1 AC4) |
+   | "that saved server no longer exists" | nothing | a connect request whose identifier is not in the list; before any start (SV-3 AC4) |
+   | "shell not supported" | the shell's base name, when it passes SV-2 AC10's length and character rule; otherwise nothing | before any start (SV-2 AC10) |
+   | "not available in an engagement" | nothing | before any start (AC8) |
+   | "could not start a terminal" | the operating system's error number | the shell could not be started (today's text for this is `spawn failed:` followed by the system's own message, which F7 does not pass on) |
+   | "no SSH client found" | the exit status, 127 | the pane's process ended before `ssh` was seen, with status 127 (SV-8 AC2) |
+   | "ended before ssh was seen to start" | the exit status | SV-2 AC9 |
+   | "not handed over: another program is running" | nothing | on a connecting pane (SV-2 AC9) |
+   | "not handed over yet" | nothing | on a connecting pane (SV-2 AC9) |
+
+   The last two are reported on a pane that is still connecting and are not
+   failures. **There are twelve kinds** (revision 4 had eleven; "could not be
+   saved" is revision 5's, review R4-m8); S1b adds three for a hub's server, under
+   this same rule (SV-13 AC6). **No kind's payload can carry a host, a user, a key
+   path or a server's name.** A message that names the server (SV-2
+   AC5, SV-1 AC3's confirmation, the removed-server case) gets the name in the
+   webview, from the identifier the webview sent and the list it already shows;
+   the name is never part of a kind and never reaches the log. Tests: (Rust) for
+   each kind of the list, each reached by the fixture
+   its criterion names (the engagement kind through the availability function's
+   input, AC8), with markers in every field of the saved server, in the fixture
+   home's path and in `SHELL`'s folder: `ade.log` holds no marker, and the kind's
+   value holds nothing but what its row allows ("could not start a terminal" is
+   reached with `SHELL` set to a path named `zsh` that does not exist, which
+   `shell_from` does not check for (X8), "that saved server no longer exists" with
+   an identifier that is not in the list, "the server list is full" with the 201st
+   add, "the server list could not be saved" with SV-1 AC4's read-only folder);
+   (TypeScript, component) with a marker as the server's name and the "failed its
+   checks" kind returned, the message shown holds the marker and the rejected value
+   does not; (TypeScript) each rejection of an F7
+   call, left unhandled so that `main.tsx`'s handler logs it, produces a `log_error`
+   message with no marker.
+5. **Not in the folder-keyed stores.** A remote pane adds nothing to recent
+   projects (`ade-recent-projects`), the agent tracker or the orchestrator. Test
+   (TypeScript, store): those keys are byte-identical before and after a Connect
+   and its end.
+6. *(Moved in revision 3 to F7.9, "What stays on this machine": it is a
+   statement for the owner, not a criterion.)*
+7. **[Second] The phone.** **Every server tab is relayed with the title "Remote
+   server", renamed or not** (owner, OQ-13, for a server-named tab; extended to a
+   renamed one by the stricter reading flagged in AC2). The payload holds no saved
+   server's name, host, user or identity file, no name typed onto a server tab, and
+   no project for that tab.
+
+   - **Carried by** whichever of F7 S1 and the relay's tab payload merges into
+     `main` second (F3 D14's rule). The other story is **phone-watch ticket 8**,
+     "ADE's Remote bridge", which adds `remote_tabs_set`
+     (`_bmad-output/initiative-phone-remote/epic-phone-watch/tickets.toml`); it is
+     sharded and not built (F7.0), and it already carries F3's mirror as a
+     conditional item.
+   - **Written on both sides at F7 S1's sharding:** as a conditional mirror item in
+     ticket 8, as a conditional item in the S1 story that owns AC2, and as a row of
+     `.ade/context/f7-merges-second.md`. Each side is checked at its review against
+     `main`, and again before merging if the other merged in between.
+   - **Gate on each side:** that story's verification command. Ticket 8's gate is
+     its own; F7's is S1's.
+   - **Until it lands.** S1 is Done without this test when S1 merges first: no relay
+     payload exists then to test, and the obligation sits in ticket 8. The rule
+     binds the code from S1 on, whichever merges second: S1 has **one rule that
+     gives a tab's outward name** ("Remote server" for a server tab, the tab's name
+     otherwise), **stated once as a checked-in table of cases** (review R4-m6). The
+     export of AC2 is Rust over the session's JSON (`sync.rs`), and the relay's tabs
+     are supplied by the webview (X7), so one implementation may not be possible:
+     there may be two, one on each side, **each tested against that same table**,
+     and a case added to the table is thereby a test on both. If the architect can
+     have one side derive the name for both, there is one. In S1 the Rust side is
+     tested against the table by AC2's test, and the webview side as a pure
+     function. Nothing in S1 sends a server tab's name, typed name or remote record
+     to any relay; and the relay's payload, when it is built, takes a tab's title
+     from the webview's implementation of the rule.
+   - **Test (in whichever story merges second):** the payload for a server-named
+     tab, for a renamed server tab holding a remote pane, for the hand-built tab of
+     AC2's test and for the tab after SV-3 AC9's sequence holds no marker; the first
+     three are titled "Remote server".
+8. **[Second] Engagements** (owner, OQ-14, D15: not available for now). In an
+   engagement's instance the saved-servers feature is **not available**: no server
+   list, no palette entries, no connect request accepted, and the default profile's
+   list is not readable from it. The default profile is unaffected.
+
+   - **Carried by** whichever of F7 S1 and **F1 ticket e29** merges into `main`
+     second. F1 slice 1 **is sharded** (review R3-M3;
+     `_bmad-output/initiative-personas-and-engagements/epic-profile-and-rule/tickets.toml`).
+     e29, "The slice 1 scenario: the real create and start", is the first story in
+     which a test starts a real engagement instance: the default starts A through
+     the starter and A reports its own readiness. e19 (the starter) and e20 (A's own
+     start) are tested against stand-ins, and e30 (the slice 1 gate) changes the
+     expected-result mark and collects the runs, "and nothing else". F3 wrote its
+     mirror for the same scenario into e29 (`.ade/context/f3-merges-second.md`).
+   - **Written on both sides at F7 S1's sharding:** as a conditional mirror item in
+     ticket e29, as a conditional item in the S1 story that owns the availability
+     function, and as a row of `.ade/context/f7-merges-second.md`. Each side is
+     checked at its review against `main`, and again before merging if the other
+     merged in between.
+   - **Gate on each side:** on F7's side, S1's verification command; on F1's side,
+     **F1 D28** (the verification command plus green CI runs of the isolation test
+     on macOS, Linux and Windows), as for every item of e29. On Windows the feature
+     is unavailable already (SV-8 AC3), so the item's assertions hold there by that
+     rule.
+   - **Until it lands.** S1 is Done without the instance test when S1 merges first:
+     at 84389eb no engagement instance can exist and the code has nothing that says
+     "this instance is an engagement's" (checked). The owner's decision still binds
+     the code from S1 on, whichever merges second: **the one function that decides
+     whether the feature is available** (SV-8 AC3's) takes "this instance is an
+     engagement's" as an input and answers no for it, and the list, the palette
+     entries and the connect request all ask it. Tested in S1 (TypeScript, pure, and
+     Rust for the connect request): with that input set, the palette's entries
+     include none of F7's, and a connect request is refused with the "not available
+     in an engagement" kind and makes 0 client starts. Whichever story merges second
+     connects that input to F1's real signal, so that the answer is no **by F1 slice
+     1's gate** (e30 needs e29; review R4-m5, X6). It is not "as soon as an
+     engagement instance can exist": F1's tickets e18 (engagement mode), e19, e20
+     and e31 (the default profile's form and Open) can each merge before e29, and
+     none carries the mirror. So between e31 and e29 a developer who turns F1's flag
+     on in a **debug build** can open an engagement in which saved servers are still
+     offered. Release builds ignore that flag (e22), so no shipped build has the
+     gap.
+   - **Test (in whichever story merges second, joining e29's scenario):** a connect
+     request made in A's instance is refused with the "not available in an
+     engagement" kind, 0 client starts, the palette there has no saved-server entry,
+     and a marker in the default profile's server list is found nowhere in A's
+     instance.
+
+#### SV-6. Local-folder features in a remote pane (S1)
+
+The rules are **per pane**, and hold for a remote pane in each of its states:
+connecting, live and ended. A local split or sub-terminal of a server tab is a
+local pane and behaves as today.
+
+1. **File links are off.** In a remote pane, text that looks like a file path is
+   not a link, and no click on the pane's output opens a local file in the code
+   viewer, preview or an editor tab. URL links are unchanged. Test (TypeScript,
+   unit on the file-link provider, `src/lib/terminalFileLinks.ts`): for a remote
+   pane the provider returns no links for `/etc/hosts:3` and `src/main.rs`, and for
+   a local pane in the same tab it returns them.
+2. **No folder.** A remote pane reports no folder, in any state. A tab reports no
+   folder when its own view's active pane is remote, and reports the active pane's
+   folder as today when that pane is a local split. The 3 s folder poll stores no
+   result for a remote pane. The file browser, when the pane it follows is remote,
+   follows nothing and says the pane is on a server. The panels that take the
+   active terminal's folder (Board, Contracts, Tokens, Integrations, Fleet's "This
+   terminal"), project setup and the BMAD questions get no folder from a remote
+   pane, as from a non-terminal tab today; features that open a **new** local tab
+   from the active pane's folder likewise get none (**not checked per caller**
+   what each does today with no folder; the architect lists it). Tests:
+   (TypeScript, pure) `tabCwd` is null for a tab whose active pane is
+   remote, and is the split's folder when the active pane is a local split;
+   (TypeScript, store) no poll result is stored for a remote pane, and the active
+   folder the panels and project setup read is null while a remote pane is active;
+   (component, `FileBrowser`) the on-a-server state is shown.
+3. **Agent status.** A remote pane has no agent state. ADE runs and installs nothing
+   on the server and passes nothing beyond the grammar. By SV-2 AC8 ADE passes the
+   connection no vault variable and no `ADE_*` variable, and removes every inherited
+   `ADE_*` variable and every inherited variable that has a vault secret's name. So
+   the user's own `SendEnv` settings have nothing of ADE's making to forward, **with
+   the exceptions SV-2 AC8 states** (reviews R3-M2, R4-M1, R6-m1): a secret's value
+   under another name, a secret removed from the vault after ADE started, whatever
+   the user's start-up files export, which is theirs, and a list of names that is
+   missing or damaged, with which nothing is removed by name. Covered by SV-2 AC1's
+   and AC8's tests.
+4. **ADE initiates no write into a remote pane.** The rule: `writePty` refuses a
+   remote pane, connecting, live or ended, with a message that it is a server
+   session, unless the call is one of the **named user sends**: the scratchpad's
+   send, its chain steps, and the two Send Enter actions. Those send what the
+   engineer wrote, on their action, and work as today, with one change: the
+   scratchpad refuses to send to a remote pane while images are attached (it would
+   add local temp-file paths, which mean nothing on a server), keeps the text, and
+   says why. The terminal's own input path is not `writePty` and is untouched. Every
+   other caller is ADE-initiated and is refused. Today those are (F7.0):
+   `sendToActiveTerminal`'s five callers (the Tokens panel, the anti-slop "ask to
+   fix", a notification's action such as "Type /compact", the Contracts panel's "New
+   Foundry project", and the contract runner's typed actions), `typeWhenReady`'s
+   caller that targets the active pane (the agent picker's "This terminal", which
+   already refuses a pane running `ssh`), and the sub-terminal notice's "Insert
+   command". Callers that type into a tab or sub-terminal they just opened never
+   target a remote pane. Tests: (TypeScript, store) SV-2 AC3's test, plus: each
+   named user send writes to a live remote pane, and the scratchpad send with an
+   image attached writes 0 bytes and keeps the text; (component) each refused caller
+   shows the server-session message; (TypeScript, static) a test lists every call
+   site of `writePty`, `writePtyInput` and `invoke("write_pty"` under `src/` outside
+   tests and compares it with a checked-in list in which each site is marked
+   "terminal input", "named user send" or "refused in a remote pane"; a call site
+   missing from the list fails the test. **Rust-side writers** (review R3-m14): each
+   terminal has one writer thread, fed by exactly two callers, the `write_pty`
+   command and `type_line` (F7.0). `write_pty` carries the webview's writes, which
+   the rule above decides. `type_line` is `/open`'s typing into the pane it just
+   opened, always a local shell (SV-2 AC6). (Rust, static) a test lists every send
+   into a terminal's input queue under `src-tauri/src` outside tests and compares it
+   with a checked-in list of those two; a third fails the test. `type_line` reaches
+   only the terminal that carries its `/open` request id (X4), and a client start's
+   terminal carries none (F7.11; review R4-m13). **A third writer that neither list
+   can see** (review R4-B1): the terminal library itself writes a newline and the
+   end-of-file byte when its writer is dropped (F7.0, X1). No list of call sites or
+   queue sends shows it, so it is covered by a test that reads the bytes instead:
+   SV-2 AC3's recording stub, which must hold 0 bytes after End and after a close.
+
+#### SV-7. Safety (S1)
+
+1. **Host key checking is the SSH client's and the user's, never ADE's.** ADE
+   offers no setting, and builds no argument or variable, that disables, relaxes or
+   redirects it: no `StrictHostKeyChecking`, `UserKnownHostsFile`,
+   `GlobalKnownHostsFile`, `CheckHostIP`, `VerifyHostKeyDNS`, `UpdateHostKeys`,
+   `HostKeyAlias`, `KnownHostsCommand` or `NoHostAuthenticationForLocalhost`. ADE
+   never answers a host key question: it writes nothing into the pane, when the
+   pane is ended or closed included (SV-2 AC3), and sets no askpass variable (SV-2
+   AC8). ADE itself never writes, edits or deletes any file under `~/.ssh` (the SSH
+   client it starts writes `known_hosts` as it always does). Tests: (Rust, pure) no
+   argument list for any record in the fixtures holds `-o` or any of those words;
+   (Rust, fixture home, stub `ssh`) after add, edit, remove, connect, Reconnect and
+   the load of a hostile store, the fixture's `.ssh` folder is byte-identical, with
+   the same modification times.
+2. **Hostile values run nothing.** A checked-in fixture of at least 40 hostile
+   values per field (a leading `-`; `-oProxyCommand=...`; spaces; `;`, `|`, `&`,
+   `$(...)`, `$VAR`, backticks; quotes; `*`, `?`, `~`, `#`, `!`, `=`; newline, NUL,
+   ESC and other control characters; bidi overrides; `%h`, `%r` and other `%`
+   tokens; `${VAR}`; `user@host`; `host command`; `host:port`; a 2000-character
+   value; a path with `..`) is run through save and through a connect request. For
+   each: either it is refused at both, with 0 stub records, or it is accepted and
+   the stub `ssh` received the grammar with that value as exactly one argument,
+   byte for byte. And for every **accepted** Host and User value, every character
+   is in SV-1 AC1's set for that field (so the fixture cannot pass with a value a
+   shell would expand in the user's `ProxyCommand`). No file outside the stub's
+   record is created (the fixture's values name marker files to create). Test
+   (Rust, Unix, stub `ssh`).
+3. **Through the shell, safely** (D4). Every argument is quoted by ADR 0008's
+   quoting rules (the architect says how Rust and `src/lib/shellQuote.ts` stay one
+   quoter), no argument holds a character outside `0x20`-`0x7e` (a saved value
+   that does is refused by SV-1 AC1), and nothing reaches a shell history file.
+   Test (Rust, Unix): for the accepted values of AC2's fixture, a client start
+   under `zsh` and under `bash` (both always; SV-2 AC2), with the fixture's
+   history file configured, hands the stub exactly SV-2 AC1's arguments and leaves
+   the history file byte-identical.
+4. **S1 uses no keychain, and of the vault only its list of names.** F7's code in
+   S1 makes no call to the OS keychain, reads no secret's value, and changes nothing
+   of the vault's. **The one thing of the vault's it uses is the reader of the list
+   of names** (`vault-index.json`), for SV-2 AC8 (e) (revision 5; review R4-M1).
+   Tests: (Rust, text test over F7's Rust source files, which the architect lists in
+   the design and the test reads from that checked-in list; the list includes every
+   file that builds or makes a client start, with its inline tests) none of them
+   contains `keyring` or `find_command` (SV-8 AC1), and **the only reference to the
+   `vault` module in them is to the one reader of the list of names**, which the
+   checked-in list names: a reference to anything else of the vault's
+   (`env_for_terminals`, `vault_get`, a value) fails the test; (Rust, fixture) after
+   add, edit, remove, connect, Reconnect and restore, `vault-index.json` is
+   byte-identical. SV-2 AC8's test adds that the builder has no input for a vault
+   value and that a recording stand-in for the OS keychain records 0 calls. The
+   vault's own code has no seam a test could count reads on (F7.0; review R3-M2),
+   which is why F7 uses none of that code but the plain-file reader.
+5. **The list's store is untrusted input.** Besides what the user types into ADE's
+   form, the store file is the only input S1 reads (S1b adds one, an open hub's
+   `hub.conf`, treated the same way: SV-13), and ADE does not assume it wrote every
+   byte of it: another program running as the user, a restored local
+   snapshot, or a hand edit can **add, change or remove** rows. Every row is loaded
+   by SV-1 AC2 and AC4 and checked again at every client start (SV-2 AC5). A
+   changed row cannot run anything (AC2), and is visible: the palette entry and
+   the Reconnect control show the destination summary (SV-9 AC2, SV-3 AC4).
+   **Residual risk, stated:** a program that can rewrite the store can make a row
+   with a trusted name point at another host; the engineer sees the changed
+   summary and, for a host their SSH client has not seen, the SSH client's own
+   host key question, and nothing else stops them typing a password there. There
+   is no import action (D7). This criterion adds no test of its own: it is
+   covered by the tests of SV-1 AC2 and AC4, SV-2 AC5, SV-7 AC2, SV-3 AC4 and
+   SV-9 AC2.
+
+#### SV-8. Platforms, and a machine without an SSH client (S1)
+
+1. **macOS and Linux.** The SSH client is whatever the user's shell runs for the
+   name `ssh` (SV-2 AC2): the first `ssh` on that shell's `PATH`, unless the user's
+   own start-up files point the name at another program. ADE bundles and downloads
+   none and does not use `find_command` for it. A different `ssh` (a wrapper script,
+   another vendor's client, a `hash` entry) is the user's own choice and is handed
+   the same arguments; what a wrapper then passes on to the program it runs is the
+   wrapper's (SV-2 AC9). Covered by SV-2 AC2's test (the stub is such an `ssh`),
+   SV-2 AC9's wrapper test, and SV-7 AC4's text test, which also asserts that F7's
+   files do not name `find_command`.
+2. **None installed.** When the user's shell finds no `ssh`, Connect and Reconnect
+   start no SSH client: the pane is ended and says that no SSH client was found and
+   how to get one on this OS (for Linux, the distribution's OpenSSH client package).
+   The list still opens, and add, edit and remove still work. **The rule is the exit
+   status** (review R3-m4): the kind is "no SSH client found" when the pane's
+   process ended before `ssh` was seen to start (SV-2 AC9) with status 127, which is
+   what both shells return for a command they cannot find (W6). ADE has no other
+   signal. So anything else that ends with 127 before `ssh` was seen is shown the
+   same way: a start-up file's own failure, or an `ssh` that ran too briefly to be
+   seen and returned 127 from the server. **A wrong message there is accepted**, and
+   is kept truthful by its wording: it says the shell reported status 127, which
+   usually means no `ssh` on the `PATH`. Tests: (Rust, Unix, fixture `PATH` with no
+   `ssh`, under `zsh` and `bash`) a connect request gives the "no SSH client found"
+   kind with status 127, the pane's process has ended, and an add still saves;
+   (component) that kind shows the message with the status and the OS's instruction.
+3. **Windows is not in F7's slices** (D12, OQ-12). No Windows installer ships. A
+   Windows build made before F7's Windows work shows no server list and no
+   saved-server palette entry. The rules here are **not** claimed to hold there
+   unchanged: the Identity file rule (no `C:\` paths), the User set (no
+   `DOMAIN\user`) and D4's start (PowerShell) are each specified with F1's
+   Windows work. PuTTY and `plink` are never used. Test (TypeScript, pure): the
+   one function that decides whether the feature is available answers no for
+   the Windows platform, and with that answer the palette's entries include none
+   of F7's.
+
+#### SV-9. Where it lives (S1)
+
+1. **The server list.** One place in the UI, in the main window, shows the saved
+   servers in name order (by SV-1 AC1's comparison, then by code point), each with
+   its name and its **destination summary**, built from its fields: `HOST`, with
+   `USER@` before it when User is set and `:PORT` after it when Port is set (an
+   IPv6 host is shown in brackets when a port follows), for example
+   `deploy@db1.example.com:2222`. It offers Connect, Add, Edit and Remove.
+   **It is an overlay**, opened and dismissed like Integrations, not a permanent
+   side panel (owner, OQ-9: accepted as recommended, and the recommendation named an
+   overlay; review R4-m11). How the overlay is laid out is the designer's. Every
+   action is
+   reachable and operable from the keyboard. Tests: (Rust or TypeScript, pure,
+   whichever side the architect gives the summary; one implementation) the summary
+   and order functions over a table of records; (component) with focus in the
+   list, Connect, Add, Edit and Remove are each reached and triggered with keys
+   only.
+2. **The palette.** In the main window the command palette has one entry that opens
+   the server list, and one entry per saved server that connects to it. **A server's
+   entry has its name and its destination summary in its label, and the palette
+   matches both** (decided; review R3-m17): a palette entry is a label, a category
+   and an optional shortcut, with nowhere to show text that is not matched (F7.0),
+   so the entry is found by typing part of its name or part of its host or user,
+   through the palette's existing match rule. F7 adds entries and changes nothing
+   else: not the match rule, not the selection, and not the order of today's
+   entries, which the saved-server entries follow (G1; revision 2's prefix rule is
+   removed, review N-m3). Tests: (TypeScript, store) with three saved servers the
+   palette's entries include one per server with name and summary, after every entry
+   it had before; with text typed that only one server's name contains, and again
+   with text that only one server's host contains, that entry is the only one left
+   and is the selected one; for a fixed table of typed texts, the entries kept and
+   their order, with F7's entries taken out, are identical with and without saved
+   servers; running a server's entry makes exactly one connect request carrying that
+   server's identifier and nothing else of it.
+3. **An empty list** says what the feature does and offers Add. It does not list
+   hosts from anywhere else (S1b adds one source, an open hub's recorded server, in
+   a marked group of its own: SV-13 AC2). Test (component).
+
+#### SV-10. Next (S3; **no criteria yet, not buildable**)
+
+Listed so the cut is explicit. Criteria are written, and reviewed, before any of
+it is sharded. S3 does not depend on S2.
+
+- **A jump host:** one optional field with Host's rules, passed as `-J`, added to
+  the grammar before `--`.
+- **Groups:** one optional group name per server; the list shows servers by group.
+- **A colour** per server, applied as the server tab's accent (today's tab colour).
+- **Duplicate** a saved server.
+- **Open in a split or as a sub-terminal** of the current tab, **duplicate a
+  connection** into a new tab, and **move a connection to its own window** (which
+  needs a detached window that asks before it closes a live connection and whose
+  tab is saved with the session; SV-3 AC8).
+- **A "Server" row in the New tab dialog.**
+- **Another login shell** (`fish` first): added only with SV-2 AC2's and AC9's
+  tests running under it in CI, always (SV-2 AC10, OQ-20).
+- **Save a copy of a hub's server** (after S1b): an action on a hub's row that makes
+  an ordinary saved server from its four values, through SV-1's rules, with a Name
+  the engineer gives. The copy counts towards the 200, has no link back to the hub
+  and is never updated from it.
+
+#### SV-11. Import aliases from `~/.ssh/config` (S4; **no criteria yet, not buildable**)
+
+Read-only. ADE lists the literal `Host` names (no patterns) found in the
+**top-level** `~/.ssh/config` file only: it does not follow `Include`, evaluate
+`Match` or expand anything, and says so beside the list (following `Include`
+faithfully is the parser D5 rejected). The engineer picks some, and each becomes a
+saved server whose Name and Host are the alias and whose other fields are empty,
+so nothing else from the file is copied into ADE. Each goes through SV-1 AC1. ADE
+never writes the file (D5).
+
+#### SV-12. A stored server password (S2; **gated on the architect's spike; no criteria yet, not buildable**)
+
+Revision 2 specified this slice in eleven criteria. The delta review found three
+of its central promises false or undecidable against what `ssh` does (N-B2, N-B3,
+N-B4), and the owner then decided to split and spike (D14). Those criteria are
+**withdrawn**. What follows is not a specification: it is what binds the slice,
+what it must achieve, and what has to be shown before anyone writes criteria for
+it. It is not sharded and not built until then, and nothing in S1 depends on it.
+
+**The owner's decisions that bind it (2026-11-18)**
+
+- **OQ-3 as amended by D14: passwords only.** A server password may be stored and
+  entered by ADE. A key passphrase is never stored by ADE (D3).
+- **OQ-16: host keys and binding.** A stored password is used only when the SSH
+  client's resolved settings verify the host key and the resolved destination
+  matches what the password was saved for; otherwise `ssh` asks the engineer.
+- **OQ-17: the keychain's limit is accepted, with disclosure.** A program running
+  as the user can read the entry; the PRD and the guide say so (the text is
+  below).
+
+**The outcomes it must achieve** (promised to the owner, or established by the
+reviews). Each is an outcome, not a mechanism. Criteria written later must make
+each one decidable by an automated test, or the slice does not ship.
+
+- **O1. In the OS keychain only.** The password is kept in the OS keychain
+  (Keychain on macOS, Secret Service on Linux), apart from the Secrets vault, and
+  nowhere else: no file ADE writes, no other store, no fallback.
+- **O2. Opt-in per server.** Nothing is stored unless the engineer chooses it for
+  that server and types the password in that server's form. ADE never offers to
+  remember something typed in a terminal, and never shows a stored password back.
+- **O3. Bound to its destination.** It is stored with the destination it was
+  saved for, where rewriting the server list's store cannot change the binding.
+- **O4. Never sent before the host key is verified.** Not to a host whose key the
+  SSH client has not verified, and not under any setting of the user's or the
+  system's SSH configuration that accepts a host key without verifying it.
+- **O5. Never sent to a destination other than the one it was saved for,** judged
+  on the **resolved** host name, port and user, not on ADE's record alone (an
+  alias can be pointed elsewhere without touching ADE's record); and never to a
+  jump host or any other hop of the same connection.
+- **O6. Never anywhere else.** Never in a log, an export, ADE sync, a snapshot, a
+  recording, the session, a tab set, the phone relay; never in an environment
+  visible to another process; never on a command line; never in a pane's input,
+  output or scrollback; never returned to the webview.
+- **O7. A wrong password is not retried into a lockout.** A stored password that
+  failed is not sent again by any later Connect or Reconnect until the engineer
+  stores it again, and this holds across a restart and when the server ends the
+  connection after the first failure without asking again.
+- **O8. Removing the server removes it.** So does changing the destination it was
+  saved for. A password is never deleted silently because a list was empty,
+  older or unreadable.
+- **O9. Everything else stays the engineer's.** The host key question, one-time
+  codes, key passphrases, hardware-key PINs and touches, and a change-password
+  prompt are never answered by ADE, and each still reaches the engineer, with the
+  SSH client's own text, and can be answered or cancelled by them.
+- **O10. S1 is unchanged for a server with nothing stored:** no keychain call, no
+  askpass variable, one client start (SV-2 AC2, AC8, SV-7 AC4).
+
+**The gate: what the architect's spike must show first**
+
+A **spike**, not a story: a short piece of investigation by the architect, with its
+own output, an evidence note under `docs/superpowers/specs/` (F7.11). It is run
+against a **real, disposable test server** that the architect creates for it and
+discards: **a container or a virtual machine on the architect's own machine, or a
+throwaway host that holds no third party's data and that nobody else uses** (review
+G-m3). "Real" means a real `sshd` answering a real connection; it never means
+somebody's server. Throwaway accounts and keys, a scratch home folder and a scratch
+keychain. It never connects to any other host and never touches the user's real
+`~/.ssh`, keys, agent or keychain. For each question below the note records what was
+run, on which OpenSSH versions and on macOS and Linux, **with which build of the
+app**, and what was observed. **Two answers must be shown with a build signed as the
+shipped app is, not a debug build** (review G-m1): what the macOS keychain allows
+depends on the code signature of the program that reads it, so a scratch keychain
+read by an ad-hoc-signed debug binary does not show what the shipped app does. They
+are GQ-1's macOS clause and GQ-10's "after an app update", the second with two such
+builds of different versions. Every other answer may be shown with a debug build.
+"Safe" is what the evidence must show for the outcome to be considered achievable.
+Facts V1 to V11 are the starting point and need not be shown again.
+
+| # | Question | From | A safe answer shows |
+|---|---|---|---|
+| GQ-1 | **Can a program the user's SSH configuration runs obtain the password?** `ProxyCommand` and `Match exec` children inherit the askpass variables, can run the helper with a forged prompt before `ssh` asks anything, and are indistinguishable from `ssh` by process identity (V4, V5). `LocalCommand` and `KnownHostsCommand` by the same mechanism were not run. | N-B3; list 6 | For each of the four settings, and for a start-up file and anything it starts, a child that plays the exchange (before the first real prompt, after the answer, after the connection ended, and from a second connection) gets nothing; and what the environment holds cannot be exchanged for the password. On macOS, that this route does not yield the password without the keychain's per-application prompt, **shown with a build signed as the shipped app is** (G-m1). (O5, O6) |
+| GQ-2 | **Once the helper is forced, `ssh` puts no prompt on the terminal: every prompt goes to the helper** (V1), and a helper that declines returns an empty answer with no fallback (V2). So ADE's helper would have to relay every prompt of the connection: the host key question with its yes, no and fingerprint loop, one-time codes, passphrases, PINs, typed passwords. Can it, or is there a way for only the password prompt to reach it? | N-B4; list 4, 8 | Either a delivery in which prompts ADE does not answer never pass through ADE; or, for each prompt type (hardware-key touch and PIN included), evidence that the text reaches the engineer unchanged, echo is off for non-echo prompts, the typed answer reaches `ssh`, cancel ends the connection, and a helper crash or hang never produces an answer. In the second case the owner is told that ADE then handles secrets the engineer types and never asked it to store, and decides. (O9, O6) |
+| GQ-3 | **Is an empty or failed helper answer sent to the server as a password attempt** that counts toward its failure limit? (Suspected, not checked.) | N-B4, N-M5; list 3 | Server-side evidence that no failure path of ADE's (declined, locked keychain, crash, mismatch) causes an authentication attempt. (O7) |
+| GQ-4 | **Can the password prompt for the bound destination be recognised from the prompt text alone?** The helper receives only the text (V1). Formats differ by tool and are built from resolved values (V6, V7). Needed: the exact text for a literal host, an alias with `HostName`, an empty User, `CanonicalizeHostname` and `HostKeyAlias`, per supported OpenSSH version. | N-B2; list 1 | A whole-text rule, built only from values ADE holds before the prompt, that matches the bound destination's password prompt in every listed case and matches nothing else: not a server-chosen text shaped like it, not another host's or user's prompt, not a passphrase prompt. (O5, O9) |
+| GQ-5 | **Servers that ask for the password by keyboard-interactive** (many PAM setups): the prompt is `(user@host) ` followed by text the server chooses (V6), and the same channel carries one-time codes. From which OpenSSH version is the prefix present? | N-B2; list 2 | Either evidence that such a prompt can be told from a one-time-code prompt by something the server cannot forge; or the statement that it cannot, in which case the stored password is not used on those servers, the engineer is told so when storing, and the owner decides whether that is acceptable. (O5, O9) |
+| GQ-6 | **`ProxyJump` and other hops:** do the jump `ssh` child's prompts reach the same helper, and with what text? | N-B2, N-M6; list 5 | A jump host's prompt is distinguishable and is never answered with the stored password; a passphrase prompt of any `ssh` in the chain is never answered. (O5, O9) |
+| GQ-7 | **Can ADE know the resolved destination and that the host key is verified** (OQ-16)? `ssh -G` prints the resolved settings but is a second client start: it runs `Match exec` programs again, runs the start-up files again under D4, may do name lookups, and its answer can differ from the real run (V7). `StrictHostKeyChecking` is not the whole of it: `UserKnownHostsFile`, `GlobalKnownHostsFile`, `KnownHostsCommand`, `VerifyHostKeyDNS`, `NoHostAuthenticationForLocalhost` and `HostKeyAlias` each change what "verified" means. | N-M4; list 7; OQ-16 | A method whose answer is shown equal to what the real connection used, in each listed setting, or a rule that does not use the password in any setting not shown; the cost stated (an extra run, what it executes, whether it resolves names). If it needs a second client start, the amendment to G3 and SV-2 AC2 ("exactly one client start") is proposed to the owner, not assumed. (O3, O4, O5) |
+| GQ-8 | **Where and when are the askpass variables set?** Set in the shell ADE starts, the user's start-up files and everything they start hold them, a start-up file's own `SSH_ASKPASS` overrides ADE's while `force` stays, and a start-up file that runs `ssh-add` or `git` calls the helper. | N-M3 | The pair is set for the `ssh` process only, after the start-up files, shown by the recorded environment of a start-up file and of a program it starts; what else that environment may hold is named; and whether replacing the user's own `SSH_ASKPASS` for a stored connection is acceptable is put to the owner. (O6, O10) |
+| GQ-9 | **A wrong password with no second prompt.** The server may end the connection after the first failure (an agent offering several keys first; `NumberOfPasswordPrompts 1`), and each Reconnect would spend another attempt. | N-M5 | A state "released, not confirmed" that the next Connect shows before any use, kept beside the binding where rewriting the list's store or restoring a snapshot cannot clear it, shown to survive a restart. (O7) |
+| GQ-10 | **Storage.** Which servers have a stored password must be known without reading values, the binding must be checked without releasing the value on a mismatch, and orphans must be found: together these imply an index, never named. A list that parses but is empty or older would delete every newer password. A real keychain can block on an unlock dialog. | N-M7, N-m9; list 9, 10 | The index named, with its trust level; entries named by identifier only, never by host or user; no deletion without the engineer's confirmation or a stated waiting period; a time bound on every keychain call, with what the engineer sees at the bound; on macOS, the behaviour after an app update, **shown with two builds signed as the shipped app is, of different versions** (G-m1), and whether entry attributes are readable while locked; on Linux, Secret Service unlock. Every state shown to the engineer has a decidable moment. (O1, O3, O8) |
+| GQ-11 | **The value's path through the form.** It crosses the webview and one call to Rust. | N-M8 | A test design showing that after typing, saving and a rejected save, no persisted key and no logged message (`log_error` on a rejected call) holds the value and the field is empty; and, if GQ-2 ends in a relay, the same for answers the engineer types into it. (O6) |
+| GQ-12 | **Versions and platforms.** `SSH_ASKPASS_REQUIRE` is absent before OpenSSH 8.4 (per the review; to be confirmed). | F7.9; list 2 | The OpenSSH versions and the platforms on which every answer above was shown, and what ADE does elsewhere: the password is not used and the engineer is told. (O9, O10) |
+
+**What happens with the spike's result**
+
+- If every question has a safe answer, the product manager writes SV-12's
+  criteria from the outcomes and the evidence, they are reviewed adversarially,
+  and the owner approves them before S2 is sharded.
+- **If the spike cannot show that the outcomes can hold, nothing is narrowed
+  quietly: the result goes back to the owner with the alternatives.** The two
+  questions most likely to end this way are GQ-1 (a program the user's SSH
+  configuration runs can play the helper exchange) and GQ-2 (ADE's helper would
+  have to relay every prompt of the connection, the host key question and
+  one-time codes included). The alternatives known today: (a) stored passwords
+  only for servers whose resolved configuration runs no local program; (b) a
+  different way of delivering the password than the helper mechanism, if the
+  spike finds one that meets the outcomes; (c) no stored passwords, with the
+  operating system's and the agent's own support left to do the remembering.
+- Until the owner has decided on that result, S2 stays as it is here.
+
+**Disclosure (OQ-17), corrected by N-B3 and N-m8**
+
+These are the facts the engineer is told wherever a password can be stored, and
+that the guide states in full. They are the wording today; the spike may remove
+a sentence only by evidence (GQ-1).
+
+- In the form, before a password can be saved: *"Better Terminal keeps this
+  password in your computer's keychain. Any program running as you can read it
+  there, and a program that your SSH configuration runs for this server can
+  obtain it without the keychain asking you."*
+- In the guide, in addition: the password is never synced by ADE sync, but the
+  login keychain is part of a backup or a migration of the machine and travels
+  with it; a program running as the engineer, an agent in a Better Terminal
+  terminal included, can ask the keychain for the entry itself (without a prompt
+  on Linux; macOS may ask first), and can change `~/.ssh/config` so that a saved
+  name leads to another host; key passphrases are not stored by Better Terminal,
+  and the operating system's own support or an SSH agent is the place for them.
+- **Conditional, and not to be dropped when criteria are written** (review G-m2;
+  N-B4): if GQ-2 ends in a relay, which means Better Terminal's helper carries every
+  prompt of a stored connection, the form and the guide also say: *"For a server
+  with a stored password, Better Terminal's helper handles every prompt of that
+  connection, including what you type in answer: one-time codes, passphrases and
+  PINs."* The line goes only if the spike shows a delivery in which prompts ADE does
+  not answer never pass through ADE.
+
+**Carried from revision 2, for whoever writes the criteria**
+
+- The delta review's S2 findings (N-B2 to N-B4, N-M3 to N-M8, N-m8, N-m9) are
+  each carried into a gate question above (F7.12 lists which).
+- Decisions revision 2 took in the text and the review said belong to the owner:
+  whether keyboard-interactive password prompts are answered (GQ-5); replacing
+  the user's own `SSH_ASKPASS` for a stored connection (GQ-8); deleting a stored
+  password whose server is gone (GQ-10). Whether passphrases are stored at all
+  is answered: no (D14).
+- Engagements and profiles: S2 binds the default profile only while D15 stands;
+  F1 D20 (secret-store entries are separate per profile) applies if that changes.
+- What ADE says publicly changes only when S2 ships. "ADE never handles, stores
+  or syncs private keys" stays true and as written. The passages to update then,
+  each checked by a **text test over the named files** (required sentences
+  present, forbidden claims absent; review N-M9), are: `README.md`,
+  `docs/index.html`, `docs/guide/integrations.md`, `docs/guide/contracts.md` and
+  a new guide page for saved servers. No passage may say or imply that ADE
+  stores SSH keys or key passphrases, or that a stored password is safe from
+  other programs on the machine.
+
+#### SV-13. A hub's server in the list (S1b; **not buildable before F4 slice S1 and F7 S1 are on `main`**)
+
+The owner's decision D16 (OQ-21). Everything here uses F2's and F4's terms, checks
+and bounds **as those features define them**: it restates none and changes none,
+**except in the two places AC1 states** (a bare `~/` in the key path, and which
+bytes must be valid UTF-8; D18 (a), (l)), and anywhere else that this text and
+theirs differ, theirs stand and this is corrected (F7.9, "F2 and F4"). S1b is macOS
+only (AC7). A connection started from a hub's server is a connection in every
+respect: SV-2 to SV-8 hold for it, and the criteria below say only what is different
+or added. The criterion numbers are SV-13's own; no S1 number moves.
+
+In the tests, a **fixture hub** is a hub folder the test builds as F4's tests do: a
+repository of its own whose commit holds `hub.conf`, on F4 WS-1 AC6's marker
+fixture, in which `hub.conf` and every script under `bin/` write a marker file when
+sourced or run. Its `hub.conf` holds the text the test names. **No test runs the hub
+template and none contacts a host:** the SSH client is the stub `ssh` (F7.1). That a
+hub is open is given to the code under test as F4's own tests give it: its registry
+in Rust, a stand-in for it in a webview test.
+
+1. **What is read, and how** (D18 (a) to (c), (l)). For each finished hub whose
+   workspace is open in this instance (F4.1, WS-1 AC8), ADE reads **the hub folder's
+   top-level `hub.conf`**: the file on disk, which is the one the hub's own scripts
+   read and may differ from the committed one. It reads it:
+   - **under F4's bounds, through F4's bounded file calls** (the contract
+     `.ade/context/workspaces.md`): a regular file only, opened so that the open
+     never blocks, at most 1 MB (WS-9 AC2), each call off the UI thread and under
+     the 2-second bound (WS-9 AC3), so that a hub that does not answer never delays
+     another hub's row or the saved servers;
+   - **as bytes, of which only the lines that name one of the four keys must be
+     valid UTF-8** (D18 (l); review R6-B1). A line ends at a newline byte. A line
+     that names one of the four keys and is not valid UTF-8 makes the server not
+     usable ("could not be read"). **Bytes on every other line are not interpreted,
+     are never shown or logged, and cannot make the server not usable.** This
+     differs on purpose from F4, whose contract reads a file only when the whole of
+     it is valid UTF-8: on a Mac `bin/init` itself writes a `hub.conf` that is not,
+     when the hub's name, client or owner holds certain characters (F7.0);
+   - **by F2's rule for reading `hub.conf` without running it** (OB-6 AC2; its
+     design, 6.6), through that one reader, with the one addition stated below. For
+     each key, **every line that names the key as a word must be a plain `KEY=value`
+     assignment at the start of the line**, its value a literal in the forms `printf
+     %q` writes, and the last such line wins. **Nothing is sourced, expanded or
+     substituted, and no program is started**, from the hub, from its git
+     configuration or from anywhere else (F4 D3);
+   - **for exactly four keys:** `HUB_REMOTE_HOST`, `HUB_REMOTE_USER`,
+     `HUB_REMOTE_PORT` and `HUB_REMOTE_KEY`. No other key is used: not
+     `HUB_REMOTE_DIR`, not `HUB_STAGING_URL`, not `HUB_NAME`. No `AGENT_REMOTE_*`
+     variable in ADE's own environment is read.
+
+   **The one addition to F2's reader: a bare leading `~/` in `HUB_REMOTE_KEY`** (D18
+   (a); review R6-B1). F2's rule takes an unescaped `~` at the start of a value as
+   not a literal. On a Mac `bin/init` writes a key path given with `~` exactly so:
+   `HUB_REMOTE_KEY=~/.ssh/acme` (F7.0). **For `HUB_REMOTE_KEY`, and for no other
+   key, a value whose first two characters are a bare `~/` is read as the literal it
+   is,** the rest of the value under F2's rule unchanged. The escaped form that bash
+   5 writes (`\~/.ssh/acme`) gives the same literal. ADE does not expand the `~/`
+   when reading: the literal goes to the Identity file rule, which allows a path
+   starting `~/` (SV-1 AC1), and SV-2 AC1 replaces it with the home folder at the
+   client start, as for a saved server. **A `~` not followed by `/` (`~user/...`, a
+   `~` alone) and a leading `~` in the host, the user or the port stay "not a
+   literal".** Whether the exception is an option of F2's reader or a step in front
+   of it is the architect's (F7.11); either way there is one reader and one stated
+   exception.
+
+   The four literals become Host, User, Port and Identity file, and **each passes
+   SV-1 AC1's rule for its field, by SV-1 AC1's one function, unchanged**. There is
+   no Name (AC2, AC5). The result is one of three:
+
+   | Result | When | What ADE then has |
+   |---|---|---|
+   | **no hub's server** | no line names `HUB_REMOTE_HOST`, or its literal is empty (the hub's own meaning of "none configured") | nothing: no row |
+   | **usable** | the host is a non-empty literal; each of the other three is absent, empty or a literal; and all four pass SV-1 AC1 | a destination. An absent or empty user, port or key is a field that is not set, exactly as in a saved server: the default port of 22 that the hub's scripts apply is **not** applied, so with no port recorded ADE passes none |
+   | **not usable** | anything else: the file cannot be read within the bounds; a line that names one of the four keys is not valid UTF-8, or is not a plain assignment of a literal at the start of the line; or a literal fails SV-1 AC1 | the key's name and a reason (AC6), and **nothing of the value** |
+
+   **A value is never guessed.** One that would need an expansion ADE does not do
+   (`$HOME/.ssh/acme`, `~user/...`, a command substitution), one written by hand in
+   quotes (`"..."`, or `'...'` other than the empty `''`), an `export` line, a `+=`,
+   an indented assignment, and a line with a second word (a trailing `# note`
+   included) are each "not a literal". **So is any other line that names the key, a
+   comment included** (review R6-m6): F2's rule counts every line that names the
+   key, not only the last, so a commented-out old value (`#
+   HUB_REMOTE_HOST=old.example.com`) makes the server not usable until the comment
+   is removed or reworded, and the row names that line. ADE does not expand such a
+   value, strip its quotes, a carriage return or a byte-order mark, join a line that
+   ends in a backslash to the next, or use part of a value; and **one key that is
+   not usable makes the whole hub's server not usable**, whatever the other three
+   hold. What `bin/init` itself can write that is still not usable is listed in
+   F7.9.
+
+   Tests (Rust; fixture hubs; one table, each row a `hub.conf` text and the expected
+   result):
+   - **usable, as `bin/init` writes it on a Mac:** the five lines
+     `HUB_REMOTE_HOST=box.example.com`, `HUB_REMOTE_USER=deploy`,
+     `HUB_REMOTE_PORT=2222`, `HUB_REMOTE_KEY=/Users/dev/.ssh/acme` and
+     `HUB_REMOTE_DIR=/srv/marker` give the destination `deploy@box.example.com:2222`
+     with that key, and the result holds no `marker`; `HUB_REMOTE_USER=''`,
+     `HUB_REMOTE_KEY=''` and `HUB_REMOTE_PORT=22` give the host with port 22 and no
+     user or key; a `hub.conf` with the host line alone gives the host with no port;
+     **`HUB_REMOTE_KEY=~/.ssh/acme`, the form bash 3.2 writes, gives the identity
+     file `~/.ssh/acme`**; `HUB_REMOTE_KEY=/Users/dev/my\ keys/id` gives the path
+     with its space; with two `HUB_REMOTE_HOST` lines the last is used; **and the
+     first row's five lines with a `HUB_OWNER` line before them that holds the bytes
+     bash 3.2 writes for `Ørsted` under a UTF-8 locale (`$'`, 0xC3, `\230rsted'`),
+     so that the file is not valid UTF-8, give the same destination**, and the
+     result holds no byte of that line;
+   - **usable, other accepted forms:** `HUB_REMOTE_KEY=\~/.ssh/acme`, the form bash
+     5 writes, gives the identity file `~/.ssh/acme`;
+     `HUB_REMOTE_HOST=$'box.example.com'` gives the host (F2's design accepts the
+     `$'...'` form);
+   - **none:** no `HUB_REMOTE_HOST` line; `HUB_REMOTE_HOST=''`;
+   - **not usable, not a literal:** `HUB_REMOTE_KEY=~dev/.ssh/acme`,
+     `HUB_REMOTE_KEY=~`, `HUB_REMOTE_HOST=~/box`, `HUB_REMOTE_USER=~/deploy`,
+     `HUB_REMOTE_KEY=$HOME/.ssh/acme`, `HUB_REMOTE_KEY="/Users/dev/.ssh/acme"`,
+     `HUB_REMOTE_HOST='box.example.com'`, `HUB_REMOTE_HOST=$(cat /tmp/marker)`, a
+     host in backticks, `export HUB_REMOTE_HOST=box.example.com` and
+     `HUB_REMOTE_HOST=box.example.com extra`: each gives "not usable", the key's
+     name and the reason "not a literal", and the result holds no part of the value;
+   - **not usable, a line that names the key** (review R6-m6; each is F2's design
+     rule as written). Each of these with a good `HUB_REMOTE_HOST=box.example.com`
+     line as the last line that names the key: a comment `#
+     HUB_REMOTE_HOST=old.example.com`; an assignment indented by two spaces;
+     `HUB_REMOTE_HOST+=x`; and `: ${HUB_REMOTE_HOST:=x}`. And alone:
+     `HUB_REMOTE_PORT=2222 # note`, and a `$'...'` value holding an escape outside
+     F2's list (`HUB_REMOTE_HOST=$'box\u00e9'`). Each gives "not usable", the key's
+     name, the reason "not a literal" and the number of the offending line. A
+     comment that names no key of the four (`# the box`) changes nothing;
+   - **not usable, where F2's unbuilt design does not say** (review R6-m6). These
+     are the results SV-13 requires, **each to be confirmed against F2 as merged, at
+     the re-check before sharding** (F7.9): a `hub.conf` whose host line ends in
+     CRLF (the carriage return is not stripped); a byte-order mark before
+     `HUB_REMOTE_HOST` on the first line (not stripped; line 1); and
+     `HUB_REMOTE_HOST=box.example.com\` with the backslash last on its line (the
+     next line is not joined). Each gives "not usable" with the key's name and the
+     reason "not a literal", and no destination;
+   - **not usable, fails SV-1 AC1:** hosts `-oProxyCommand=x`, `2130706433` and
+     `box.example.com:2222`; ports `022`, `0` and `65536`; user `a\$b` (the literal
+     `a$b`); keys `keys/id`, `/Users/dev/.ssh/%h` and `~/.ssh/%h` (the exception
+     does not bypass the Identity file rule): each gives "not usable", the key's
+     name and the field's name;
+   - **the bounds:** a `hub.conf` of 2 MB, one whose `HUB_REMOTE_HOST` line is not
+     valid UTF-8, and one whose read is stubbed to hang each give "not usable" with
+     their reason; with the hanging one, a second open hub's result is returned
+     within 2 s;
+   - **a link and a FIFO** (review R6-m8): a hub folder whose `hub.conf` is a
+     symbolic link to a good file, and one whose `hub.conf` is a FIFO, are not
+     finished hubs by F4's check, so each gives **no row**, and the test returns
+     within 2 s. With the bounded read stubbed to report "not a regular file", as
+     when the file is replaced after F4's check, the result is "not usable", "could
+     not be read";
+   - **the environment:** with `AGENT_REMOTE_HOST=other.example.net` set in the test
+     process, the result is the file's;
+   - **runs nothing** (review R6-m10): after every row above, on F4's marker
+     fixture, there is no marker file and the hub folder is byte-for-byte unchanged.
+     **And, by the means F4 uses for its own modules, a static test:** the source
+     files that hold the hub's-server read, named in a checked-in list, contain no
+     `std::process`.
+2. **Where it appears, and how it is marked** (D18 (e), (g), (k)). In the main
+   window's server list (SV-9 AC1), **after the saved servers, in a group of their
+   own**, there is one row for each open hub that has a hub's server, usable or not,
+   in the order of the hubs' labels (by code point, then by the hub folder's path).
+   A row shows:
+   - **the hub's label:** the hub folder's name, as F4 names a hub, with nothing
+     read from `hub.conf` for it (F4 WS-2 AC5); two open hubs whose folders have the
+     same name are told apart as F4 tells same-named roots apart (WS-4 AC1). **The
+     row and the palette entry apply to the label the rule AC5 applies to the tab's
+     name** (review R6-M1): the label is shown only when it passes SV-1 AC1's Name
+     rule for length and characters (1 to 64 code points; no control, format or
+     separator characters), and otherwise both show the fixed text "Hub server"; the
+     part of a parent path that tells two hubs apart is shown only when it holds no
+     such character. Two rows that both read "Hub server" differ by their summaries
+     and keep their order;
+   - **a mark, in text or an accessible name and never by colour alone,** that says
+     the server is the hub's, that it is read from the hub's `hub.conf`, and that it
+     is not saved in Better Terminal. The words are the designer's;
+   - **when usable,** the destination summary, built by SV-9 AC1's function, and
+     **Connect**;
+   - **when not usable,** no summary and no Connect, and a line that names the
+     setting (the key) and the reason. The value itself is never shown.
+
+   **A hub's server cannot be changed in ADE:** its row offers no Edit and no
+   Remove, and ADE never writes `hub.conf`. S1b offers no "Save a copy" (SV-10).
+   **It is never merged with anything:** two open hubs give two rows even when they
+   record the same destination, and a hub's server with the same destination as a
+   saved server appears as well as that saved server, each in its own group. It does
+   not count towards SV-1 AC4's 200. The saved servers' part of the list is
+   unchanged: with no saved server it still shows SV-9 AC3's text and Add, with the
+   hub group after it. **The palette** (main window) has one entry for each
+   **usable** hub's server, after F7's saved-server entries, whose label holds the
+   mark's words, the hub's label and the destination summary; it is matched by the
+   palette's existing rule, and nothing else of the palette changes (SV-9 AC2). A
+   hub's server that is not usable has no palette entry.
+
+   Tests: (TypeScript, store) with two saved servers and two open hubs that each
+   have a usable server, the list's rows are the two saved servers and then the two
+   hub rows in label order, and the palette's entries are the ones it had, then the
+   saved servers', then the two hubs'; with a hub's server whose destination equals
+   a saved server's, both rows and both entries exist; with 200 saved servers and
+   one hub's server, the hub row is present; with no saved server and one hub's
+   server, the list holds the empty text, Add and the hub row; a hub's server that
+   is not usable gives a row and no palette entry; two open hubs whose folders are
+   both named `acme` give two labels that differ. (Component) a hub row has the mark
+   with an accessible name, has no Edit and no Remove control, and has Connect only
+   when usable; a row that is not usable shows the key's name and the reason and,
+   with a marker as the value in the fixture, no marker; Connect on a hub row is
+   reached and triggered with keys only; with a hub label that holds a right-to-left
+   override, and again with one of 65 code points, the row and the palette entry
+   read "Hub server" and hold no character of the label.
+3. **When it appears, and that it is never stored** (D18 (d)). A hub's server is
+   offered only while its hub's workspace is open in this instance, by F4's meaning
+   of open (WS-1 AC8), which counts a workspace tab in any window; the list that
+   shows it is the main window's. ADE reads `hub.conf` again by AC1, and shows the
+   result of the latest read: when the workspace is opened or restored and at each
+   F4 refresh (WS-1 AC5); each time the server list is opened; and at every hub
+   connect request and every Reconnect (AC4, AC5). **The row and the palette entry
+   go** when F4 reports the hub no longer open (its last workspace tab closed), when
+   the hub's tab becomes a "Hub removed" tab (F2 OB-5 AC4), and for as long as the
+   hub is not a finished hub (F4 WS-6 AC3); they come back at the next read that
+   finds the hub open and finished. **A hub's server is discovered each time and
+   never stored,** as F4's discovered checkouts are: it is not in the server list's
+   store, not in F4's workspace record, and not in any persisted key, snapshot or
+   tab set. The one thing kept is the remote record of a pane it opened (AC5). **A
+   row that changes while the list is open says so** (review R6-m9). When a read
+   made while the list is open gives a result that differs from the one the row was
+   showing (another destination, in any of the four fields, or usable where it was
+   not, or the reverse), the row shows the new result and says that it changed, in
+   text or an accessible name, for as long as the list stays open; the words are the
+   designer's. A change between two openings of the list is not marked (F7.9).
+
+   Tests: (TypeScript, store) with a hub reported open, its row and its entry exist;
+   after the report that it is no longer open, and again after its tab became "Hub
+   removed", and again with its state reported as not finished, neither exists, and
+   0 hub connect requests were made; one read is requested at each of the moments
+   listed (counted on the stubbed command); with the list open, a refresh whose read
+   returns another port, and again one that differs only in the identity file, marks
+   the row as changed, a refresh with an identical read does not, and closing and
+   opening the list clears the mark. (Rust, fixture) with markers in the four values
+   and in the hub folder's name: after the hub is opened, the list is opened and the
+   hub is closed, with no Connect, the server list's store is byte-identical (or
+   still absent), and no file under the fixture's app data holds a marker.
+4. **Connect: one press, the destination shown, and nothing else of the hub's** (D18
+   (c), (f)). A connection to a hub's server starts only when the engineer presses
+   Connect on its row or runs its palette entry (or Reconnect, AC5). **Opening,
+   restoring or refreshing a hub, Open Hub, the start of a persona session, and
+   opening the list make no hub connect request and no client start.** On the press
+   the webview sends a hub connect request: the hub, the read its row was showing,
+   and the pane; never a host, a user or an argument. Rust reads `hub.conf` again by
+   AC1 and, **before any start and in this order**:
+   - when the hub is not open, is not a finished hub, or has no hub's server now:
+     refuses with the kind "that hub's server is no longer there";
+   - when the hub's server is not usable now: refuses with the kind "the hub's
+     server is not usable";
+   - when the destination read now differs from the one the pressed row was showing:
+     refuses with the kind "the hub's server changed", and the list shows the new
+     one. **The comparison is over all four fields** (host, user, port and identity
+     file, as the literals read, a field that is not set being equal only to one
+     that is not set), whether or not the summary shows the field (review R6-m9).
+     **So no connection goes to a destination other than the one whose row the
+     engineer pressed;**
+   - otherwise makes exactly one client start by SV-2: SV-2 AC1's grammar built from
+     the four fields, started as SV-2 AC2 says, with SV-2 AC8's environment,
+     confirmed by SV-2 AC9, and refused under a shell SV-2 AC10 refuses.
+
+   Each refusal opens no tab and starts no process, as SV-2 AC7's refusals do. There
+   is no second question before the start: the press is the consent, as for a saved
+   server. **A server list that cannot be read or saved (SV-1 AC4) does not stop a
+   hub's server,** which is not in that store. **Nothing else that the hub records,
+   or that its own script does, is applied:** no remote command and so no change of
+   folder (`HUB_REMOTE_DIR`), no `-o` option (the hub script's `BatchMode` and its
+   timeout), no `user@host` form. The session therefore opens in the remote
+   account's default folder, is interactive, and asks whatever the SSH client asks,
+   in the pane. F7.9 lists the differences from the hub's own `bin/remote`.
+
+   Tests: (Rust, Unix, fixture hub, stub `ssh`, under `zsh` and `bash`) for AC1's
+   first usable row, one hub connect request gives exactly one stub record, whose
+   arguments are `["-p", "2222", "-l", "deploy", "-i", "/Users/dev/.ssh/acme", "--",
+   "box.example.com"]`, so that no argument holds `marker`, `-o`, `cd` or `@`; with
+   `hub.conf` rewritten between the read and the request to name
+   `other.example.net`, the request gives 0 stub records, starts no process and
+   returns "the hub's server changed", and the same when only `HUB_REMOTE_KEY` was
+   rewritten; for a `hub.conf` whose key line is `HUB_REMOTE_KEY=~/.ssh/acme`, the
+   one stub record's `-i` argument is the fixture's home folder followed by
+   `/.ssh/acme`; rewritten to `HUB_REMOTE_HOST=-oProxyCommand=touch\ /tmp/x`, 0 stub
+   records and "the hub's server is not usable"; with the host line removed, and
+   again with the hub not in the open set, "that hub's server is no longer there";
+   with the server list's store corrupt, the first case still gives its one stub
+   record. **The hostile fixture:** each value of SV-7 AC2's fixture for Host, User,
+   Port and Identity file, written into `hub.conf` in the form `printf %q` gives it,
+   is either refused with 0 stub records or reaches the stub as exactly one
+   argument, byte for byte; every accepted Host and User character is in SV-1 AC1's
+   set; and no file outside the stub's record is created. (TypeScript, store)
+   opening a hub, restoring a session that holds its workspace tab, a refresh, and
+   opening the list each make 0 hub connect requests; one press makes exactly one;
+   each refusal leaves the tab count unchanged.
+5. **The tab it opens is a server tab, by every S1 rule** (D18 (h)). Connect opens a
+   new tab in the main window (SV-2 AC7) that is server-named and whose first pane
+   is a remote pane. Its name is the hub's label when that label passes SV-1 AC1's
+   Name rule for length and characters, and otherwise the fixed text "Hub server".
+   **The tab shows that its source is a hub** (review R6-M1). The owner's decision
+   is "marked as the hub's"; a saved server's Name is unique in the list, while a
+   hub's label is whatever its folder is called, so without this a hub cloned into a
+   folder named `db1` would open a tab that reads exactly as the saved server
+   `db1`'s does. Wherever a server tab's name and remote mark are shown (the tab,
+   the tab switcher, the pane), a tab whose remote pane has a hub as its source says
+   so, in text or an accessible name and never by colour alone, in or beside the
+   name or in the remote mark. The words and the form are the designer's; they are
+   fixed words and hold nothing read from `hub.conf`. The tab says so for as long as
+   it holds that pane: in all three states, after a restore, and renamed or not. It
+   does not change the outward name: the tab is "Remote server" in the export and on
+   the phone, with no word about a hub. Its remote record holds, in place of a saved
+   server's identifier, **that its source is a hub, and which hub folder**, with the
+   destination at the last client start and its state. Everything SV-3 to SV-6 say
+   of a server tab and a remote pane then holds unchanged: the remote mark and its
+   three states; ending and closing (SV-2 AC3); SV-3 AC9; restored ended and never
+   reconnected by itself (SV-4 AC2); Reopen Closed Tab; no Duplicate and no Move to
+   New Window; "Remote server" in the session's export and on the phone, with the
+   remote record left out (SV-5 AC2, AC7); left out of tab sets; no folder, no file
+   links and no ADE-initiated write. **It is not an F4 workspace tab and not an F2
+   hub tab:** it carries neither of their marks (the source mark above is F7's own),
+   it does not keep its hub open, and it keeps its scrollback on this machine as any
+   server tab does (SV-4 AC1), which a hub tab does not. **Reconnect** follows SV-3
+   AC4, the "current record" being a new read of `hub.conf`: an unchanged
+   destination makes one hub connect request; a changed one shows both summaries and
+   needs the second confirmation; and when the hub is not open, is not finished, or
+   no longer has a usable server, Reconnect is not offered and the pane says so, as
+   in SV-3 AC4's removed case. The outward-name rule's table of cases (SV-5 AC7)
+   gains this tab's cases.
+
+   Tests: (TypeScript, store) after Connect on a hub row the tab count rose by one;
+   the new tab is active and server-named, has the hub's label as its name, has no
+   workspace mark and no hub-tab flag, and its first pane is remote and connecting
+   with a hub as its source; with a hub label of 65 code points, and again with one
+   that holds a right-to-left override, the name is "Hub server"; closing the hub's
+   last workspace tab while that server tab is open removes the hub's row and leaves
+   the server tab and its connection as they were; SV-2 AC6's table of states holds
+   for this tab (restore, close and reopen, the menu without Duplicate and Move to
+   New Window, SV-3 AC9's sequence); Reconnect with the hub open and unchanged makes
+   one hub connect request, with it changed none until confirmed, and with the hub
+   closed none, with no Reconnect control. (Rust) SV-5 AC2's export test with such a
+   tab added, and markers in the hub folder's path and name and in the four values:
+   the export holds no marker and one more "Remote server". (TypeScript, pure) the
+   webview's outward-name function gives "Remote server" for it. **(Component;
+   review R6-M1)** with the saved server `db1` connected and a hub whose folder is
+   named `db1` connected, the two tabs differ in their text or their accessible
+   name, and so do their two entries in the tab switcher and the marks in their two
+   panes; the test reads text and accessible names only, never a colour or a class;
+   the two still differ when both are ended after a restore, and when the engineer
+   has renamed both to `x`.
+6. **Kinds and logs.** S1b adds three kinds to SV-5 AC4's fixed list, under that
+   criterion's rule (fifteen kinds once S1b is built):
+
+   | Kind | May carry | When |
+   |---|---|---|
+   | "the hub's server is not usable" | the key's name, one of the four; and one reason from a closed list: "not a literal", with the line's number; "failed its checks", with the field's name; "could not be read" (not a regular file, too large, a line that names one of the four keys is not valid UTF-8, no permission); "not answering" | on a row; a hub connect request, before any start |
+   | "that hub's server is no longer there" | nothing | a hub connect request or a Reconnect, before any start |
+   | "the hub's server changed" | nothing | a hub connect request, before any start |
+
+   **No kind carries a value read from `hub.conf`, the hub folder's path or the
+   hub's label,** and none of those, nor any argument of a client start, is written
+   to ADE's log by either side. A message that names the hub gets the label in the
+   webview, from the list it already shows. "Not available in an engagement" and
+   "shell not supported" are S1's kinds, reused. **"Not a regular file" is reached
+   only in a race** (review R6-m8): a `hub.conf` that is a link or a FIFO makes the
+   hub not finished, so its row goes by AC3; the reason is for a file replaced
+   between F4's check and this read, and AC1's test reaches it with a stubbed read.
+   Tests: (Rust) for each of the three kinds and each reason, reached by AC1's and
+   AC4's fixtures, with markers in every value, in the hub folder's path and in its
+   name: `ade.log` holds no marker, and the kind's value holds only what its row
+   allows; (TypeScript) each rejection of a hub connect request, left unhandled so
+   that `main.tsx`'s handler logs it, produces a `log_error` message with no marker.
+7. **Platforms, engagements and the dependency.** S1b is **macOS only**, as F2 and
+   F4 are: on Linux saved servers work as S1 says and there is no hub group. It is
+   **not available inside an engagement** (D15): the hub group is part of the
+   saved-servers feature, which SV-5 AC8 switches off there. The one function that
+   decides whether the feature is available (SV-8 AC3, SV-5 AC8) answers for the hub
+   group too, and answers no off macOS and for an engagement's instance; with that
+   answer there is no hub row, no hub palette entry and no read of any `hub.conf`
+   for this purpose, and a hub connect request is refused. **S1b depends on F4 slice
+   S1 and on F7 S1 being on `main`**, and through F4 S1 on F2 slice 1, which brings
+   the reader of `hub.conf`; F7.9 says what follows from that. Test (TypeScript,
+   pure, and Rust for the request): with the platform input Linux, and again
+   Windows, and again with the engagement input set on macOS, the list's rows and
+   the palette's entries include no hub's server, 0 reads are requested, and a hub
+   connect request makes 0 client starts and is refused, in the third case with the
+   "not available in an engagement" kind.
+8. **Agents get no route to a hub's server through ADE** (D9 stands). `ade open` and
+   `POST /open` gain no option that names a hub's server; no ADE interface gives a
+   program in a terminal a hub's server or a list of them; and a hub connect request
+   is made by the webview only, from the three places an engineer presses: the row's
+   Connect, the palette entry and Reconnect. This holds for an agent in the hub's
+   own persona session as for any other. What an agent can do without ADE is stated
+   in F7.9. Test (TypeScript, static): a test lists every call site of the hub
+   connect command under `src/` outside tests and compares it with a checked-in list
+   of those three; a fourth fails the test. `/open` already refuses unknown fields
+   (SV-2 AC6), so no test is asked for it.
+
+### F7.8 Slices
+
+Each is useful without the slices after it, and they are listed in order. **The
+slice between S1 and the gated S2 is named S1b, not S2:** S2, S3 and S4 are cited by
+those names throughout this section, in S1's own text and in the reviews, so
+renumbering them would move references that revision 6 must leave alone.
+
+| Slice | What the engineer gets | Requirements |
+|---|---|---|
+| **S1** | Save, edit and remove servers; connect to one in a new ADE tab through the machine's SSH client; a remote mark (connecting, live, ended); Reconnect; nothing connects by itself; nothing leaves the machine; ADE's local features off in a remote pane. **No password and no passphrase is stored or entered: every prompt is the SSH client's, in the pane** | SV-1 to SV-9 (SV-5 AC7 and AC8 by the merges-second rule) |
+| **S1b** | **A hub's server in the list** (macOS). While an ade-brain hub's workspace is open, the SSH server its `hub.conf` records is in the server list and the palette, marked as the hub's and read-only; Connect opens it in a server tab that shows its source, otherwise as for a saved server. Nothing is run from the hub, nothing is stored, nothing connects without a press, and the hub's remote folder is not applied | SV-13: **criteria written; not buildable before F4 slice S1 and F7 S1 are on `main`** |
+| **S2** | Store a server password in the OS keychain and have ADE enter it. Passwords only | SV-12: **gated on the architect's spike; no criteria yet, not buildable** |
+| **S3** | Jump host, groups, colour, duplicate, open in a split or sub-terminal, move a connection to its own window, New tab dialog row, another login shell | SV-10: **no criteria yet, not buildable** |
+| **S4** | Import aliases from `~/.ssh/config`, read-only | SV-11: **no criteria yet, not buildable** |
+| **Out** | Remote files, port forwards, a status view (OQ-1); sync, an export or import file (OQ-4); stored key passphrases (D14); a route for agents; quick connect; anything more of a hub than its recorded server's four values (D18); Windows; inside an engagement, for now (D15) | F7.5 |
+
+By the owner's decision (D14) S1 is built now and S2 waits for its gate. **S1
+depends on nothing in S2:** no S1 criterion, goal or test names a stored secret, a
+keychain call or an askpass variable except to assert there is none (G2, SV-2
+AC8, SV-7 AC4). S3 and S4 do not depend on S2 either, so their order against S2
+is the owner's to choose when each has criteria. S1 can be sharded so that the
+rules, the grammar and the hostile fixture (Rust, SV-1 AC1 and AC2, SV-2 AC1,
+SV-7 AC2) land first with no UI; that story is testable alone but not useful
+alone, so it is part of S1, not a slice.
+
+**S1b comes after S1 and needs F4.** It depends on F7 S1 (the list, the rules, the
+grammar, the client start, the server tab) and on F4 slice S1, which is macOS only
+and itself depends on F2 slice 1. Neither F2 nor F4 is on `main`, so S1b is not
+sharded and not built until both F4 S1 and F7 S1 are (F7.9, "F2 and F4"). **S1 is
+not affected:** no S1 criterion, goal or test depends on a hub, and S1 ships with
+the saved servers alone. Three S1 criteria name SV-13 in a cross-reference (SV-5
+AC4, SV-7 AC5, SV-9 AC3); none adds an S1 test or a wait (review R6-m11). S1b does
+not depend on S2, S3 or S4, and none of them depends on it.
+
+### F7.9 Constraints and stated limits
+
+- **Standing positions F7 keeps:** ADE never handles, stores or syncs private keys
+  (README; S1 stores no credential at all); anything started from an ADE terminal
+  opens inside ADE, never in an outside window (the owner's standing rule; a
+  connection is an ADE tab); client data does not leave the machine without the
+  owner deciding so (F4 WS-7, F1.1).
+- **The user's and the system's SSH configuration decide everything the grammar
+  does not** (review M2). ADE passes five things. The SSH client then applies
+  `~/.ssh/config` and `/etc/ssh/ssh_config` to the Host given, alias or not (a
+  `Host *` or `Match` block applies to plain host names too). Those files can make
+  a connection run local programs (`ProxyCommand`, `LocalCommand`, `Match exec`,
+  `KnownHostsCommand`), run a command on the server (`RemoteCommand`), forward the
+  agent (`ForwardAgent`), forward ports, and send environment variables
+  (`SendEnv`). All of that is the user's own setup working as it does from any
+  terminal, which is J4; ADE neither reads those files nor changes what they do.
+  G3 measures what ADE adds, not what the user's configuration does.
+- **The user's shell start-up files are the user's own code** (D4). They run before
+  the SSH client and can do anything a program running as the user can. F7 does not
+  defend against them, and ADE ends nothing of theirs of its own accord. It
+  guarantees only that a pane is never shown as live unless an image ADE observed of
+  the pane's own process was named `ssh`, or was a listed interpreter given a script
+  so named, and held exactly the grammar (SV-2 AC2, AC9). ADE reads the argument
+  list, not the executable, and cannot know why the shell ran that program or what
+  it is. A start-up file that deliberately arranges for a different program to
+  answer to the name `ssh` and receive the grammar, by a `hash` entry, a link, or a
+  process given that name, is the same case as a different `ssh` on `PATH` (SV-8
+  AC1).
+- **Start-up files that never hand over** (SV-2 AC9; owner, OQ-20 (2)). The pane
+  stays connecting, with the message and End, until the engineer ends or closes it
+  or its process ends; ADE sets no limit on that. It is a remote pane for all that
+  time, although what runs in it may be local: **the engineer's own local shell, or
+  a local `tmux` the start-up file attached to, sits under the server's name, with
+  the connecting mark and the message, and with file links, the folder and ADE's
+  own writes off** (G5's qualifier). **End appears only with the message:** for a
+  shell that is still waiting there is no End in the first 30 s, and the way out
+  then is a close, which asks, while End asks nothing. A `$SHELL` that is itself a
+  wrapper script is expected to show the message on every Connect (suspected, not
+  run; SV-2 AC9). A `zsh` or `bash` login shell whose start-up file hands over to
+  another shell, `fish` for example, can **never** Connect: every Connect shows the
+  message, and SV-2 AC10 cannot see it, because it reads `$SHELL` (W7). A setup that
+  runs `ssh` as a child of the shell (W5) works and is never shown as live.
+- **The user's own `ssh` wrapper** (SV-2 AC9, SV-8 AC1). ADE confirms the wrapper on
+  the arguments the shell handed it. What the wrapper adds when it runs the real
+  client is not checked and not ADE's. A wrapper that replaces itself with a
+  differently-argued client faster than ADE observes leaves its pane connecting,
+  with the message, while the session works.
+- **What ADE inherits** (SV-2 AC8; reviews R3-M2, R4-M1). From what it inherited,
+  ADE removes every `ADE_*` variable and every variable whose name is in the vault's
+  list of names, read as a plain file at every client start with no keychain call.
+  It leaves every other inherited variable, as it does for a terminal. **What that
+  does not cover:** (1) a secret's value held in a variable under **another name**
+  (ADE compares names and reads no value); (2) anything **the start-up files
+  export**, which is the user's; (3) a secret **removed from the vault after ADE
+  started**: its name is gone from the list, and if ADE inherited the variable it
+  stays until ADE is restarted from an environment without it; (4) a list of names
+  that is **missing or does not parse**, which is read as empty, as the vault itself
+  reads it (X9), so that nothing is removed by name. **And one cost:** the removal
+  is by name, so a variable the engineer set outside ADE under the same name as a
+  vault secret is removed from the connection too, unless a start-up file exports
+  it. An ADE started from the desktop inherits no vault value. **The list read is
+  this instance's own** (suspected, not run, since F1 is not built; review R6-m4):
+  `vault-index.json` is in the instance's app data, so when the terminal ADE was
+  started from belongs to another profile, whose vault is its own (F1 PE-7), that
+  profile's secret names are not in this instance's list and are not removed. Today
+  a dev build and a release build share one identifier, and so one list.
+- **Ending and closing** (SV-2 AC3; review R4-B1). End, a confirmed close, a close
+  of the tab, a close of the main window and quitting write nothing into a remote
+  pane and leave no process of it alive; a job that ignores a hangup is killed after
+  2 s. A quit and a close of the main window wait for that kill, up to the 2 s, when
+  a process of a remote pane is still alive (review R6-m2). **What stays:** a
+  process that a start-up file put in a session of its own; and, after a crash or a
+  forced quit of ADE, a job that ignores the hangup the operating system sends. A
+  close of the main window and a quit ask nothing, today and under F7, so they end
+  live connections unasked, as they close every terminal unasked today. **Outside
+  F7:** a terminal in which the engineer typed `ssh` by hand is still closed the way
+  every terminal is today (F7.0, X1), which types Enter into it.
+- **A name the engineer types is theirs.** While a tab holds a remote pane, no name
+  of it leaves the machine (SV-5 AC2, AC7). After its remote pane is closed, a tab
+  the engineer had renamed keeps the typed name and is a local tab; if what they
+  typed is the server's name, that typed text is saved, exported and relayed as any
+  tab name is (F4's rule for typed text). **A change of only case or spacing counts
+  as typed** ("db1" retyped as "DB1"): the rule compares the trimmed text exactly
+  (SV-3 AC1; X3). Only a name ADE gave is replaced by "Terminal" (SV-3 AC9).
+- **Not checked on Linux** (review of revision 3): the process name a script named
+  `ssh` has there, and whether another process's arguments can be read in every
+  configuration (`hidepid`). SV-2 AC9's tests run on the Linux Backend job and
+  decide; if they cannot pass there, that comes back as a question (F7.11).
+- **The SSH client is taken to be OpenSSH.** The grammar uses only options every
+  OpenSSH release in support has (`-p`, `-l`, `-i`, `--`). ADE does not check the
+  client's version or vendor in S1. SV-1 AC1's rules do not rely on the client
+  refusing anything.
+- **Shells.** `zsh` and `bash` only in S1 (SV-2 AC10). The facts behind SV-2 AC2's
+  table were established on zsh 5.9 and bash 3.2.57 (V8); the CI jobs run
+  whatever versions their images carry, and the tests, not the versions, decide.
+  Today only the Frontend CI job installs `zsh` on Linux; the Backend job on
+  Linux must have it for SV-2's tests, which fail without it (F7.11).
+- **`TERM`.** A connection gets `TERM=xterm-256color`, as every ADE terminal does.
+- **What stays on this machine, and where** (revision 2's SV-5 AC6; the owner chose
+  "saved locally" in OQ-11). These are local and are **not** exported by ADE sync:
+  the server list; a remote pane's scrollback, in plain text in `ade-session` and in
+  up to 20 local snapshots (F7.0); **a remote pane's remote record, which holds
+  which saved server it is and the host, user, port and identity-file path at the
+  last client start, in `ade-session` and the same snapshots** (left out of the
+  export by SV-5 AC2; review R3-m16); recordings of a remote pane (`ade-rec-*`,
+  never snapshotted); and, if the architect keeps the list in a snapshotted store,
+  the list in those snapshots (the rule of F4 WS-7 AC2). One thing **is** exported
+  today and F7 does not change it: text the engineer sends to a remote pane from the
+  scratchpad goes into the sent-prompt history, a shared key, as text sent to any
+  terminal does. It is their own typed text (F4's rule for typed text).
+- **An older build** (revision 2's SV-4 AC4; review N-m4). A build without F7
+  that reads a session saved by this one opens a remote pane as a local shell
+  under its saved scrollback, with no mark, and its sync export carries that
+  tab's real name (it does not know SV-5 AC2). **And if that older build saves
+  the session, the server-named mark and the remote record are gone for good:**
+  the newer build then sees an ordinary local tab that happens to carry the
+  server's name, and exports that name. F7 cannot prevent what a build without
+  it does. The architect says in the design whether the session format can keep
+  an older build from opening such a session at all (OQ-11).
+- **F3 and F4.** A remote pane is a view without a folder: F3's per-view file
+  browser and code viewer show nothing local for it (SV-6 AC2), and it is never an
+  F4 workspace tab. If F4's S0b (generic names in `ade-session`'s export, pending
+  the owner's approval) merges first, SV-5 AC2 is written into the same strip.
+- **F1.** Not available inside an engagement (D15, SV-5 AC8). F1 PE-4 AC8's
+  shell-history rules are not touched: a client start writes nothing to a history
+  file (SV-7 AC3).
+- **F6.** Nothing in F7 calls a model or costs tokens.
+- **A hub's server: what the engineer is protected from, and what not** (S1b,
+  SV-13). `hub.conf` is a file in a repository, and the hub may be one that somebody
+  else made and the engineer cloned; ADE treats it as it treats a hand-edited store
+  (SV-7 AC5). **Protected:** opening a hub connects to nothing and runs nothing of
+  the hub's (SV-13 AC1, AC4); a value cannot carry an option, a second argument, a
+  command, a folder or an expansion, because each passes SV-1 AC1 and nothing but
+  the four fields is used; the row is marked as the hub's and shows its destination,
+  a tab opened from it shows that its source is a hub (SV-13 AC5), and a connection
+  goes to the destination that was shown or does not start; host key checking is the
+  SSH client's and untouched (SV-7 AC1), so a host that client has not seen brings
+  the client's own question. **Not protected: the press.** The destination is
+  whatever the file names. A cloned hub can name a host its author controls, or,
+  since Host accepts an alias (D5), an alias in the engineer's own `~/.ssh/config`,
+  with everything that configuration does for it. After a press, whatever the
+  engineer types at the SSH client's prompts goes to that host; the engineer's own
+  SSH configuration applies to it as to any host, agent forwarding and the programs
+  it runs included; and the identity-file path names a key on the engineer's
+  machine, which the SSH client then offers there. **It is the file on disk that is
+  read, not the committed one, and it can change between two presses** (a pull, the
+  hub's own sync, an agent or a person editing it, committed or not): the row shows
+  what the file says now, and ADE keeps no record of what it said before. A row that
+  changes while the list is open says so (SV-13 AC3); a change between two openings
+  of the list is not marked; and an open pane's Reconnect shows a change (SV-3 AC4).
+- **A hub's server in ADE is not the hub's own `bin/remote`** (S1b). The hub's
+  script is the hub's business and outside F7: F7 does not run it, change it or
+  restrict it. The two differ, as read on 2026-11-18 (F7.0):
+
+  | | The hub's own `bin/remote` | A hub's server in ADE (SV-13) |
+  |---|---|---|
+  | What it is for | running one command on the box, then returning | an interactive session in a server tab |
+  | The folder | changes to `HUB_REMOTE_DIR` first, when one is recorded | not applied: the remote account's default folder |
+  | Prompts | none: `BatchMode=yes`, so the SSH client asks nothing | the SSH client's own, in the pane |
+  | Arguments | `-p`, two `-o` options, `-i`, `user@host`, a command | the grammar only: `-p`, `-l`, `-i`, `--`, the host; no `-o`, no command |
+  | The values | `hub.conf` sourced by the shell, or `AGENT_REMOTE_*` variables; port 22 when none is recorded | read as literals, each through SV-1 AC1; no variable; no default port |
+  | Who starts it | anyone with a shell in the hub, an agent included | the engineer's press, in ADE's main window |
+
+  So a server that the hub's script reaches may be shown in ADE as not usable (a
+  value typed by hand in quotes, a user name outside SV-1's set), and a session ADE
+  opens does not start where the hub's script would. **What ADE shows can also be a
+  destination the hub's own scripts would not use** (review R6-m7). ADE reads
+  literals and a shell runs the file, and the two can disagree: a key set through
+  `eval`, in a second file that `hub.conf` sources, or after an early `return`, and
+  an `AGENT_REMOTE_*` variable, are seen by the shell and not by ADE. And with no
+  port recorded ADE passes none, so a `Port` in the engineer's `~/.ssh/config`
+  applies, where the hub's script always passes one, 22 by default. In every case
+  what ADE shows is what ADE connects to: this is a limit on what the row tells the
+  engineer about the hub, not on where a press goes.
+- **Agents and a hub's server** (S1b; D9, SV-13 AC8). ADE gives an agent no route to
+  it. That is a statement about ADE and about nothing else: an agent in a hub
+  terminal, the persona session included, can already run the hub's `bin/remote`,
+  whose header allows read-only use by any agent, and can run `ssh` itself, with
+  none of F7's protections (no mark, no press, and no check of the values, which
+  that script takes by sourcing `hub.conf`). Such an agent can also edit `hub.conf`,
+  which changes what the row shows, as a program that rewrites the server list's
+  store can (D9, SV-7 AC5).
+- **What S1b leaves on this machine.** Nothing in the server list's store. A pane
+  opened from a hub's server has a remote record like any other, in `ade-session`
+  and its snapshots: it holds the hub folder's path with the host, user, port and
+  identity-file path at the last client start. Its scrollback is saved as any server
+  tab's is (OQ-11), although the server came from a hub, and a hub tab's own
+  scrollback is never saved (F2 OB-14 AC1).
+- **What of `hub.conf` is read, and what is shown as not usable** (S1b; D18 (a),
+  (l); review R6-B1). F2's reader accepts the forms `printf %q` writes, with one
+  addition, a bare leading `~/` in the key path; and only the lines that name one of
+  the four keys must be valid UTF-8. **With those two decisions a hub that
+  `bin/init` made on a Mac is read in the two cases revision 6 got wrong:** a key
+  path recorded with a leading `~/`, and a hub whose name, client or owner is
+  written in bytes that are not valid UTF-8. **What `bin/init` itself can still
+  record that ADE shows as not usable:** a key path given as `~user/...`, which is
+  written bare and is not a literal; a key path that holds a non-ASCII character,
+  since its line may not be valid UTF-8 and the Identity file rule allows printable
+  ASCII only; a relative key path, or one holding `%` or `${`, since `--remote-key`
+  is written as given, unchecked; and a host, user or port that `bin/init`'s own
+  pattern accepts and SV-1 AC1 refuses (a host or user that starts with `-`, a host
+  of digits only, a port such as `0` or `022`). All but the first are refused for a
+  saved server too. **And by hand:** the hub's README has the engineer edit
+  `hub.conf`, and a value typed there in quotes or with a variable, an indented
+  assignment, a `+=`, a trailing comment, and **any other line that names one of the
+  four keys, a commented-out old value included,** each make that key "not a
+  literal", though the hub's scripts work. The row names the setting and the line.
+  **The remedy depends on the reason:** write `KEY=value` at the start of a line
+  with no quotes (a space in a path takes a backslash before it); give the key path
+  as an absolute path or with a leading `~/`; and remove or reword a comment that
+  names the key.
+- **F2 and F4** (S1b; SV-13 AC7). S1b uses, by name, things that exist only on F2's
+  and F4's branches (F7.0): "finished hub", "open", the registry of open hubs and
+  its announcement, the bounded file calls, the reader of `hub.conf`, "Hub removed"
+  and the hub's label. **It is a dependency, not a merges-second item** (D18 (i)):
+  there is no order in which S1b could merge before F4 S1, so no mirror is written
+  into an F4 or F2 story, and S1b adds no row to `.ade/context/f7-merges-second.md`.
+  **Until F4 S1 and F7 S1 are both on `main`, S1b is not sharded and not built.** At
+  its sharding SV-13 is checked line by line against F2 and F4 as merged: where a
+  name, a bound or a rule of theirs has changed, theirs stands and SV-13 is
+  corrected, as a PRD change the owner sees, before any story is written. F4's
+  revisions 3.11 and 3.12 and its design are not approved today, so that check is
+  expected to find something. **Three things that check must settle, because SV-13
+  departs from F2 and F4 or goes beyond what they say** (revision 7): the bare `~/`
+  exception to F2's reader (D18 (a)); reading `hub.conf` as bytes, where F4's
+  contract reads a file only when all of it is valid UTF-8 (D18 (l)); and SV-13
+  AC1's three rows that F2's design does not decide (a carriage return, a byte-order
+  mark, a backslash that ends a line), which are confirmed or corrected against F2's
+  reader as merged. S1 needs none of it.
+- **No GUI end-to-end harness** exists; every S1 criterion is written for a Rust,
+  TypeScript or component test, and none needs a real server. Checks against a
+  real server belong to S2's spike only (SV-12), are not part of any story's
+  Done gate, and S1 does not wait for them.
+
+### F7.10 Questions for the owner (all answered)
+
+Each question is kept as asked, with its answer after its title. **All twenty-two
+are answered; none is open.** The owner answered OQ-1 to OQ-4 on 2026-11-18, OQ-14 to
+OQ-18 later the same day (OQ-18 by the split-and-spike decision, D14, which also
+amends OQ-3), and in a third round the same day accepted OQ-5 to OQ-13, OQ-19 and
+OQ-20 (1) at their recommendations and answered OQ-20 (2) with "keep it, offer End".
+In a fourth round the same day the owner answered OQ-21 and OQ-22.
+**An answer records what was decided.** Where a fact or a consequence is added that
+the question as asked did not state, it is labelled as that; it is not a reason the
+owner gave (review R3-m15). Nothing here is about the stored password: what is
+undecided there is in SV-12's gate, and reaches the owner with the spike's result.
+Where a question as asked names a criterion of SV-12 (AC3, AC4, AC5, AC6, AC9,
+AC10), that is revision 2's numbering; those criteria are withdrawn. Revisions 4,
+5 and 6 raise no question of their own (OQ-21 and OQ-22 record what the owner
+decided in the fourth round); what the revisions decided without a question is
+listed for the owner's approval in F7.11.
+
+**Answered, first and second rounds**
+
+- **OQ-1. What "server viewer" means.** **Answered 2026-11-18 (owner): list and
+  terminal only; remote files, port forwards and a status view stay out of the
+  first version** (D1, F7.5). Is a saved list that opens SSH terminals the whole
+  ask, or did "viewer" mean more: (a) browsing and opening the server's files
+  (SFTP), (b) a status view of the server, (c) port forwards? *Recommend: the list
+  and terminal only.* Each of (a) to (c) is a feature of its own; (a) alone is
+  larger than all of S1 and brings remote files into the editor and viewers.
+- **OQ-2. How ADE connects.** **Answered 2026-11-18 (owner): the machine's own
+  `ssh` client** (D2). The machine's own SSH client in an ADE terminal, or an SSH
+  implementation inside ADE? *Recommend the machine's client*: nothing of the
+  user's setup is re-implemented, and it is a fraction of the work.
+- **OQ-3. Passwords and passphrases.** **Answered 2026-11-18 (owner): store them in
+  the OS keychain and enter them for the user. This is against the recommendation
+  below and reverses revision 1's D3** (D3, SV-12; what cannot be made fully safe is
+  OQ-16 and OQ-17). **Amended 2026-11-18 (owner, later the same day):
+  passwords only, as a later slice gated on the architect's spike; key passphrases
+  are not stored by ADE and are left to the operating system's own support (on
+  macOS, `UseKeychain` and `ssh-add --apple-use-keychain`) or the user's SSH agent;
+  the first version stores nothing** (D14, D3, SV-12). The question as asked: Never
+  stored (the user types them at the SSH client's prompt, or uses keys and an
+  agent), or saved in the OS keychain and entered for the user? *Recommend never.*
+  Storing them needs a per-server keychain entry outside today's vault (which
+  exports every secret to every terminal), an askpass helper, and a change to ADE's
+  stated position.
+- **OQ-4. Sync and sharing.** **Answered 2026-11-18 (owner): local only, never
+  synced; the export and import file was not chosen** (D7, F7.5). Saved servers
+  stay on this machine, in no sync and with no export file? *Recommend yes.* If
+  the owner wants the same list on two machines: an explicit export and import
+  file is the smaller answer, and opt-in sync the larger one.
+- **OQ-14. Engagements, and F1's isolation rule.** **Answered 2026-11-18 (owner):
+  (a), not available inside an engagement for now, as recommended; approved F1 is
+  unchanged** (D15, SV-5 AC8). **Consequence, stated by the product manager: the
+  question as asked did not state it (review N-M10), it is not a reason the owner
+  gave, and it is listed for the owner's approval (F7.11):** work on a client's
+  servers then happens either in the default profile, where that client's host names
+  sit in the one server list and the session's scrollback in the default profile's
+  session, which is the mixing F1 exists to prevent; or by an `ssh` typed by hand
+  inside the engagement, which already today reads `~/.ssh` and writes the shared
+  `known_hosts`, and has none of F7's protections (no remote mark, file links and
+  ADE's own writes still on, the tab's name exported). So (a) keeps F7's protections
+  out of engagements; it does not keep SSH out of them. To be revisited with F1. The
+  question as asked: F1 says that while engagement A's instance runs, ADE and what
+  it starts write only under A's own folders and secret-store entries, and take in
+  from outside only a closed list of eight allowed inflows (F1.1). A connection made
+  inside A breaks both, and F7 cannot fix it inside its own rules: (1) the SSH
+  client **reads** `~/.ssh/config`, the user's keys and their agent, none of which
+  is an allowed inflow (inflow 5 is shell start-up files only); (2) on a first
+  connection the SSH client **writes** the client's host name and key into
+  `~/.ssh/known_hosts`, one file shared by every engagement and the default profile,
+  and SV-7 AC1 forbids ADE from pointing it elsewhere. So one of: **(a)** saved
+  servers are not available inside an engagement until this is decided (they stay
+  available in your main Better Terminal); **(b)** F1 is amended: `~/.ssh` (read)
+  becomes a named allowed inflow and `~/.ssh/known_hosts` (write) a named exemption
+  from the isolation rule and its test, with a note in F1's history, and each
+  engagement then has its own server list and stored secrets in its own profile;
+  **(c)** ADE gives each engagement its own known-hosts file, which means ADE
+  passing a host-key option it now never passes (a change to SV-7 AC1) and the
+  engineer accepting every host key again per engagement. *Recommend (a)* for now:
+  it changes nothing in approved F1 and nothing in SV-7, and (b) can follow as its
+  own F1 amendment once you have used the feature. SV-5 AC8 and SV-12 AC9 are
+  written at (a). **If (b):** SV-5 AC8 becomes "its own list per engagement", F1
+  gains the inflow and the exemption, and client host names accumulate in the shared
+  `known_hosts`.
+- **OQ-15. What the SSH client's environment holds.** **Answered 2026-11-18 (owner):
+  neither, as recommended: no vault variables and no `ADE_*` variables** (D9, SV-2
+  AC8). **What the question as asked did not cover, and what revision 5 wrote
+  (review R4-M1); this is the product manager's reading, not something the owner
+  said, and it is listed for the approval (F7.11):** the question spoke of what ADE
+  gives a terminal. It did not say that an ADE started from one of its own
+  terminals has that terminal's vault values in its own environment and would pass
+  them on. Revision 4 left those in place. Revision 5 removes every inherited
+  variable whose name is a vault secret's name, read from the vault's list of names
+  with no keychain call (SV-2 AC8 (e)): the stricter reading of "neither". The
+  alternative is to leave them, as revision 4 did. The question as asked: Today
+  every ADE terminal gets every Secrets vault
+  value and the `ADE_HOOK_*` variables as environment variables (F7.0). Should the
+  SSH client ADE starts get them? Facts: the user's or system's `SendEnv` can
+  forward any variable to a server that accepts it, and the vault exports names from
+  its index without re-checking them, so the `LC_` refusal is not a guarantee; local
+  programs the user's SSH config runs (`ProxyCommand`, `LocalCommand`, `Match exec`,
+  `KnownHostsCommand`) inherit the whole environment; `ADE_HOOK_TOKEN` lets its
+  holder post status as that pane and open ADE terminals, and serves no purpose in a
+  pane with no agent state; and `ForwardAgent yes` in the user's own config applies
+  whatever ADE does (ADE passes no `-A`). *Recommend neither*: a connection to a
+  server has no use for local API keys or ADE's hook token (SV-2 AC8). The other
+  answer keeps a remote pane's environment the same as a local terminal's, so that a
+  `ProxyCommand` that needs a vault secret works; it then also reaches every other
+  child and every `SendEnv`. Either way a stored server password is never a variable
+  (SV-12 AC3).
+- **OQ-16. What a stored secret is bound to, and host key checking that the user
+  turned off.** **Answered 2026-11-18 (owner): yes to both, as recommended: a stored
+  secret is used only when the client's resolved settings verify the host key and
+  the resolved destination matches what the secret was saved for; otherwise `ssh`
+  asks.** It binds the gated slice (SV-12, O3 to O5); how it can be met is the
+  spike's GQ-7. **Corrections to the question as asked (reviews N-M10, N-M4):** its
+  opening words "As you asked" attributed the binding to the owner without basis,
+  since it was revision 2's own design; `ask` or `yes` for `StrictHostKeyChecking`
+  is not sufficient, because six other settings change what "verified" means (GQ-7
+  lists them); and the "one extra run" is a second start of the SSH client, which
+  runs `Match exec` programs and the shell's start-up files again and can answer
+  differently from the real run. The question as asked: As you asked, a stored
+  secret is bound to the saved Host, Port and User (SV-12 AC4). That does not cover
+  two cases, and neither can be closed without ADE asking the SSH client for its
+  resolved configuration before each use (`ssh -G`, which connects to nothing but
+  does run any `Match exec` line of the user's own config): (1) when Host is an
+  **SSH config alias**, or Port or User is empty, the real host, port and user come
+  from `~/.ssh/config`, which another program can rewrite without touching ADE's
+  record; (2) when the user's own configuration accepts unknown host keys without
+  asking (`StrictHostKeyChecking no` or `accept-new`), a redirected alias gets no
+  host key question, and the stored password is sent to the new host silently.
+  Should ADE (i) also bind a stored secret to the host name, port and user the SSH
+  client resolves, and (ii) not use a stored secret when the resolved host key
+  checking is anything but `ask` or `yes`? *Recommend yes to both*, as part of S2:
+  without them the binding protects ADE's own record only. The cost is one extra run
+  of the SSH client (no connection) before each use, and that a server whose alias
+  the user edits must have its secret stored again. Until answered, SV-12 is written
+  at the saved fields only and states the gap (AC6).
+- **OQ-17. Accepting what a stored secret cannot be protected from.** **Answered
+  2026-11-18 (owner): accepted, with disclosure, as recommended: a program running
+  as the user can read the entry, and the PRD and the guide say so** (SV-12,
+  "Disclosure"). **Facts the question as asked did not state (reviews N-B3, N-m8,
+  N-M10), now in the disclosure:** a program the user's SSH configuration runs for
+  the connection can obtain the secret through ADE's own helper, on macOS without
+  the keychain's per-application prompt (V4, V5), unless the spike shows otherwise
+  (GQ-1); and "never synced" is true of ADE sync only, since a login keychain
+  travels with a backup or migration of the machine. The question as asked: A
+  program already running as you, an agent in an ADE terminal included, can read the
+  keychain entry itself (without a prompt on Linux; macOS may ask), as F1 already
+  discloses for the vault (SV-12 AC10). ADE cannot prevent that. Accept it with the
+  disclosure in the store form and the guide? *Recommend yes*: it is what storing in
+  the OS keychain means, and the alternatives are not storing (your decision was to
+  store) or a per-use unlock by you (Touch ID or the login password on macOS,
+  nothing comparable on Linux), which is a larger feature of its own. If you want
+  the per-use unlock, it becomes a slice after S2.
+- **OQ-18. When the stored password is built.** **Answered 2026-11-18 (owner): split
+  and spike** (D14). S1, the saved list and the terminal, is built now. The stored
+  secret is a later slice (S2), passwords only, gated on the architect proving the
+  mechanism safe against a real test server; it is not specified, not sharded and
+  not built until then, and nothing in S1 depends on it. The question as asked: Its
+  own slice (S2) directly after the list and terminal (S1), or inside the first
+  version? *Recommend its own slice, directly after*: S1 is useful alone, and S2's
+  mechanism has one point the architect must confirm against a real server before it
+  is sharded (SV-12 AC5). If you want it in the first version, S1 and S2 are sharded
+  together and the first release waits for that confirmation.
+
+**Answered, third round (2026-11-18), in the order they were asked: most
+build-changing first**
+
+- **OQ-20. A login shell other than `zsh` or `bash`, and start-up files that never
+  reach `ssh`.** **Answered 2026-11-18 (owner). (1): (a), as recommended: a login
+  shell other than `zsh` or `bash` is refused with a message** (SV-2 AC10). **(2):
+  keep it, offer End, which is not the recommendation below: at the bound ADE ends
+  nothing; the pane stays "connecting", which is already treated as remote in every
+  respect, shows a message that the start-up files have not handed over to `ssh`,
+  and offers an End control** (SV-2 AC9, D4). The 30 s is kept and only times that
+  message. **Facts the question as asked did not state (review R3-M4), recorded
+  here; they are not reasons the owner gave:** the bound ran from the client start,
+  not from the last output or key, so a start-up file in the middle of asking
+  something would have been ended at 30 s; with a function named `command` that
+  passes its arguments on, a working `ssh` runs as a child of the shell in a pane
+  that is never confirmed (W5), and so does a `tmux` started without `exec`; a `zsh`
+  or `bash` login shell whose start-up file hands over to another shell can never
+  Connect, and decision (1) cannot see it (W7); "none" was described as changing one
+  number, when it leaves a local program in a pane under a server's name with no end
+  offered; and the alternative the owner chose was not offered. **Consequences of
+  "keep it, offer End", stated by the product manager and listed for the approval
+  (F7.11):** a pane whose start-up files never hand over stays connecting for as
+  long as the engineer leaves it; a working `ssh` that runs as a child of the shell
+  is left running and is never shown as live; a process that ends before `ssh` was
+  seen says so, with its exit status. The question as asked: (New in revision 3; the
+  delta review found that revision 2 left the first undefined and the second
+  unhandled.) Connect works by having your own login shell replace itself with `ssh`
+  (D4), and what that promises was checked under `zsh` and `bash` only. Two
+  decisions. **(1) When your login shell is anything else** (`fish`, `nu`, `tcsh`
+  and so on): (a) Connect is refused with a message that names the shell and says
+  that `ssh` typed in a terminal still works; (b) ADE starts `ssh` through a plain
+  `/bin/sh` instead, which works for many setups but does not read your shell's
+  start-up files, so an agent socket or a `PATH` set there is missing, and it is the
+  second start model D4 rejected; (c) `fish` is supported in S1, which needs the
+  architect to show D4's property under it and CI to run its tests always.
+  *Recommend (a)* for S1, with `fish` first among S3's items (SV-2 AC10 is written
+  at (a)). **(2) When your start-up files do not hand over to `ssh`** (they attach
+  to `tmux` in every interactive shell, or wait for input): the pane is never shown
+  as live, and is ended with a message: at once when another program took the
+  shell's place, and after 30 s when the shell is still waiting. *Recommend yes, and
+  30 s*: long enough to answer a question your own start-up files ask, short enough
+  not to leave a pane that looks like a connection and is not one. A longer bound,
+  or none (the pane stays "connecting" until you close it), changes one number in
+  SV-2 AC9.
+- **OQ-10. ADE's local features in a remote pane.** **Answered 2026-11-18 (owner):
+  yes, as recommended** (D10, SV-6), the scratchpad's image case included. The
+  question as asked: File-path links off, no local folder, and every ADE-initiated
+  write refused there (D10, SV-6)? *Recommend yes.* Without the third part these
+  type into the server today, with no check: the Tokens panel's commands, the
+  anti-slop "ask to fix", a notification's "Type /compact", and the Contracts
+  panel's typed commands. (Revision 1 named the agent picker; that was wrong: it
+  already refuses a pane running a program.) It includes one change to the
+  scratchpad: no send to a remote pane while images are attached (SV-6 AC4).
+- **OQ-11. Scrollback of a remote pane, and what else stays on disk.** **Answered
+  2026-11-18 (owner): saved locally, and the scratchpad's history left as it is,
+  both as recommended** (SV-4 AC1, F7.9). **A fact the question as asked did not
+  state (review R3-m16):** a remote pane's remote record, which holds which saved
+  server it is and the host, user, port and identity-file path at the last client
+  start, is saved beside the scrollback in `ade-session` and in the same local
+  snapshots; it is left out of the export (SV-5 AC2). The question as asked: Saved
+  on this machine with the session like any terminal's, or not saved at all, as F2
+  does for hub tabs? **Know when answering:** if saved, everything a client's server
+  printed in that pane (secrets it printed included) sits in plain text in
+  `ade-session` under app data and is copied into up to 20 local snapshots, one
+  every 10 minutes, so up to 21 files (F7.9); none of it is synced. An older build
+  of ADE opening that session shows the text under a **local** shell with no mark,
+  and its sync export carries the tab's real name; if that older build then saves
+  the session, the mark is lost for good and the newer build exports the real name
+  as well (F7.9). Recordings of a remote pane are local. Text you send to a remote
+  pane from the scratchpad is added to the sent-prompt history, which **is** synced,
+  as for any terminal. *Recommend saved locally*: it is what happens today when
+  `ssh` is typed by hand, and a restored ended tab is of little use without it. "Not
+  saved" is a small change to SV-4 AC1 and AC2 and removes the 21-file exposure.
+  *Recommend leaving the scratchpad history as it is* (it is your own typed text);
+  the other answer leaves text sent to a remote pane out of that history.
+- **OQ-5. After a restart.** **Answered 2026-11-18 (owner): yes, as recommended**
+  (D8, SV-4 AC2). The question as asked: A restored remote pane comes back ended,
+  with Reconnect, and nothing connects by itself (D8)? *Recommend yes.* The other
+  answer reconnects every remote tab at launch: several authentication prompts or
+  key touches at once, and connections to client servers the user did not ask for
+  that day.
+- **OQ-19. Six things the draft added that you did not ask for** (D13). **Answered
+  2026-11-18 (owner): keep all six, as recommended** (D13; SV-1 AC4, SV-3 AC8, AC9,
+  SV-4 AC3, SV-5 AC3). Decisions of the same kind that revisions 4 and 5 took, and
+  that this question did not ask, are listed for the owner's approval in F7.11. The
+  question as asked: (1) A limit of 200 saved servers. (2) Duplicate is not offered
+  on a server tab. (3) Reopen Closed Tab brings a closed server tab back as an ended
+  server tab with Reconnect, not as a local shell. (4) Move to New Window is not
+  offered on a server tab: today a detached window closes without asking, which
+  would end a live connection unasked, it has no tab bar, and its tab is in no saved
+  session (SV-3 AC8). (5) Saving a tab set leaves server tabs out and says how many
+  (SV-5 AC3). (6) When you close the remote pane of a tab that also has a local
+  split, the tab loses the server's name and becomes "Terminal" (SV-3 AC9).
+  *Recommend keep all six*: (2) to (6) exist so that no action leaves a local shell
+  named after a server, ends a connection unasked, or copies a server's name into a
+  synced store, and (1) bounds the palette and the store. Dropping (1) changes one
+  line; (2) could instead open an ended copy; (4) could instead be offered, which
+  adds to S1 a close question in the detached window, a saved record for a detached
+  tab, and tests inside that window; (5) could instead save the tab under a generic
+  name; (6) could instead keep the name, with the tab then exported and treated as a
+  server tab although it is a local shell. (Revision 2 also changed how the palette
+  picks its selected entry; revision 3 removed that, so the palette's matching and
+  order are as today.)
+- **OQ-9. Where it lives and where a connection opens.** **Answered 2026-11-18
+  (owner): yes, as recommended, the recommended form being an overlay** (D11, SV-9,
+  SV-2 AC7). The question as asked offered the form to the designer and recommended
+  an overlay in the same breath; since the recommendation was accepted, SV-9 AC1
+  now says an overlay, with its layout the designer's (review R4-m11; listed for
+  the approval, F7.11). The question as asked: A server list reached from the
+  palette, one palette entry per server, and Connect opening a **new tab** in the
+  main window (D11); the list's form (a side panel like the file browser, or an
+  overlay like Integrations) left to the designer? *Recommend yes, and an overlay*
+  (it is used briefly, to pick or edit). Splits, sub-terminals, a New tab dialog row
+  and a connection in its own window are S3. If the owner wants a permanent side
+  panel, "open in a split", or Connect from a detached window in the first version,
+  S1 grows.
+- **OQ-8. `~/.ssh/config`.** **Answered 2026-11-18 (owner): yes, as recommended**
+  (D5, SV-11, F7.9). The question as asked: ADE never writes it, keeps its own list,
+  accepts an alias as Host, and imports aliases read-only in S4 (D5)? *Recommend
+  yes.* **Know when answering:** whatever the user's and the system's SSH
+  configuration say for a host applies to a connection ADE starts, including
+  settings that run local programs, run a command on the server, forward the agent
+  and send environment variables (F7.9). ADE does not read or filter them. If the
+  owner would rather see the config's hosts in the list from day one, S4 moves into
+  S1 and S1 grows by a config reader.
+- **OQ-7. No free-text options.** **Answered 2026-11-18 (owner): yes, as
+  recommended** (D6, SV-1 AC2). The question as asked: Five fields, with anything
+  advanced kept in the user's own `~/.ssh/config` behind an alias (D6)? *Recommend
+  yes.* A free-text options or remote-command field would let a saved value run a
+  program directly and would need its own allow-list. (Revision 1 called it "the one
+  place" a saved value could do that; the User field was another, through the user's
+  own `ProxyCommand`, and SV-1 AC1 now closes it by narrowing User.)
+- **OQ-6. Agents.** **Answered 2026-11-18 (owner): no, not in F7, as recommended**
+  (D9, SV-2 AC6). The question as asked: May a Claude Code agent in an ADE terminal
+  open a saved server (for example `ade open --server NAME`)? *Recommend no, not in
+  F7* (D9): an agent with a shell on a client server is a larger decision than this
+  feature. If yes later: per-server opt-in, a confirmation in ADE for each open, and
+  the command guard's rules extended.
+- **OQ-13. The phone.** **Answered 2026-11-18 (owner): yes, as recommended: a
+  server-named tab appears on the phone as "Remote server", without the server's
+  name** (SV-5 AC7). **What the question as asked did not ask, and what revision 4
+  wrote (review R3-B1):** it asked about a server-named tab only. In revision 3 a
+  server tab the engineer had renamed went to the phone, and into the session's sync
+  export, under its typed name. Revision 4 writes "Remote server" for **every**
+  server tab, renamed or not, in both places (SV-5 AC2, AC7). This is the product
+  manager's choice of the stricter reading of this answer and of OQ-4's "local only,
+  never synced". It is not something the owner said, and it is listed for the
+  approval (F7.11). Its cost: several server tabs cannot be told apart on the phone
+  or on another device, even after the engineer named them. The question as asked: A
+  server-named tab appears on the phone remote as "Remote server", without the
+  server's name (SV-5 AC7)? *Recommend yes*, in line with F2's "Agent hub" label.
+  The other answer shows the saved name, which is the engineer's own text but often
+  a client's host.
+- **OQ-12. Windows.** **Answered 2026-11-18 (owner): yes, as recommended** (D12,
+  SV-8 AC3). The question as asked: Not in F7's slices; specified with F1's Windows
+  work, on Windows' OpenSSH client (D12, SV-8 AC3)? *Recommend yes.*
+
+**Answered, fourth round (2026-11-18)**
+
+The owner said, verbatim: *"make sure to incorporate ade-brain and ade-setup"*.
+Asked what that means for F7, the owner chose the two answers below. Each is
+recorded as given, and the owner stated no reasons. The questions as they were put
+are not held in this file; what is recorded is the choice.
+
+- **OQ-21. What incorporating ade-brain means for F7.** **Answered 2026-11-18
+  (owner): a hub's server shows up.** When an ade-brain hub is open, ADE reads the
+  SSH server recorded in the hub's `hub.conf`, read-only and with nothing run from
+  the hub, and offers it in the saved-servers list, marked as the hub's; it is its
+  own slice after the list and the terminal (D16; S1b, SV-13). **What the answer
+  does not say, and what revision 6 wrote; these are the product manager's
+  decisions, not the owner's, and are listed for the approval (D18, F7.11):** which
+  settings are read and by which rule (revision 7 adds one exception to that rule
+  and narrows the UTF-8 check: D18 (a), (l)); that a value ADE cannot read as
+  written is shown as not usable; that the hub's remote folder is not applied; when
+  the row appears and goes; that it is never stored, never merged and not editable;
+  that Connect asks no second question; what the tab it opens is, and how it shows
+  its source; and that it is macOS only and waits for F4.
+- **OQ-22. What incorporating ade-setup means for F7.** **Answered 2026-11-18
+  (owner): roles learn the feature.** Role updates are planned in ade-setup for what
+  F7 adds, the owner's example being the DevOps and SRE roles told that saved
+  servers exist and that agents may not open them; they are listed in the PRD as
+  follow-up work, released from ade-setup and re-vendored into ADE (D17; F7.11,
+  "Follow-up in ade-setup"). **What the answer does not say, and what revision 6
+  wrote (the product manager's, listed for the approval):** which roles (DevOps and
+  SRE, and no other); the statements, in outline; when each ships; that "agents may
+  not open them" is written as a statement about ADE's saved servers and a hub's
+  server, and not as a new ban on an agent running `ssh` where the engineer or a
+  hub's own rules allow it; and that no F7 criterion asserts the vendored text.
+
+**Open:** none.
+
+### F7.11 Handoff
+
+Not before the owner's approval. The delta check of revision 6 **passed S1 with five
+minors** and **blocked S1b on one blocker**; revision 7 answers every finding
+(F7.12, sixth table). By that check S1 is fit to go to the owner. **S1b's answers
+have not been re-checked:** the re-check comes before S1b is approved, or the owner
+holds S1b. Revision 7 itself has not been reviewed.
+
+**What the owner is asked, and what approval covers**
+
+- **Asked: to approve S1, which is SV-1 to SV-9:** the saved list and the terminal,
+  under D1 to D15 and the answers in F7.10, with items 1 to 7 of the list below.
+  Approval lets the architect design S1 and the designer draw it; the verification
+  command is fixed with the architect's design, and sharding follows.
+- **Asked separately: whether to approve S1b, which is SV-13, now, or to hold it:**
+  a hub's server in the list, under D16 and D18, with items 8 to 13 of the list
+  below. Approving it fixes what a hub's server is and is not, and lets it be
+  designed with or after F4's design. It does not make S1b buildable: that waits for
+  F4 slice S1 and F7 S1 on `main`, and for the check of SV-13 against F2 and F4 as
+  merged (F7.9). **Holding S1b changes nothing in S1.**
+- **Approval does not cover:** the gated password slice, S2, which has no criteria
+  and waits on the architect's spike (SV-12); the spike may start, and its result
+  comes back to the owner before any criterion is written. The later slices, S3 and
+  S4, which have no criteria. Windows. Use inside an engagement. And the role
+  changes in ade-setup (D17), which are that repository's work and are released
+  there ("Follow-up in ade-setup").
+- **To accept knowingly with the approval.** None needs a redesign if the owner
+  decides otherwise. **Items 1 to 7 come with S1. Items 8 to 13 come with S1b, and
+  fall away if S1b is held. Item 14 is about the roles in ade-setup.**
+  1. **The stricter reading of "Remote server".** Every server tab reads "Remote
+     server" in the session's sync export and on the phone, renamed or not (SV-5
+     AC2, AC7). The owner's words covered a server-named tab; the product manager
+     extended them. Cost: server tabs cannot be told apart there. **What the rule
+     still lets out** (F7.9): a name you type onto a server tab is treated as your
+     own text. While that tab holds its remote pane the name stays on this machine.
+     Once you close that remote pane and keep the tab, the typed name is exported
+     by sync, sent to the phone, saved in tab sets and copied by Duplicate, like
+     any tab's name, even if what you typed is the server's name. Retyping the
+     name with only its case or spacing changed ("db1" to "DB1") counts as typing
+     it. Only a name Better Terminal gave the tab is replaced by "Terminal".
+  2. **The stricter reading of "neither"** (SV-2 AC8; OQ-15; taken in revision 5).
+     If Better Terminal was itself started from one of its own terminals, the vault
+     secrets in that terminal's environment are in Better Terminal's own
+     environment. **This revision removes them from a connection:** every inherited
+     variable whose name is a vault secret's name is taken out, the names being read
+     from the vault's list of names, a plain file, with no keychain call. **The
+     alternative**, which revision 4 had: leave them, so that those API keys reach
+     `ssh`, the local programs your SSH configuration runs for the connection, and
+     anything `SendEnv` forwards. Costs and limits of the choice made: a variable
+     you set yourself outside Better Terminal under the same name as a vault secret
+     is removed from the connection too; a secret's value under another name,
+     anything your start-up files export, and a secret you removed from the vault
+     after Better Terminal started are not removed; and if the vault's list of names
+     is missing or damaged, nothing is removed by name.
+  3. **The consequence of OQ-14 (a).** With saved servers unavailable inside an
+     engagement, work on a client's servers happens in the default profile, where
+     that client's host names sit in the one list and the scrollback in the default
+     profile's session; or by an `ssh` typed by hand inside the engagement, which
+     has none of F7's protections.
+  4. **What "keep it, offer End" leaves** (F7.9). A pane whose start-up files never
+     hand over stays connecting with no limit. **What can sit in such a pane:** your
+     own local shell, or your local `tmux`, under the server's name, for as long as
+     you leave it. The pane carries the connecting mark and the message, and file
+     links, the folder and Better Terminal's own writes are off in it, but what you
+     type there goes to your own machine. So G5's "no local shell under a server's
+     name" holds for ordinary tabs and not for this pane, and G5 now says so. A
+     working `ssh` that runs as a child of the shell is never shown as live; a `zsh`
+     or `bash` whose start-up file hands over to another shell can never Connect.
+  5. **When End is there, and what asks.** End appears only together with the
+     hand-over message. If your shell is still waiting (a start-up file asking
+     something), there is no End for the first 30 s; the way out before that is to
+     close the pane, and closing asks first. End itself asks nothing: one
+     press ends what is running in the pane. So for the same pane a close asks and
+     End does not.
+  6. **What ending and closing do** (SV-2 AC3; decided in revision 5). End, a
+     confirmed close, closing the tab, closing the main window and quitting type
+     nothing into a server pane and leave nothing of it running. A program that
+     ignores the hangup is killed after 2 s. This is stricter than what closing any
+     terminal does today, which types Enter and an end-of-file into it and signals
+     nothing; that stays as it is for every other terminal, including one where you
+     typed `ssh` by hand, and is noted for whoever owns that code. **Closing the
+     main window and quitting end live connections unasked:** they ask nothing,
+     today and under F7, as they close every terminal unasked today. A quit can take
+     up to 2 s longer when a program in a server pane ignores the hangup.
+  7. **Decisions revisions 4 and 5 took that no question asked:** (a) a rename box
+     committed with its text unchanged is not a rename (SV-3 AC1); (b) the user's
+     own `ssh` wrapper is confirmed on what the shell handed it, and what it adds is
+     not checked (SV-2 AC9); (c) the hand-over message appears at once when another
+     program took the shell's place, and at 30 s when the shell is still waiting
+     (SV-2 AC9); (d) End asks no second question (SV-2 AC9; item 5); (e) inherited
+     variables with a vault secret's name are removed (SV-2 AC8; item 2, where
+     revision 4 had decided the opposite); (f) "no SSH client found" is decided by
+     exit status 127 and can be wrong (SV-8 AC2); (g) closing a remote pane asks by
+     its record: always while connecting or live, never when ended (SV-3 AC6); (h)
+     the palette matches a server's host and user as well as its name (SV-9 AC2);
+     (i) a versioned shell name such as `zsh-5.9` is refused (SV-2 AC10); (j) "live"
+     is decided from a process's argument list, not from its executable, and a
+     wrapper script named `ssh` counts only when written for `sh`, `bash`, `zsh`,
+     `dash` or `ksh`; one in another language leaves its pane "connecting" with the
+     message while the session works (SV-2 AC9); (k) the server list is an overlay,
+     as OQ-9's recommendation named it (SV-9 AC1); (l) a twelfth kind, "the server
+     list could not be saved" (SV-1 AC4, SV-5 AC4).
+  8. **A hub's server is not the hub's `bin/remote`** (SV-13 AC4; F7.9). Better
+     Terminal uses the host, user, port and key the hub records and nothing else.
+     The hub's remote folder (`--remote-dir`) is **not applied**: the session opens
+     in the remote account's default folder. It is an interactive session that asks
+     what `ssh` asks, where the hub's script runs one command and asks nothing.
+     **What Better Terminal shows can differ from what the hub's own scripts use:**
+     it reads the values as written and does not run the file, so a value that only
+     a shell running the file would see, or an `AGENT_REMOTE_*` variable, is not
+     seen; and with no port recorded the port in your own SSH configuration applies,
+     where the hub's script uses 22. What is shown is always what is connected to.
+  9. **A cloned hub can put a host in your list.** It is marked as the hub's and
+     shows where it goes; opening the hub connects to nothing and runs nothing of
+     the hub's; nothing connects without your press. **What that does not protect:**
+     if you press, the host is whatever the file names, your own SSH configuration
+     applies to it, and the key file it names on your machine is offered to it.
+     **The file read is the one on disk, not the committed one,** so an uncommitted
+     edit, by a pull, an agent or a person, changes the row. The file can change
+     between two presses: a row that changes while the list is open says so, and a
+     change between two openings of the list is shown with no notice (F7.9).
+  10. **No second question before connecting to a hub's server** (D18 (f)). One
+      press connects, as for a server you saved. The alternative is a confirmation
+      naming the hub and the destination every time.
+  11. **What of `hub.conf` is read, and what is shown as not usable** (D18 (a), (l);
+      corrected in revision 7). Revision 6 said here that only values typed by hand
+      were affected. That was wrong: **on a Mac, `bin/init` itself writes some
+      values that the rule as first written refused.** Two decisions were taken for
+      that, the product manager's, each with its alternative:
+      - **A key path that starts `~/` is accepted, for the key path only.** On a Mac
+        `bin/init` records `--remote-key '~/.ssh/acme'` exactly so. This is one
+        addition to F2's reader, which is otherwise used as it is; a `~user/` form,
+        and a `~` anywhere else, stay not usable. **The alternative:** no exception.
+        A key path that `bin/init` itself recorded with `~` is then shown as not
+        usable on a Mac, and the remedy is an absolute path.
+      - **Only the lines for the four settings must be valid UTF-8; the rest of the
+        file is not interpreted.** On a Mac `bin/init` writes a hub name, client or
+        owner that holds certain characters (`Ørsted`, `Łukasz`, most CJK text) in
+        bytes that are not valid UTF-8. **The alternative:** check the whole file,
+        as F4 does for the files it reads. A hub whose client, owner or name holds
+        such a character then has no usable server.
+      - **Still shown as not usable after both, although `bin/init` wrote it:** a
+        key path given as `~user/...`; and a key path holding a non-ASCII character,
+        `%` or `${`, a relative one, or a host, user or port outside the rules, each
+        of which a saved server refuses too.
+      - **And typed by hand:** a value in quotes or with a variable, an indented or
+        `+=` assignment, a trailing comment, and any other line that names the
+        setting, **a commented-out old value included**, each make that setting not
+        usable, though the hub's scripts work. The row names the setting and the
+        line. A wider reader in F7 was rejected: it would read one file by two
+        rules.
+  12. **A hub's server tab is a server tab, not a hub tab** (D18 (h)). Its
+      scrollback is saved on this machine, and its record there holds the hub
+      folder's path and the destination; a hub tab's own scrollback is never saved.
+      Like every server tab it is "Remote server" in the export and on the phone.
+      **The tab shows that it is the hub's** (SV-13 AC5; added in revision 7): a
+      hub's folder can carry any name, a saved server's included, so the tab says
+      its source in words or an accessible name, not by colour; how is the
+      designer's.
+  13. **The rest of what S1b decides** (D18): the row is shown while the hub is open
+      in any window of this instance, in the main window's list; it cannot be edited
+      and there is no "Save a copy" yet; two hubs, or a hub's server equal to a
+      saved one, give two rows; the hub is named by its folder's name; it is macOS
+      only; it is not offered inside an engagement, where the whole feature is off
+      (D15); and it cannot be built before F4's first slice is on `main`. **And one
+      thing F7 does not change:** an agent in a hub terminal can already run the
+      hub's own `bin/remote`, and `ssh`, with none of this feature's protections.
+  14. **How "agents may not open them" is written for the roles** (D17; "Follow-up
+      in ade-setup"). As a statement that Better Terminal gives an agent no way to
+      open a saved server or a hub's server, and that an agent must not look for
+      one. It is not written as a ban on an agent ever running `ssh`: no role and no
+      rule forbids that today, D9 leaves it unchanged, and a hub's own rules allow
+      its agents read-only use of `bin/remote`. A stricter text is the owner's to
+      ask for.
+
+**Who does what next**
+
+- **Architect, S1: to settle in the design.**
+  - the client start (D4, SV-2 AC2): the exact invocation for `zsh` and for
+    `bash` that is login and interactive, replaces the shell with `ssh`, has
+    every word quoted, gives outcome (i) for an alias or function named `ssh`
+    (in `zsh` a plain `exec ssh` does not, V8), and writes no history; how Rust
+    quotes by ADR 0008 without becoming a second quoter (SV-7 AC3). The webview
+    sends a connect request (an identifier and a pane) through a new, narrow
+    command; it never sends a program or arguments;
+  - the hand-over check (SV-2 AC9): how ADE observes the image of the pane's **own**
+    process (not the foreground job that `pty_foreground_job` reads today), on macOS
+    and Linux, and how often; the pure judging function over argument lists, with
+    its listed forms and its five interpreters, and which side an interpreter line
+    that carries an option falls on (the two probed, `/bin/sh -e P/ssh G` and `bash
+    -e P/ssh G`, are unlisted and so "not" until placed; X5); how the bound is set
+    in a test; and a fixture for a `$SHELL` that is itself a wrapper script, to
+    confirm or correct the stated limit (suspected, not run). **"Still that shell"
+    is compared with the argument list as the operating system reports it,** which
+    for a login shell may begin `-zsh` or `-bash` (review R6-m5). Three forms the
+    judging rule leaves unplaced fall on the safe side: `[bash, -l, /x/ssh, G]`,
+    `[env, -i, sh, /x/ssh, G]`, and an interpreter line whose first word is `-bash`
+    or `-zsh` are unlisted and so "not", the pane stays connecting, and none can
+    make a pane live wrongly. If a process's arguments cannot be read reliably on a
+    supported platform, or a script named `ssh` shows on Linux in a form the rule
+    does not list, that comes back as a question;
+  - **how a remote pane's terminal is ended** (SV-2 AC3; review R4-B1): one routine
+    that End, a confirmed close, a close of the tab, the main window's close and
+    quitting all reach, that writes 0 bytes into the terminal and leaves no process
+    of the pane alive, with a kill that cannot be ignored 2 s after for whatever is
+    still alive. **The quit and the window-close paths do not exist today**
+    (`lib.rs` has no exit handler and no window-destroyed handler; review R6-m2):
+    the design names the two handlers that call the routine, how a quit waits for it
+    (up to the 2 s), and the checked-in list of the routine's call sites that SV-2
+    AC3's static test compares. **Today's `kill_pty` does not do this and cannot be
+    reused as it is** (F7.0, X1): it only forgets the terminal, the library's writer
+    types a newline and the end-of-file byte when it is dropped, and the reader
+    thread keeps the terminal open, so no hangup is sent. **A note for whoever owns
+    `pty.rs`, not an F7 requirement:** the same defect exists today for every
+    terminal, and so for an `ssh` typed by hand in any tab, whose close sends Enter
+    to the server and can leave the connection running. Fixing it for all terminals
+    is outside F7; if the architect's routine fixes it for all, that is a change to
+    existing behaviour to record, not something F7 asks for;
+  - **`/open` and a remote pane** (review R4-m13; X4): `type_line` types only into
+    the terminal that carries its `/open` request id. A client start's terminal
+    must carry none, so that no `/open` can ever type into a remote pane;
+  - the exit status of a pane's process (SV-2 AC4, AC9, SV-8 AC2): today's exit
+    event carries none (F7.0). It is a shared contract, recorded in `.ade/context/`
+    (review R3-m14);
+  - the supported-shell decision (SV-2 AC10) and its refusal;
+  - the connection's environment (SV-2 AC8): a builder that takes its base
+    environment and the list of names to remove as inputs, has no input for a vault
+    value, removes every inherited `ADE_*` variable and every variable named in the
+    vault's list of names, and sits in a file SV-7 AC4's text test lists; **the one
+    reader of `vault-index.json` that F7 may use** (today's `read_index` is private
+    to `vault.rs`; X9), named in that checked-in list; and how the test puts a
+    recording stand-in in place of the OS keychain. The library has the place
+    (`set_default_credential_builder` and a public builder trait, `keyring` 3.6.3;
+    read by the delta check of revision 6). **That stand-in is process-wide**
+    (review R6-m3): it replaces the builder for the whole test binary, and Rust runs
+    a binary's tests on parallel threads, so "0 calls" holds only if no other test
+    in that binary makes an entry meanwhile. The test needs a test binary of its
+    own, or a count kept per thread;
+  - where the server list is stored, its format version, and the unreadable-store
+    rule (SV-1 AC4); where the rules, the grammar and the destination summary live
+    so there is one implementation (F7.7, SV-9 AC1); the list of F7's Rust source
+    files that SV-7 AC4's text test reads;
+  - the remote record on the pane (with its three states), the server-named mark
+    on the tab, the clearing of the mark and the name when the remote pane is
+    closed (SV-3 AC9), what a closed tab remembers (SV-4 AC3), the session format
+    and the older-build limit (F7.9), and the export strip of SV-5 AC2 (with F4
+    S0b if it lands);
+  - the refusal inside `detachTabToWindow` (SV-3 AC8);
+  - the `writePty` rule and the checked-in list of call sites, and the checked-in
+    list of the two Rust-side feeders of a terminal's input queue (SV-6 AC4); how
+    the folder poll, file links and the active folder skip a remote pane (SV-6 AC1,
+    AC2), with what each new-tab caller does with no folder;
+  - where the close confirm decides a remote pane from its record (SV-3 AC6); the
+    store's rename rule (SV-3 AC1) and the single store update of SV-3 AC9; the one
+    availability function, with its platform and engagement inputs (SV-8 AC3, SV-5
+    AC8), and the outward-name rule: its checked-in table of cases, and whether one
+    side derives the name for both or Rust and the webview each implement it
+    against that table (SV-5 AC2, AC7); how a message that names the server gets the
+    name in the webview, so that no kind carries it (SV-5 AC4);
+  - an ADR for D4 (the client start, the hand-over rule, "kept, never ended by ADE
+    of its own accord", and how a remote pane's terminal is ended), and
+    `.ade/context/` notes for the grammar, the remote record, the server-named mark
+    and "server tab", the fixed list of kinds (SV-5 AC4) and the exit-status
+    contract, since F3, F4 and the phone relay all read tab state.
+- **Architect, separately: the F7 stored-password spike.** A named piece of
+  investigation, **not a story**, not sharded, with no Done gate, and not a
+  precondition of anything in S1. Scope: SV-12's gate, questions GQ-1 to GQ-12.
+  Conditions: a real, disposable test server the architect creates and discards;
+  throwaway accounts and keys; a scratch home folder and keychain; no other host
+  contacted; the user's real `~/.ssh`, keys, agent and keychain never touched.
+  **Output:** one short evidence note,
+  `docs/superpowers/specs/<date>-f7-stored-password-spike.md`: per question,
+  what was run, on which OpenSSH versions and platforms, what was observed, and
+  "safe", "not safe" or "not shown". It proposes no criteria and builds nothing
+  that ships. The note comes back to the product manager, who takes it to the
+  owner (SV-12, "What happens with the spike's result").
+- **DevOps:** `zsh` in the Linux Backend CI job, so that SV-2 AC2's, AC9's and
+  SV-7 AC3's tests run there and fail, not skip, without it (F7.9).
+- **Designer (S1 only):**
+  - the server list's overlay (SV-9 AC1) and its add and edit form, with each
+    field's refusal message (SV-1 AC1), the identity-file warning (SV-1 AC5) and the
+    destination summary on every row and palette entry (SV-9). The form has no
+    password or passphrase field;
+  - the remote mark on the tab, in the tab switcher and in the pane, in its three
+    states, not by colour alone, **and with the live state not worded "connected"**:
+    live means the `ssh` process is running, which is true before it has reached the
+    server (SV-3 AC2); Reconnect in an ended pane with the destination summary, and
+    the changed-destination state with its second confirmation (SV-3 AC4);
+  - the hand-over message on a connecting pane, in its two kinds, with its End
+    control, and how both go when the pane becomes live (SV-2 AC9); the close
+    question for a connecting or live remote pane (SV-3 AC6);
+  - the messages: no SSH client, with the status (SV-8 AC2); ended before `ssh` was
+    seen to start, with the status (SV-2 AC9); a server that fails its checks (SV-2
+    AC5); an unsupported shell, with its base name (SV-2 AC10); a removed server
+    (SV-3 AC4); an unreadable list, a full one and one that could not be saved
+    (SV-1 AC4); an unsupported shell whose name is not shown (SV-2 AC10); a terminal
+    that could
+    not be started (SV-5 AC4); the refusal of an ADE-initiated write in a remote
+    pane and the scratchpad's image case (SV-6 AC4); the file browser's on-a-server
+    state (SV-6 AC2); and the tab set's left-out count (SV-5 AC3);
+  - the palette entries' wording (SV-9 AC2) and the empty list (SV-9 AC3). UI copy
+    says "Better Terminal".
+- **Architect, S1b (with or after F4's design; not before the owner approves
+  SV-13):** the read of the four keys through F2's one reader of `hub.conf`, inside
+  F4's bounded file calls, and where that code lives given F4's static rule on what
+  its modules may name; the hub connect command (a hub, the read the row was
+  showing, a pane) and how that read is carried and compared, so that no start goes
+  to a destination other than the one shown (SV-13 AC4); the remote record's hub
+  source and the session format for it (SV-13 AC5); how the list and the palette
+  learn which hubs are open and when to read again (SV-13 AC3); the three kinds
+  (SV-13 AC6); the availability function's platform input for the hub group (SV-13
+  AC7); the checked-in list of the hub connect command's call sites (SV-13 AC8); and
+  `.ade/context/` notes for the hub's-server read and the hub connect request. Also
+  (revision 7): the one exception to F2's reader, a bare `~/` in `HUB_REMOTE_KEY`,
+  and whether it is an option of that reader or a step in front of it (SV-13 AC1); a
+  bounded read that hands back bytes, since F4's contract reads a file only when all
+  of it is valid UTF-8, and how only the lines that name the four keys are decoded;
+  and the checked-in list of the files that hold the read, for the static test. If
+  F2's reader cannot serve these keys with that one exception, or F4's bounded calls
+  cannot be used by code outside F4's modules or cannot hand back bytes, that comes
+  back as a question.
+- **Designer, S1b:** the hub group in the server list, its mark and the mark's
+  words, the row that is not usable with its setting and reason, the palette entry's
+  wording, and the messages for the three kinds and for a Reconnect whose hub is not
+  open (SV-13 AC2, AC4 to AC6); **how a tab opened from a hub's server shows its
+  source** in the tab, the tab switcher and the pane, in words or an accessible
+  name, so that it differs from a saved server's tab of the same name (SV-13 AC5);
+  the placeholder "Hub server" in the row and the palette entry (SV-13 AC2); and how
+  a row says that it changed while the list was open (SV-13 AC3).
+- **Scrum-master (after the owner approves S1 and the architect's design):** S1
+  only. S2, S3 and S4 have no criteria and are not sharded. **At S1's sharding,
+  write `.ade/context/f7-merges-second.md`** in the form of
+  `.ade/context/f3-merges-second.md`: one row per criterion (the F7 story, the other
+  story, whether it is sharded, where the mirror is written, the gate) and an "Until
+  each lands" section. Its two rows: SV-5 AC7, with the mirror written into
+  phone-watch ticket 8 as a conditional item; and SV-5 AC8, with the mirror written
+  into F1 ticket e29 as a conditional item, gate F1 D28. The matching conditional
+  items go into S1's own stories. The "Until each lands" text is SV-5 AC7's and
+  AC8's. **S1b is not sharded** until F4 slice S1 and F7 S1 are on `main` and SV-13
+  has been checked against F2 and F4 as merged (F7.9); it adds no row to that file.
+
+**Follow-up in ade-setup: the roles learn the feature** (owner, D17, OQ-22)
+
+This is work in another repository. **It is not part of any F7 slice's Definition of
+Done here:** no story of S1 or S1b carries it, and no F7 criterion asserts the
+roles' text. `vendor/ade-setup/` is a pinned copy that this repository does not
+edit, and its content is validated in ade-setup. The text itself is ade-setup's to
+write; this is what it has to say.
+
+| Role | Says today (F7.0) | To add once S1 has shipped | To add once S1b has shipped |
+|---|---|---|---|
+| **DevOps** (`agents/devops.md`) | owns environments and "configuration and secrets management"; no secrets in code, logs or artifacts; nothing about SSH or a session on a server | Better Terminal has saved servers, which the engineer opens in a tab; an agent cannot open one and must not look for another way in, so when the work needs a session on a server it says what is needed and the engineer opens it. Passwords, passphrases and keys are never asked for, written into project files or echoed | a hub's recorded server appears in that list, marked as the hub's; the hub's own `bin/remote` stays under the hub's rules |
+| **SRE** (`agents/sre.md`) | owns SLOs, runbooks and postmortems; nothing about servers, SSH or secrets | a runbook step that needs a session on a server is a step for the person, naming the saved server to open in Better Terminal; the agent does not open it, the server pane is the engineer's, and Better Terminal types nothing into it. No password, passphrase or key goes into a runbook or a postmortem | the same sentence about a hub's recorded server |
+| Security engineer, support engineer, solutions engineer, release manager | nothing about servers or remote access (the security engineer's one mention is of a leaked credential, in a threat model) | no change | no change |
+
+- **How it ships.** A change in ade-setup, checked there by `node
+  scripts/validate.mjs`; merged to its `main`, where CI tags and publishes a
+  release, a patch since existing definitions are edited (its `RELEASING.md`); then
+  here `ADE_SETUP_REF=<the new tag> npm run sync:agents`, which replaces
+  `vendor/ade-setup/` and its `VERSION`, as a change of its own. A project that was
+  set up earlier keeps the definitions it has until someone updates it: nothing
+  pulls a release by itself.
+- **When.** The third column's text is released and re-vendored **after the ADE
+  release that contains S1 has shipped, not before**, so that no role describes a
+  feature its user does not have; the fourth column's after the release that
+  contains S1b.
+- **Consistent with today's rules.** No role and no line of `rules.md` forbids an
+  agent to run `ssh` today, and none tells it to (F7.0). The text above adds no such
+  ban (item 14 of the list above): it says what ADE offers an agent and what it does
+  not, and that credentials are never asked for, stored in project files or echoed,
+  which the DevOps role already says of secrets.
+- **The user guide.** One line in `docs/guide/agents.md`, in the change that
+  re-vendors: the DevOps and SRE roles know that saved servers exist and leave
+  opening them to the engineer. It is not a criterion. (S1 itself asks for no guide
+  page; a guide page for saved servers is named only among what S2 would change:
+  SV-12, "Carried".)
+- **No conflict was found** between today's role text and F7 (F7.0). If the
+  ade-setup change finds one, it is reported to the owner and not settled in a
+  role's wording.
+
+### F7.12 Reviews: findings and answers
+
+**Adversarial review of revision 1 (2026-11-18, blocked): answers in revision 2.**
+"Question" means the finding is put to the owner; the requirement is written at
+the recommendation meanwhile. The "Where" column is as revision 2 wrote it:
+SV-12's criteria it names are withdrawn in revision 3, SV-4 AC4 and SV-5 AC6 are
+now in F7.9, and where a row says "remote tab" the rule is now written for a
+server tab (the second table).
+
+| Finding | Answer in revision 2 | Where |
+|---|---|---|
+| **B1** User rule lets a saved value reach a shell through the user's `ProxyCommand` | Fixed. User narrowed to `A-Z a-z 0-9 . _ - @`; `$VAR`, `%r`, `%h` and the other accepted-by-`ssh` characters in the refused table; the hostile fixture also asserts every accepted Host and User character is in the set; the rules no longer rely on the client's version | SV-1 AC1, SV-7 AC2, F7.0, F7.9; OQ-7 corrected |
+| **B2** how `ssh` is started contradicts itself; lookup is not the user's `ssh` | Fixed. One model: the user's login, interactive shell replaces itself with `ssh` (D4). "Spawn request whose program is the SSH client" replaced by connect request and client start; start-up files and `PATH` are the shell's own; `find_command` not used; the test stubs `ssh` through a fixture start-up file and checks the process id | D4, G1, G3, SV-2 AC1, AC2, AC4, SV-7 AC2, AC3, SV-8 AC1, F7.1 |
+| **B3** "Remote server" substitution leaks through Duplicate, rename, remove and tab sets | Fixed. Keyed on the tab's own server-named mark, cleared only by a typed rename; Duplicate not offered; Reopen gives an ended remote tab; a renamed or removed server leaves the mark; tab sets leave remote tabs out; all cases in the tests | F7.1, SV-3 AC1, AC7, SV-4 AC3, SV-5 AC2, AC3, SV-2 AC6 |
+| **M1** `ssh` gets every vault secret and the hook token | Question, with the facts; written at "neither". Reconciled with the stored secret: it is never a variable, and the only `SSH_` variables ADE sets are the askpass pair, for a connection with a usable stored secret | OQ-15, SV-2 AC8, SV-6 AC3, SV-7 AC4, SV-12 AC3 |
+| **M2** G3 does not measure "runs nothing"; OQ-8 does not tell the owner | Fixed. G3 reworded to what ADE adds; the limit stated; the sentence is in OQ-8 | G3, F7.9, D5, OQ-8 |
+| **M3** a changed row is not handled; D9 contradicted | Fixed. Residual risk stated; palette entry and Reconnect show the destination summary; a changed destination shows both and needs a second confirmation; D9 and SV-7 AC5 reworded; a stored secret is bound to its destination | D9, SV-7 AC5, SV-3 AC4, SV-9 AC1, AC2, SV-12 AC4; OQ-16 for what the binding cannot cover |
+| **M4** list of composed-command callers wrong both ways | Fixed. Callers re-read from the code; the rule is on `writePty` with named user sends; scratchpad image paths decided; a static test over call sites; OQ-10's premise corrected | F7.0, SV-6 AC4, SV-2 AC3, OQ-10 |
+| **M5** F1 isolation drift | Question, with the `~/.ssh` and `known_hosts` facts and three options; written at "not available in an engagement"; the carrying note named | OQ-14, SV-5 AC8, SV-12 AC9 |
+| **M6** test kinds do not match where the code is | Fixed. Each criterion names Rust, TypeScript or component; one implementation of rules and grammar, in Rust; webview tests count connect requests only | F7.7 intro and every criterion |
+| **M7** negative tests pass on the worst outcome; `/open` test vacuous | Fixed. A state table with positive assertions (remote, ended, no process); `/open` test dropped | SV-2 AC6, SV-4 AC2, AC3, G5 |
+| **M8** pane and tab distinction in SV-6 AC2 | Fixed. Rules are per pane; `tabCwd` tested for both cases | SV-6 intro, AC2 |
+| **M9** G1 not measurable, false for detached windows | Fixed. Selection rule defined; G1 and Connect limited to the main window; the detached case specified | G1, SV-2 AC7, SV-3 AC8, SV-9 AC2 |
+| **M10** where a remote session's scrollback can reach | Question, with the facts (21 files, older build, prompt history, recordings) | OQ-11, SV-5 AC6, SV-4 AC4, G4 |
+| **M11** SV-2 AC3 false as worded, vacuous as tested | Fixed. Terminal-emulator replies and named user sends excluded by name; the test drives every ADE-initiated writer | SV-2 AC3, SV-6 AC4 |
+| **m1** identity file `%`, `${`, directory, FIFO, `..` | Fixed. `%` and `${` refused, "to be confirmed" removed; non-regular file warns; `..` allowed and said so | SV-1 AC1, AC5 |
+| **m2** host `name:port`, numeric forms, IPv6 zone | Fixed. Each a decided case | SV-1 AC1 |
+| **m3** port form | Fixed. Canonical decimal | SV-1 AC1 |
+| **m4** name folding | Fixed. NFC and Unicode lowercase, with examples | SV-1 AC1 |
+| **m5** extra members on next save | Fixed. Dropped at load and not written back | SV-1 AC2 |
+| **m6** close confirm | Fixed. Stated as checked; test on `useGuardedClose` | F7.0, SV-3 AC6 |
+| **m7** SV-11 against D5 | Fixed. Top-level file only, stated | SV-11 |
+| **m8** Windows | Fixed. What a Windows build shows; the "holds unchanged" claim withdrawn | SV-8 AC3 |
+| **m9** quick connect | Fixed. A non-goal | F7.5 |
+| **m10** slices table | Fixed. "No criteria yet, not buildable" | F7.8, SV-10, SV-11 |
+| **m11** logs | Fixed. Failures are kinds without values on both sides; webview test through `main.tsx`'s handler | SV-5 AC4 |
+| **m12** `10.20.0.7` | Fixed. `192.0.2.7` | SV-1 AC1 |
+| Testability: SV-1 AC3 "asks once" | Fixed. Component test | SV-1 AC3 |
+| Testability: SV-1 AC5 "never opens" | Fixed. FIFO with no writer, bounded time | SV-1 AC5 |
+| Testability: SV-2 AC2 | Fixed with B2 | SV-2 AC2, AC8 |
+| Testability: SV-2 AC3, AC5, AC6 | Fixed with M11, M6, M7 | SV-2 |
+| Testability: SV-3 AC2, AC3, AC6 | Fixed. Component tests for mark and Reconnect; `useGuardedClose` test | SV-3 |
+| Testability: SV-4 AC2, AC3 | Fixed. "After every pane is mounted"; positive state | SV-4 |
+| Testability: SV-5 AC2, AC4 | Fixed with B3 and m11 | SV-5 |
+| Testability: SV-6 AC2, AC4 | Fixed with M8 and M4; component test for the file browser | SV-6 |
+| Testability: SV-7 AC2, AC4 | Fixed with B1; keychain behind a recording fake | SV-7, SV-12 |
+| Testability: SV-8 AC2, SV-9 AC1, G1 | Fixed. Kind in Rust plus component message; keyboard component test; G1 with M9 | SV-8 AC2, SV-9 AC1, G1 |
+| Scope: 200-server cap; change to Duplicate and Reopen not flagged | Flagged as additions and asked | D13, OQ-19, SV-1 AC4, SV-4 AC3 |
+
+**The owner's answers of 2026-11-18, first round,** were applied in revision 2 as
+F7.10 records: OQ-1 (D1, F7.5), OQ-2 (D2), OQ-4 (D7, F7.5) and OQ-3 (D3, then
+SV-12; amended since, below).
+
+**Not verified in revision 2:** anything that needs a connection; OpenSSH other
+than 10.3p1 on macOS; Linux and Windows; what each new-tab caller does with no
+folder (SV-6 AC2); Rust-side writers to a PTY (SV-6 AC4); whether closing a
+detached window asks first (since checked: it does not, F7.0); whether a
+backslash in a user name is accepted by `ssh -l` (it is refused by SV-1 AC1
+either way).
+
+**Delta review of revision 2 (2026-11-18, blocked: 4 blockers, 10 majors, 9
+minors): answers in revision 3.** "Fixed" is a change to S1's text. "Carried into
+the gate" means the finding is about the stored secret, whose criteria are
+withdrawn: it is kept as a question the architect's spike must answer before any
+criteria are written (SV-12, GQ-1 to GQ-12), so nothing is lost. "Question" means
+it is put to the owner, with the requirement written at the recommendation.
+
+| Finding | Answer in revision 3 | Where |
+|---|---|---|
+| **N-B1** (S1) a server-named tab without a remote pane leaks the name and is a local shell under it | Fixed, two ways. (1) The state is no longer reachable: closing a tab's remote pane clears the mark and gives the tab a new tab's name. (2) Every rule is keyed on the tab's own record: the export on the server-named mark; Duplicate, Move to New Window, Reopen, tab sets and the phone on "server tab" (server-named **or** holding a remote pane). The sequence connect, split, close is in the state table and in the tests of the session, the export, tab sets, Reopen, Duplicate and the phone, with a hand-built server-named tab that holds no remote pane beside it | F7.1 ("Server-named", "Server tab"), SV-3 AC9, SV-2 AC6, SV-4 AC3, SV-5 AC2, AC3, AC7, G4, G5 |
+| **N-B2** (S2) the password prompt cannot be identified from what the helper receives | Carried into the gate | SV-12 GQ-4, GQ-5, GQ-6; outcomes O5, O9 |
+| **N-B3** (S2) "the prompt comes from the SSH client" cannot be established | Carried into the gate, as the first question, with the owner's alternatives if it cannot be shown; the no-prompt route on macOS is in the disclosure | SV-12 GQ-1, "What happens with the spike's result", "Disclosure" |
+| **N-B4** (S2) with askpass forced the helper is the prompt for everything | Carried into the gate, with the same alternatives; S1 sets no askpass variable, so in S1 every prompt is on the terminal | SV-12 GQ-2, GQ-3; SV-2 AC8, G2 |
+| **N-M1** (S1) a start-up file that execs away or waits breaks D4's claim | Fixed. A pane is connecting until ADE has confirmed its process is `ssh` with the grammar, and only then live; otherwise it is ended with a stated kind. Fixtures: a start-up file that replaces the shell (with a program, and with another shell), one that waits (bound of 30 s, 2 s in the test), one that is answered in time, an early exit, and wrong arguments. D4's costs restated | SV-2 AC9, D4, F7.1 ("Connection"), SV-3 AC2, G6 |
+| **N-M2** (S1) the alias and function rule covers one name; unsupported shells undefined | Fixed. The property is stated (outcome (i) or (ii), no third); every word quoted; the fixture has V8's cases with the required outcome per row; functions named `exec`, `command`, `builtin` and `hash ssh=` are a stated limit with SV-2 AC9 as the backstop; supported shells are `zsh` and `bash`; any other is refused with a kind. The refusal is also a question | SV-2 AC2, AC10, D4, F7.9, OQ-20 |
+| **N-M3** (S2) where the askpass variables are set | Carried into the gate. For S1: ADE sets no `SSH_` variable, no exception | SV-12 GQ-8; SV-2 AC8 |
+| **N-M4** (S2) OQ-16 not written at its recommendation; `ssh -G` contradicts S1 | OQ-16 is answered (yes). How to meet it is carried into the gate, including that a second client start needs an amendment to G3 and SV-2 AC2 proposed to the owner. The Status line no longer claims every requirement is at its recommendation for a slice that has none | OQ-16, SV-12 GQ-7, O3 to O5 |
+| **N-M5** (S2) a wrong stored password re-sent on every Connect | Carried into the gate | SV-12 GQ-9, GQ-3; O7 |
+| **N-M6** (S2) the key passphrase half | Answered by the owner: passphrases are not stored by ADE (D14, D3). The jump-host residue is carried into the gate | D3, D14, OQ-3; SV-12 GQ-6 |
+| **N-M7** (S2) storage rules conflict and can silently wipe secrets | Carried into the gate | SV-12 GQ-10; O8 |
+| **N-M8** (S2) the "never" list has untested places | Carried into the gate | SV-12 GQ-11; O6 |
+| **N-M9** a criterion "checked by review" contradicts the Definition of Done | Fixed. SV-12 AC11 is withdrawn with its slice, and its passages are carried with "a text test over the named files" as the form the criterion must take. In S1, every numbered criterion has an automated test or names the tests that cover it; the three that were statements are moved out (SV-4 AC4, SV-5 AC6 to F7.9; SV-3 AC8's "the architect confirms" replaced by a tested rule) | SV-12 "Carried"; F7.7 intro, SV-3 AC8, SV-4 AC4, SV-5 AC6, SV-7 AC4, AC5, SV-8 AC1, AC3, F7.9 |
+| **N-M10** OQ-14, OQ-16 and OQ-17 did not state all the facts | Fixed. Each is answered, and each answer records the missing facts: OQ-14's consequence for client-server work and for a hand-typed `ssh` in an engagement; OQ-16's limits and the unfounded "As you asked"; OQ-17's facts in the corrected disclosure | F7.10 (OQ-14, OQ-16, OQ-17), D15, SV-12 "Disclosure" |
+| **N-m1** Host rule (a) accepts strings that are not addresses | Fixed. A value containing `:` must parse as an IPv6 address; `a:b:c`, `1::2::3` and `::` are in the refused table | SV-1 AC1 |
+| **N-m2** "the vault's keychain was not read" has no seam | Fixed. The environment is built without `env_for_terminals`; the test counts calls to a stand-in reader | SV-2 AC8, F7.11 |
+| **N-m3** palette re-ranking and tab-set omission not flagged | The re-ranking is removed: S1 does not need it, and F7 changes neither the palette's match rule nor its order. The tab-set omission is flagged and asked | G1, SV-9 AC2; D13, OQ-19, SV-5 AC3 |
+| **N-m4** an older build that saves the session drops the mark for good | Fixed: stated in the limit and in the question | F7.9 ("An older build"), OQ-11 |
+| **N-m5** the detached window: no close confirm; a store test is the wrong webview; in no saved session | Fixed by removing the case from S1: Move to New Window is not offered on a server tab and the action refuses one, tested on the main window's menu and on `detachTabToWindow`. Flagged as a change to an existing action, with the alternative, and moved to S3 | SV-3 AC8, SV-2 AC6, D13, OQ-19, SV-10 |
+| **N-m6** fish tests "where the runner has it" | Fixed. fish is not a supported shell in S1; the `zsh` and `bash` tests always run and fail without the shell. The Linux Backend CI job needs `zsh` | SV-2 AC2, AC10, SV-7 AC3, F7.9, F7.11 |
+| **N-m7** S1 criteria reference S2 behaviour | Fixed. The "stored" indicator, the removal of stored secrets, G2, G7, the askpass exception, the keychain kind and every SV-12 reference are out of S1's criteria, goals and tests | G2, G7, SV-1 AC2, AC3, SV-2 AC3, AC8, SV-5 AC4, SV-7 AC1, AC4, AC5, SV-9 AC1, F7.8 |
+| **N-m8** "never synced" and machine backups | Carried: in the disclosure text | SV-12 "Disclosure" |
+| **N-m9** "as soon as ADE knows" is not decidable | Carried into the gate (every state shown has a decidable moment) | SV-12 GQ-10 |
+| **D9 note** a decision stated while its question was open | Resolved: OQ-15 is answered "neither", and D9 states it as the owner's | D9, OQ-15, SV-2 AC8 |
+| Decisions that should be questions | Keyboard-interactive, replacing the user's `SSH_ASKPASS` and orphan deletion: carried into the gate as owner decisions. Passphrases: answered (not stored). The unsupported shell: a question | SV-12 "Carried", GQ-5, GQ-8, GQ-10; D14; OQ-20 |
+| "Needs a real server", items 1 to 10 | Carried into the gate, item by item (the "From" column) | SV-12 GQ-1 to GQ-12 |
+| "Needs a real server", item 11 (fish and nushell under D4) | Not needed for S1: neither is supported in S1. It becomes a precondition of adding a shell | SV-2 AC10, SV-10 |
+
+**The owner's answers of 2026-11-18, second round,** are applied as F7.10
+records: OQ-15 (D9, SV-2 AC8), OQ-14 (D15, SV-5 AC8), OQ-16 and OQ-17 (SV-12),
+and the split-and-spike decision (D14, D3, F7.8, SV-12), which answers OQ-18 and
+amends OQ-3.
+
+**Not verified in revision 3.** Nothing was built and no test was run; no host
+was contacted. Taken from the review's experiments and not re-run by the product
+manager: V1 to V9 and V11. Re-read in the code at 84389eb for this revision:
+`closePane`, `detachTab`, `closeTab` and `reopenClosedTab` (`tabStore.ts`), the
+tab-set save (`SettingsPanel.tsx`), Duplicate and Move to New Window
+(`TabBar.tsx`), the detached window's close (`DetachedApp.tsx`), `classify`
+(`pty.rs`), `shell_from` (`platform.rs`), the palette's filter
+(`CommandPalette.tsx`), the quoter (`shellQuote.ts`) and the CI jobs
+(`.github/workflows/ci.yml`). **Not checked:** that a process's arguments can be
+read for the hand-over check on Linux and macOS in every case (SV-2 AC9; the
+architect's); how today's close confirm classifies the exact invocation the
+architect chooses while a pane is connecting (SV-3 AC6's test decides); the
+required outcome of SV-2 AC2's "(i) or (ii)" rows on shells newer than V8's; any
+shell other than `zsh` and `bash`; Linux and Windows behaviour of any kind; what
+each new-tab caller does with no folder (SV-6 AC2); Rust-side writers to a PTY
+(SV-6 AC4).
+
+**Delta review of revision 3 (2026-11-18; S1 blocked: 1 blocker, 5 majors, 17
+minors; the gate complete: 3 minors): answers in revision 4.** "Fixed" is a change
+to the text. "Decided" is a product decision this revision took where the review
+asked for one; each is listed for the owner's approval (F7.11). The review's facts
+W1 to W11 are summarised in F7.0. **Where this table and the second differ, this one
+stands:** N-B1 (a rename is now a commit that changes the name), N-M1 (a start that
+does not hand over is no longer ended by ADE: it is kept), N-m2 (the counting
+stand-in is gone; the builder takes no vault input), and every row there that says
+"Question" (all are answered).
+
+| Finding | Answer in revision 4 | Where |
+|---|---|---|
+| **R3-B1** (blocker) an unchanged rename commit clears the server-named mark, and the server's name is then exported | Fixed. A rename is a commit whose text differs from the tab's current name; an unchanged commit changes nothing and leaves the mark, on the store's rename action so both rename boxes have it. Tests: unchanged commit on blur and on Enter keeps the mark; the export, a tab set and the closed-tab record after that and after the remote pane is closed hold no marker. The phone and sync half: every server tab, renamed or not, is "Remote server" in the export and on the phone, the stricter reading, flagged | SV-3 AC1, AC9; SV-5 AC2, AC3, AC7; F7.0, F7.1 ("Server-named"), G4, G5; OQ-13; F7.11 |
+| **R3-M1** the hand-over is defined for one instant, while the process changes image; a wrapper is accepted or refused by timing | Fixed. The rule is stated over time: the first image ADE observes that is not the shell it started is judged, once; what counts as `ssh` is the program's base name, or the base name of the script an interpreter was given, through `env` if present, followed by exactly the grammar; later images of a confirmed process are not judged. Decided: SV-8 AC1 holds for a wrapper that adds arguments, and "exactly the grammar" is about what the shell hands over. Fixtures added: `#!/bin/sh` and `#!/usr/bin/env bash` stubs, a wrapper that sleeps then runs a second stub with one more argument, a pure table of argument lists; the last fixture's form and expected kind fixed. The timing residue is a stated limit, in the safe direction | SV-2 AC9, AC2; SV-8 AC1; F7.9; G6; F7.11 |
+| **R3-M2** SV-2 AC8 promises what `ssh` receives and half its test cannot be built | Fixed. AC8, D9 and SV-6 AC3 are worded as what ADE passes and removes: no vault variable, no `ADE_*` variable, every inherited `ADE_*` removed; what the start-up files export is the user's. Decided: an inherited variable with a vault secret's name is left (removing it would need a vault read). Tests replaced: inherited `ADE_HOOK_TOKEN`, `ADE_PTY_ID` and `ADE_X` seeded in the builder's base environment and absent in the stub's; the builder takes no vault input; the text test covers the files that build and make the client start. The marker-secret and counting clauses are gone | SV-2 AC8, D9, SV-6 AC3, SV-7 AC4; F7.0; F7.9; F7.11 |
+| **R3-M3** SV-5 AC8's carrying statement is false: F1 slice 1 is already sharded | Fixed. The carrier is F1 ticket e29 (the first story in which a test starts a real engagement instance), with the reason e19, e20 and e30 are not. The mirror is written into e29 and into `.ade/context/f7-merges-second.md` at S1's sharding; the gate on each side is stated (F1 D28 on F1's); an "until it lands" rule makes S1 Done when it merges first and binds the code either way: the availability function answers no for an engagement instance, tested in S1 through its input. The same explicit statement for SV-5 AC7, with phone-watch ticket 8 and an outward-name function | SV-5 AC7, AC8; SV-2 AC7; F7.11 ("Scrum-master") |
+| **R3-M4** OQ-20 (2) asked for a kill at 30 s without the facts, and did not say what is killed | Answered by the owner: keep it, offer End. ADE ends nothing; the pane stays connecting with a message and End; the 30 s only times the message. The facts the question lacked are recorded with the answer. End is defined as closing the pane's terminal so that its foreground job goes with it, and "a process of the pane" is defined | OQ-20; SV-2 AC9; D4; D13; F7.9 |
+| **R3-M5** D4 says a start that is not confirmed "says why"; for the stated-limit rows it says nothing | Fixed with a third kind, "ended before ssh was seen to start", shown with the exit status, and the fixture: a function named `exec` that returns, under both shells | SV-2 AC9; SV-5 AC4; D4 |
+| **R3-m1** the alias `exec` row allows (i) or (ii) | Fixed. (i) is required | SV-2 AC2 |
+| **R3-m2** fixture order is a `zsh` parse error; `ZDOTDIR` not set | Fixed. Function before alias, in the `function` form; each row asserts its definition is in effect; the fixture sets `HOME` and `ZDOTDIR` and removes `BASH_ENV` and `ENV` | SV-2 AC2 |
+| **R3-m3** "the first `ssh` on `PATH`" is false with a `hash` entry | Fixed. Worded as the program the shell runs for the name `ssh`, the same case as SV-8 AC1 | SV-2 AC2, SV-8 AC1, F7.1 |
+| **R3-m4** "no SSH client found" can only be told by status 127 | Fixed. The rule is the status; a wrong message in the other 127 cases is accepted, stated, and kept truthful by its wording | SV-8 AC2, SV-2 AC9, SV-5 AC4 |
+| **R3-m5** "no process of the pane is alive" not tested for a shell with a foreground child, nor defined | Fixed. Defined (attached to the terminal: the session's shell and foreground job; a detached daemon stays); the child-`ssh` fixture asserts the child is alive until End and not after | SV-2 AC9 |
+| **R3-m6** SV-2 AC5 against AC7: a tab or no tab | Fixed. From Connect no tab is opened; from Reconnect the pane stays ended | SV-2 AC5, AC7 |
+| **R3-m7** the list of kinds | Fixed. One table of eleven kinds, each with what it may carry and when, including the full list, a server that no longer exists and a failed start; the engagement kind is testable in S1 through the availability function's input | SV-5 AC4 |
+| **R3-m8** an ended remote pane can be asked about, labelled "Claude" | Fixed. Closing a remote pane is decided from its record, before and in place of the sampling, with a test in which the stub would give the wrong answer | SV-3 AC6, F7.0 |
+| **R3-m9** what a reopened pane's remote record holds | Fixed. The closed-tab record keeps the remote record without its state; the reopened pane has the same server reference and destination, ended, so the changed-destination check works | SV-4 AC3 |
+| **R3-m10** mark and name must change together | Fixed. One store update, with the pane's removal; a subscriber test | SV-3 AC9, AC1 |
+| **R3-m11** base name: `zsh-5.9` is refused; a path holds the user's name | Fixed. The base name must be exactly `zsh` or `bash`, said so; the message and the log carry the base name, never the path; a test with a marker in the path | SV-2 AC10, SV-5 AC4 |
+| **R3-m12** "live" must not be shown as "connected" | Fixed. In the term, the criterion (with a test) and the designer's handoff | F7.1, SV-3 AC2, F7.11 |
+| **R3-m13** the 2 s bound | Fixed. The test asserts that each call returns, under a generous bound | SV-1 AC5 |
+| **R3-m14** Rust-side PTY writers "not enumerated"; the exit status is a shared contract | Fixed. One writer thread per terminal, two feeders (`write_pty`, and `type_line` for `/open`; the review named the first), with a static test over a checked-in list; the exit status is in the architect's list as a contract for `.ade/context/` | F7.0, SV-6 AC4, SV-2 AC4, F7.11 |
+| **R3-m15** attribution: reasons and "accepted position" the owner did not give | Fixed. D14, D15, OQ-3 and OQ-14 state the decision; a consequence is labelled as the product manager's; OQ-14's consequence is in the approval list | D14, D15, F7.10, F7.11 |
+| **R3-m16** editorial | Fixed. Six goals; AC6 added to the withdrawn criteria the questions cite; the remote record added to what stays on the machine and to OQ-11's answer; index row and Status updated | F7.4, F7.10, F7.9, index |
+| **R3-m17** is the destination summary matched in the palette? | Decided: yes. An entry has only a label, a category and a shortcut, so the summary is in the label; a test with text only one host contains | SV-9 AC2, F7.0 |
+| **G-m1** which build two keychain answers must be shown with | Fixed. GQ-1's macOS clause and GQ-10's "after an app update" need a build signed as the shipped app is; the note records the build for every answer | SV-12, gate preface, GQ-1, GQ-10 |
+| **G-m2** the disclosure lacks the relay sentence | Fixed. A conditional line that cannot be dropped when criteria are written | SV-12 "Disclosure" |
+| **G-m3** where the disposable test server lives | Fixed. A container or a virtual machine on the architect's own machine, or a throwaway host with no third party's data | SV-12, gate preface |
+| Decisions not in a question (the review's Part 3) | The three it names are settled: "same text clears the mark" is reversed (R3-B1); ending the user's start-up code at the bound is the owner's answer to OQ-20 (2); a wrapper that adds arguments is decided (R3-M1). Those and the others revision 4 took are listed for the approval | F7.11 |
+
+**The owner's answers of 2026-11-18, third round,** are applied as F7.10 records:
+OQ-5, OQ-6, OQ-7, OQ-8, OQ-9, OQ-10, OQ-11, OQ-12, OQ-13, OQ-19 (all six kept) and
+OQ-20 (1), each at its recommendation, and OQ-20 (2), "keep it, offer End" (SV-2
+AC9). After them F7 has no open question, and revision 4 raised none.
+
+**Not verified in revision 4.** Nothing was built and no test was run; no host was
+contacted. Taken from the review's experiments and not re-run by the product
+manager: W1 to W10 (and V1 to V9 and V11, as before). Re-read in the code at 84389eb
+for this revision: the two rename boxes (`TabBar.tsx`, `SettingsPanel.tsx`) and
+`renameTab`, the closed-tab record and `saveSession` (`tabStore.ts`), `hasShell`
+(`useGuardedClose.ts`), the text heuristic (`useTerminal.ts`), the writer thread,
+`type_line`, `write_pty`, the exit event, `create_pty_core`'s environment,
+`classify` and `pty_foreground_job` and `kill_pty` (`pty.rs`), `env_for_terminals`
+(`vault.rs`), the palette's entry fields and filter (`CommandPalette.tsx`),
+`.ade/context/pane-busy.md` and `f3-merges-second.md`, F1 tickets e19, e20, e29 and
+e30, and phone-watch ticket 8's title and items. **Not checked:** that dropping a
+terminal as `kill_pty` does ends a foreground child in every case (SV-2 AC9's End
+tests decide); what the library ADE uses to read a process reports for a script
+named `ssh`, on either platform (the review sampled with `ps`); Linux in any respect
+(the process name of a script there, reading arguments under `hidepid`), bash 5 and
+other `zsh` versions; which side an interpreter line with an option falls on (the
+architect's); that exit status 127 from `ssh` itself occurs as the review suspects;
+that an engagement instance's signal will be available to the availability function
+in the form F1 builds it; the rest of phone-watch ticket 8; and everything revision
+3 listed as not checked that is not named above as now read.
+
+**Final delta check, of revision 4 (2026-11-18; S1 blocked on one blocker: 1
+blocker, 2 majors, 14 minors; the gate still complete): answers in revision 5.**
+Every finding is a text change. "Fixed" is a change to the text. "Decided" is a
+product decision this revision took where the check asked for one; each is listed
+for the owner's approval (F7.11). The check's facts X1 to X9 are in F7.0 and F7.1.
+**Where this table and the third differ, this one stands:** R3-M2 (an inherited
+variable with a vault secret's name is now removed, not left; the builder takes the
+names to remove as an input), R3-M4 and R3-m5 (End is no longer "closing the
+terminal as today": it writes nothing and leaves no process of the pane alive, and
+a job that ignores a hangup is killed), R3-m7 (twelve kinds, not eleven), R3-M3
+(the outward name is one rule with one table of cases, in one or two
+implementations; the engagement answer is no by F1 slice 1's gate), and the third
+table's "ADE ends nothing", which is "of its own accord".
+
+| Finding | Answer in revision 5 | Where |
+|---|---|---|
+| **R4-B1** (blocker) ending or closing a remote pane the way the text named types Enter and Ctrl-D into the connection and ends nothing | Fixed. F7.0 states what `kill_pty` does today (X1): no signal, a newline and the end-of-file byte written by the library on drop, the terminal kept open by the reader. A requirement: End, a confirmed close, a close of the tab, a close of the main window and quitting write nothing into a connecting or live remote pane and leave no process of it alive. A Rust test with a recording stub in raw mode: 0 bytes and not alive, after End and after a close, live and connecting. "As closing the pane does today" is removed from AC9. The architect has the item, with the note that the defect exists today for a hand-typed `ssh` and is outside F7 | F7.0; F7.1 ("A process of the pane"); SV-2 AC3, AC9; SV-3 AC6; SV-6 AC4; SV-7 AC1; G6; F7.9 ("Ending and closing"); F7.11 |
+| **R4-M1** the owner's "neither" had an unstated exception, and its stated reason was incomplete | Decided, at the stricter reading: ADE also removes every inherited variable whose name is a vault secret's name, read from the vault's list of names with no keychain call (X9). Test: indexed names seeded in the base are absent from the stub's environment; a recording stand-in for the keychain records 0 calls. The limits are stated (a value under another name, what the start-up files export, a secret removed after ADE started, an unreadable list of names) and one cost (removal is by name). Flagged, with the alternative, in the approval list | SV-2 AC8 (e); D9; SV-6 AC3; SV-7 AC4; F7.0; F7.9 ("What ADE inherits"); OQ-15; F7.11 (item 2) |
+| **R4-M2** the "accept knowingly" list was not complete | Fixed. Three statements added in plain words: the residue of the rename rule, case and spacing included; what can sit in a kept connecting pane; that End appears only with the message and asks nothing while a close asks. G5 carries the matching qualifier | F7.11 (items 1, 4, 5); G5; F7.9; SV-2 AC9 |
+| **R4-m1** "the program's base name" not defined | Decided: the rule reads the process's argument list, its first word included, and not the executable's path, with the reasons and what follows (`exec -a`, a link named `ssh`) | SV-2 AC9; F7.9; F7.11 (7 (j)) |
+| **R4-m2** `I` had no list | Decided: a closed list, `sh`, `bash`, `zsh`, `dash`, `ksh`. "Not" rows added for `[nice, ssh, G]`, `[sudo, ssh, G]`, `[env, ssh, G]`, `[echo, ssh, G]`, `[python3, /x/ssh, G]` and `[/usr/bin/env, nice, /x/ssh, G]` | SV-2 AC9 (rule and pure test) |
+| **R4-m3** what G3 and G6 can honestly claim | Fixed. G6, SV-2 AC2, AC9 and F7.9 say "an image ADE observed of the pane's own process was named `ssh`, or was an interpreter given a script so named, and held exactly the grammar"; G3 says ADE starts one program, the shell, with one instruction; that no timing gap makes a pane live on a process not so named is stated | G3, G6; SV-2 AC2, AC9; F7.9 |
+| **R4-m4** SV-2 AC8's test passed on one wrong builder | Fixed. A variable set in the test process's own environment and absent from the base must be absent from the stub's | SV-2 AC8 |
+| **R4-m5** "as soon as an engagement instance can exist" overstated | Fixed. "By F1 slice 1's gate" (e30 needs e29); the gap between e31 and e29 is stated, debug builds with F1's flag only | SV-5 AC8 |
+| **R4-m6** "one function, one implementation" for the outward name | Fixed. One rule stated as a checked-in table of cases; one implementation where one side can derive the name, otherwise Rust for the export and the webview for the relay, each tested against the table | SV-5 AC7; F7.11 |
+| **R4-m7** a foreground job that ignores a hangup | Decided: ending escalates. Whatever is still alive 2 s after the action is killed with a signal that cannot be ignored; no process of the pane is alive within 5 s. Fixture added. The limit that a process in a session of its own stays is kept | SV-2 AC3, AC9; F7.9; F7.11 (item 6) |
+| **R4-m8** kinds | Fixed. A twelfth kind, "the server list could not be saved", with a fixture; the shell's base name is carried only when 1 to 32 characters of a safe set, otherwise nothing; a message that names the server gets the name in the webview from the identifier, and no kind can carry a host, user, key path or server name | SV-1 AC4; SV-2 AC5, AC10; SV-5 AC4 |
+| **R4-m9** "ADE ends, signals and stops nothing ... at any time" contradicted by End, a close and quitting; the "how connecting ends" table | Fixed. "Of its own accord", everywhere the phrase stands; the table is retitled "What can happen to a connecting pane" and says which rows end the state and what can follow which | SV-2 AC9; F7.1; D4; F7.9 |
+| **R4-m10** G4 against SV-5 AC2's own test | Fixed. G4 carries the qualifier that a name the engineer typed is theirs | G4 |
+| **R4-m11** OQ-9 against SV-9 AC1 | Fixed, to the recorded answer: the list is an overlay; its layout is the designer's. Listed for the approval | SV-9 AC1; OQ-9; F7.11 (7 (k)) |
+| **R4-m12** fixtures tied to an invocation the architect has not chosen | Fixed. "A function named after a word of the instruction"; the `command` and `exec` names are given as the candidate invocations' and are replaced by the chosen one's | SV-2 AC9 (tests) |
+| **R4-m13** `/open` and a remote pane | Fixed. A client start's terminal carries no `/open` request id; in the architect's list and beside the feeders | SV-6 AC4; F7.11 |
+| **R4-m14** housekeeping; a wrapped `$SHELL` | Fixed. Status, history and the index row say revision 5, findings answered, pending the owner's approval; this table added. The wrapped-`$SHELL` case is a stated limit marked suspected, with a fixture asked of the architect | Status, index; F7.12; SV-2 AC9; F7.9; F7.11 |
+
+**Not verified in revision 5.** Nothing was built and no test was run; no host was
+contacted. **Revision 5 has not been reviewed.** Taken from the final delta check
+and not re-run by the product manager: X1 (the run on the real library), X2 and X5;
+X3, X4, X6, X7 and X8 were not re-read. Re-read in the code at 84389eb for this
+revision: `kill_pty`, `kill`, `remove` and the reader's start (`pty.rs`), which
+agree with X1 as far as ADE's own code goes; `read_index` and `index_path`
+(`vault.rs`), which agree with X9; the main window's close handler (`App.tsx`); and
+the keychain library's version (`keyring` 3, `Cargo.toml`). **Not checked:** the
+terminal library's source for the write on drop (taken from X1); that a real `ssh`
+forwards those two bytes to the server; what a terminal's processes receive when
+ADE quits today; that a hangup followed by a kill ends every process of the pane on
+Linux as on macOS; that 2 s and 5 s are comfortable on a slow CI runner (the
+architect may ask to change them, as a question); that the keychain library lets a
+test put a recording stand-in in its place; the wrapped-`$SHELL` case; that five
+interpreter names cover the wrapper scripts engineers actually have; whether the
+webview always holds the list when a message that names a server is shown; and
+everything revisions 3 and 4 listed as not checked that is not named above.
+
+**Revision 6 (2026-11-18): the owner's fourth round, and the end-to-end read.**
+Revision 6 was not prompted by a review, and has not been reviewed. It applies OQ-21
+and OQ-22 (D16 to D18; S1b, SV-13; F7.11's follow-up list), and it does the read of
+the whole section, from the status line to this table, that revision 5 did not do.
+The read checked every reference to a criterion, a decision, a goal, a question, an
+outcome and a gate question against what exists, by script; recounted every stated
+count; and read the prose for statements that disagree. What it caught:
+
+| Found | Fixed |
+|---|---|
+| F7.0's opening and F7.1 said V1 to V11 were all established "by experiment"; V10 is a reading of the code and V11 is from the man pages, as F7.0 itself said of V11 | both now say which is which |
+| F7.9 said "The SSH client is OpenSSH", while F7.1 says "normally OpenSSH" and SV-8 AC1 allows another vendor's client | F7.9: "taken to be OpenSSH" |
+| OQ-14's answer said its consequence was "listed for the owner's approval of revision 4" | "for the owner's approval" |
+| F7.7's opening said "S2 to S4 have no criteria", which named no requirement and would have been wrong by position once S1b sits between S1 and S2 | S1 and S1b have criteria; S2, S3 and S4 are named with their SV numbers as having none |
+| SV-2's note and F7.10's opening spoke of "revisions 4 and 5" | "4, 5 and 6" |
+| F7.4 said "All six are S1's"; F7.10 said "all twenty"; the index row said "four slices" | G1 to G6 are S1's, G7 withdrawn, G8 S1b's; twenty-two; five slices, named |
+| Ten prose lines were wider than the section's wrap, the widest 137 characters: in D9, SV-1 AC3, SV-3 AC6, SV-5 AC2, SV-6 AC4, SV-7 AC1, F7.9, OQ-9 and twice in F7.11 | re-wrapped, no word changed. Two headings (SV-11, SV-12) and one file path (SV-5 AC8) stay on one line |
+| **Checked and found consistent:** every "SV-n ACm" reference (the only ones without a target are the withdrawn SV-12 AC3 to AC11, which F7.10 and this section explain); D1 to D15; G1 to G7; OQ-1 to OQ-20; O1 to O10; GQ-1 to GQ-12; the twelve kinds of SV-5 AC4's table; the five ending actions of SV-2 AC3; the five tabs and five "Remote server" of SV-5 AC2's test; the two entries of SV-5 AC3's test; D13's six additions; the five callers of `sendToActiveTerminal` in F7.0 and SV-6 AC4; the six withdrawn SV-12 criteria F7.10 says the questions cite; the finding counts in each review's heading against its table | nothing to fix |
+
+**Left as it is:** a few lines are wrapped short (in D4, G6 and SV-2 AC9's opening);
+they read correctly.
+
+**Not verified in revision 6.** Nothing was built and no test was run; no host was
+contacted; nothing was run from a hub. Read for this revision: ade-brain's
+`README.md`, `bin/init`, `bin/lib.sh`, `bin/remote`, `bin/doctor` and its tests for
+the remote, at the public `main` (8ffac3d; the local checkout is on another branch,
+with an identical `bin/remote`); F2's PRD (F2.5, OB-5 AC4, OB-6, OB-14) and its
+design's section on reading `hub.conf`; F4's PRD at revision 3.12 (F4.1, D3, WS-1,
+WS-2, WS-8, WS-9, F4.8) and its design's contract; ade-setup's six role files named
+in F7.11's table, its `rules.md` and its `RELEASING.md`; and here
+`scripts/syncAgents.mjs`, `vendor/ade-setup/VERSION` and `CONTRIBUTING.md`. Run:
+bash's `printf %q` on eight sample values (bash 5.3), and `man ssh_config` for
+`BatchMode`. **Not checked:** that F2's reader, as designed, can serve other keys
+without change; that F4's bounded file calls can be used by code outside F4's
+modules under its static rules; that F4's registry announces a hub's closing in a
+form the list can use; anything of F2 or F4 as they will be when merged; what `ssh
+-i` does with a literal `~/`; what the SSH client does with an unknown host key
+under `BatchMode=yes`; that `printf %q` in bash 3.2, which macOS ships, writes the
+same forms as bash 5.3 for these values; the questions as they were put to the owner
+in the fourth round, which this file does not hold; and everything revisions 3 to 5
+listed as not checked.
+
+**Delta check of revision 6 (2026-11-18; S1: PASS with minors, 5 minors; S1b:
+BLOCKED on one blocker: 1 blocker, 1 major, 8 minors): answers in revision 7.** Every
+finding is a text change; R6-B1 asked the product manager for one small decision,
+taken in two parts and flagged for the owner (F7.11, item 11). "Fixed" is a change to
+the text; "Decided" is a product decision this revision took. The check found every
+revision 4 finding resolved by revision 5. **Where this table and earlier text
+differ, this one stands:** revision 6's statement that a leading `~` is written
+escaped, D18 (a)'s "unchanged", approval item 11's "typed by hand" and AC5's unmarked
+tab.
+
+| Finding | Answer in revision 7 | Where |
+|---|---|---|
+| **R6-B1** (blocker, S1b) SV-13 rests on what `bin/init` writes, and on macOS it does not write it | Fixed and decided. F7.0 states what bash 3.2.57 writes, as the check ran it (a leading `~` bare; some non-ASCII text as a raw lead byte and an octal escape, not valid UTF-8, on the `HUB_NAME`, `HUB_CLIENT` and `HUB_OWNER` lines), and says that revision 6's "checked" was a run on bash 5.3. **Decided (1):** for `HUB_REMOTE_KEY` only, a bare leading `~/` is accepted; one stated addition to F2's reader, so "unchanged" is gone from D18 (a), SV-13 and item 11; `~user/` and a `~` elsewhere stay not a literal. **Decided (2):** only the lines that name the four keys must be valid UTF-8; other bytes are not interpreted. Each is flagged with its alternative and cost. The two test rows are corrected (bare `~/` usable; `\~/` usable as the bash 5 form) and a row with a non-UTF-8 `HUB_OWNER` line is added; the approval item is retitled and says which values `bin/init` itself writes are affected and which remain so; the remedy is stated per reason | F7.0 (the hub template: format, correction); D18 (a), (l); SV-13 intro, AC1, AC4 (test), AC6; F7.9 ("What of `hub.conf` is read", "F2 and F4"); F7.11 (item 11; Architect, S1b) |
+| **R6-M1** (major, S1b) the hub's tab is named by a folder and carries no mark | Fixed. A tab whose remote pane has a hub as its source shows that, in text or an accessible name, wherever the name and remote mark are shown, in all three states, restored and renamed or not; the words and form are the designer's; the outward name is unchanged. Test: a hub tab and a saved-server tab both named `db1` differ in text or accessible name in the tab, the switcher and the pane. The row and the palette entry apply the tab name's character rule to the hub's label, or show "Hub server", with a test | SV-13 AC5, AC2; D18 (h); F7.1; G8; F7.8; F7.9; F7.11 (item 12; Designer, S1b) |
+| **R6-m1** (S1) the fourth limit is not where the owner reads | Fixed. "If the vault's list of names is missing or damaged, nothing is removed by name" added; D9 now says four | D9; SV-6 AC3; F7.11 (item 2) |
+| **R6-m2** (S1) the quit and window-close teardown is tested as a routine, not as wired | Fixed. A static test compares the teardown routine's call sites with a checked-in list holding the exit handler and the window-destroy handler; a quit and a close of the main window wait up to the 2 s of the escalation. Item 6 uses F7.9's words: they end live connections unasked | SV-2 AC3; F7.9 ("Ending and closing"); F7.11 (item 6; Architect, S1) |
+| **R6-m3** (S1) the keychain stand-in is process-wide | Fixed, for the architect: a test binary of its own, or a count per thread. The "not checked" clause is replaced by what the check read | F7.11 (Architect, S1: the environment) |
+| **R6-m4** (S1) the list read is this instance's own | Fixed. A stated limit, marked suspected: another profile's secret names are not removed | F7.9 ("What ADE inherits") |
+| **R6-m5** (S1) forms the judging rule leaves unplaced | Fixed, for the design: "still that shell" is compared with the argument list as the operating system reports it (`-zsh`); the three unplaced forms are noted as "not", the safe side | F7.11 (Architect, S1: the hand-over check) |
+| **R6-m6** (S1b) SV-13's words for a bad line differ from F2's design | Fixed, by taking F2's rule: every line that names the key as a word must be a plain assignment at the start of the line. Rows added: a comment naming the key, an indented assignment, `+=`, `: ${KEY:=x}`, `KEY=value # note`, a `$'...'` value (accepted) and one with an unlisted escape; and, where F2's design does not say, the result SV-13 requires for CRLF, a byte-order mark and a trailing backslash (not usable, not a literal), each marked to be confirmed against F2 as merged. The cost of the comment rule is in item 11 | F7.0; SV-13 AC1; F7.9; F7.11 (item 11) |
+| **R6-m7** (S1b) not every difference from the hub's own view is stated | Fixed. A literal reader and a shell can disagree, so ADE can show a destination the hub's scripts would not use; with no port recorded the engineer's `~/.ssh/config` `Port` applies | F7.9 (after the table); F7.11 (item 8) |
+| **R6-m8** (S1b) an unreachable reason and missing fixture rows | Fixed. Rows for a `hub.conf` that is a link and one that is a FIFO: no row. "Not a regular file" is kept and stated as reachable only when the file is replaced after F4's check, with a stubbed-read test | SV-13 AC1 (tests), AC6; F7.0 |
+| **R6-m9** (S1b) "the read its row was showing" | Fixed. The comparison is over all four fields, the identity file included; a row whose result changes while the list is open says so, with a store test; a key-only rewrite is refused as changed | SV-13 AC4, AC3; F7.9; F7.11 (item 9; Designer, S1b) |
+| **R6-m10** (S1b) "no process was started" has no means | Fixed. The clause is replaced by F4's means: a static test that the files holding the read contain no `std::process`, plus the marker fixture | SV-13 AC1 (tests); F7.11 (Architect, S1b) |
+| **R6-m11** (S1b) "no S1 criterion names a hub" is untrue | Fixed: "depends on", with the three cross-references named | F7.8 |
+| **R6-m12** (S1b) three statements missing from the approval list | Fixed. The tab's mark (now that it has one, item 12); the file on disk is read, not the committed one (item 9); the hub group is absent inside an engagement (item 13) | F7.11 (items 9, 12, 13) |
+| **R6-m13** (S1b) the commit named | Fixed. F7.0 says the cited lines were checked again at f3fb64e and match | F7.0 |
+
+**Not verified in revision 7.** Nothing was built and no test was run; no host was
+contacted; nothing was run or sourced from a hub. **Revision 7 has not been
+reviewed, and S1b's answers await a re-check.** Run by the product manager: `printf
+%q` under `/bin/bash` 3.2.57 on `~/.ssh/acme`, `~dev/.ssh/acme`, `~`, and, under
+`en_US.UTF-8`, `Ørsted` and `Café`; the results agree with the delta check. Read for
+this revision: F2's design 6.6 and F4's contract (the file-read and finished-hub
+lines), in the copies the delta check used; lines 75 to 80 and 90 to 99 of
+ade-brain's `bin/init` in the session's copy. Taken from the delta check and not
+re-run or re-read: that `iconv` rejects the file; `ssh -G -i` expanding a literal
+`~/`; `App.tsx:129-141` and the absence of an exit handler in `lib.rs`; `keyring`
+3.6.3's builder; the shared identifier in `tauri.conf.json`; and that the cited
+ade-brain lines match at f3fb64e. **Not checked:** that F2's reader, as designed,
+can take the `~/` exception as an option or a step in front; that F4's bounded file
+calls can hand back bytes and be used outside F4's modules; how F2's reader as
+merged treats a carriage return, a byte-order mark or a backslash that ends a line;
+R6-m4 (another profile's vault; F1 is not built); that F2's question 12 passes the
+key answer to `bin/init` unexpanded; whether F4 applies a character rule of its own
+to a hub's label; whether the tab switcher has room for a source mark (the
+designer's); and everything revisions 3 to 6 listed as not checked that is not named
+above as now run or read.
+
+<!-- F7 ends -->
