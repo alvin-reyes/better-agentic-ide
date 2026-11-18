@@ -1,8 +1,8 @@
 # Server panes: the remote record, the mark, the states, the events
 
 Status: **proposed** with the F7 S1 design
-(`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, revision 1, not
-approved). PRD: `docs/prd.md` F7, SV-2 to SV-6. Companion: `saved-servers.md`.
+(`docs/superpowers/specs/2026-11-18-saved-servers-design.md`, revision 2, not
+approved, awaiting a delta review). PRD: `docs/prd.md` F7, SV-2 to SV-6. Companion: `saved-servers.md`.
 ADRs (provisional numbers): 0044, 0045, 0046. F3, F4 and the phone relay read tab
 state: read this before adding a reader of a tab's name, folder or panes.
 
@@ -32,7 +32,30 @@ Tab.serverNamed?: true         // ADE named the tab after a saved server
 - A remote pane has no folder: `getPtyCwd` and `tabCwd` give null for it, it is
   saved without `savedCwd`, and file-path links are off in it.
 - A remote pane never calls `create_pty`. Its terminal is started only by
-  `server_connect` (Connect, Reconnect) and ended only by `server_terminal_end`.
+  `server_connect` (Connect, Reconnect).
+
+## The invariant, and how a remote terminal is ended
+
+**A remote terminal exists in Rust's table only while a pane holds its id.** The
+two bounded exceptions: while its `server_connect` has not been answered, and
+while the ending routine is running on it (at most 5 s).
+
+It is ended by one routine, `saved_servers::ending::end`, reached by:
+
+| Who | How |
+|---|---|
+| End; a confirmed close of the pane; a close of the tab | the webview's `server_terminal_end`. `closePane` and `closeTab` read "remote" from the pane's record before their store update and pass it to `destroyInstance(paneId, ptyId, remote)` |
+| a connect that resolves when its pane is gone or no longer an ended remote pane | the webview's `server_terminal_end`, at once, in the step that would have set the id |
+| any other `kill_pty` for a remote terminal's id | Rust's `kill` starts the routine on a thread and returns at once; a local terminal's `kill` is unchanged |
+| the main window destroyed | `ending::main_closed`: closes the gate, `end_all(Wait::No)` |
+| the main webview loads a page (a reload) | `ending::main_page_loaded` (Tauri's `on_page_load`, `Started`, webview `main`): `end_all(Wait::No)` and a new page count |
+| ADE exits | `ending::app_exiting`: closes the gate, `end_all(Wait::Yes)` |
+| a start that completes after the gate closed or the page changed | inserted already ending; the command rejects |
+
+`end_all(Wait::Yes)` returns when no remote terminal is left in the table and no
+client start is in progress, or 5 s have passed, whatever was already ending.
+A second `end` on a terminal returns at once. The webview makes one connect
+request per pane at a time.
 
 ## Saved in `ade-session`
 
@@ -53,13 +76,24 @@ state } }`. A tab: `serverNamed: true` when set. Restored: `state` becomes
 
 **The exit event carries `status`, `kind` and `by` for every terminal.** A local
 terminal sends `status: null, kind: null, by: "process"` (its exit comes from its
-reader, which has no status). For a remote terminal `status` is the process's
-exit status, null when a signal ended it. One thread per remote terminal sends
-`live`, `notice` and `exit`, so their order is: zero or one `notice` of each
-kind, at most one `live`, exactly one `exit`, last.
+reader, which has no status). **This amends `terminal-open.md`** ("No exit code
+in v1: `PtyEvent::Exit` is unchanged") and ADR
+`0014-terminals-open-terminals-through-the-hook-endpoint` (exit codes out of
+v1): the shape changes for every terminal; a local terminal still reports no
+code. Recorded in ADR 0046; the story that builds it edits both files.
+
+For a remote terminal `status` is the process's exit status, null when a signal
+ended it or when the ending routine gave up on a process it could not end. One
+thread per remote terminal sends `live`, `notice` and `exit`, so their order is:
+zero or one `notice` of each kind, at most one `live`, exactly one `exit`. The
+`exit` is the last event on the channel: the terminal's reader has ended or
+been stopped before it is sent (at most 1 s after the process ended).
 
 States: `connecting` from a resolved `server_connect`; `live` on `live`; `ended`
-on `exit`. A pane is never shown live without a `live` event.
+on `exit`. A pane is never shown live without a `live` event. `live`, `notice`
+and `exit` update the pane's record when they arrive, mounted or not; one that
+arrives before the connect resolves is applied in the resolve's store update.
+Only output is buffered, until the xterm is created at the resolve.
 
 ## Who may write into a remote pane
 
@@ -72,7 +106,8 @@ on `exit`. A pane is never shown live without a `live` event.
   (`saved_servers/input-queue.sites`). A remote terminal has no `/open` request
   id and `type_line` refuses it.
 - Ending writes nothing: a remote terminal's writer is ADE's own duplicate of the
-  master, never the library's writer (ADR 0045).
+  master, never the library's writer (ADR 0045). A terminal that is ending is
+  sent nothing more: `write_pty` for it returns `Ok` and drops the bytes.
 
 ## The outward name
 
