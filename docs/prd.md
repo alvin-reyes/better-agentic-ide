@@ -12,7 +12,7 @@ approval, and the change is noted in that section's history.
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
 | F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10; opener folder from a non-terminal tab (F3.1, VV-11 AC2), approved by the owner 2026-11-10 |
-| F7 | [Saved servers (SSH)](#f7-saved-servers-ssh) | **Slices S1 and S1b approved by the owner 2026-11-18** (revision 9). **The S1 design was approved by the owner on 2026-11-18, with its CI gate in force** for the F7 stories that start processes (`docs/architecture.md`); sharding of S1 follows, the UI stories waiting on the UX's review and approval. **S1** (SV-1 to SV-9, with F7.11's items 1 to 7) was approved at revision 7 and is **amended in revision 8**: by the owner's decision of 2026-11-18, a refused save reports every failing field with one reason from a closed list, and the connecting state's mark reads "ssh not confirmed"; from the S1 design and its reviews, the observation rule, the corrected quoting claim, Reopen of a server-named tab with no remote pane, the home folder, the changed-destination check at the press, and a process ADE may not signal. **Those changes to approved S1 text are pending the owner's sight of the list in F7.11.** S1 is **amended again in revision 9**: by the owner's decisions of 2026-11-18, "could not start a terminal" carries a fixed cause, Enter in every confirm question activates the focused button only with focus opening on Cancel (a change to existing behaviour outside F7), and the reload window is a stated limit; and what the approved design listed for the PRD (the changed-destination check on every connect request, a third teardown call site, `SIGTERM`, the home folder's additions, two lines for the user guide). **Revision 9's changes are listed in F7.11 for the owner to see.** **S1b** (SV-13, with items 8 to 13) was approved by the owner on 2026-11-18, after its re-check passed with six minors (answered in revision 8); it is not buildable before F4 slice S1 and F7 S1 are on `main`, and its text is re-checked against F4 before it is sharded. The approval does not cover the gated password slice (S2, SV-12), S3, S4, Windows or use inside an engagement. Revisions 8 and 9 have not been reviewed. Revision 7 answered the delta check of revision 6, which passed S1 with five minors and blocked S1b on one blocker. Revision 6 recorded the owner's two decisions of 2026-11-18: an open ade-brain hub's recorded SSH server is offered in the server list, read-only and marked as the hub's (slice S1b, SV-13), and the roles in ade-setup are told about the feature (follow-up work in that repository, F7.11). Before it, the final delta check, of revision 4, found S1 blocked on one blocker (1 blocker, 2 majors, 14 minors; every finding a text change) and the stored-password gate complete; revision 5 answered every finding (F7.12, fourth table), and the delta check of revision 6 found each resolved. **Every owner question is answered** (OQ-1 to OQ-22, F7.10): none is open. **S1, the saved list and the terminal, stores no password or passphrase**; a stored password is a later slice (S2), gated on the architect's spike, with no criteria yet and not buildable; key passphrases are not stored by ADE. Not available inside an engagement for now. Five slices (S1, S1b, S2, S3, S4); not sharded. F2 (PR #98), F4 (PR #113), F5 (PR #115) and F6 (`prd-token-cost`) add their rows when they merge |
+| F7 | [Saved servers (SSH)](#f7-saved-servers-ssh) | **Slices S1 and S1b approved by the owner 2026-11-18** (revision 10). **S1's PRD, design and UX are all approved by the owner; S1 is ready for sharding, the UI stories included.** The S1 design was approved on 2026-11-18, with its CI gate in force for the F7 stories that start processes (`docs/architecture.md`); the S1 UX was approved on 2026-11-19 (passed its re-check with eight minor wording points; verified in a mockup only, ADE itself not run). **Revision 10 amends approved S1 text** at the approved UX's stated defaults (what the hand-over message may state, three more palette entries and one style declaration on the palette row's label, compared destinations shown whole with the differing fields named, and smaller confirmations) and records the owner's decision of 2026-11-19 that no label is added to the other panes of a split server tab; **its changes are listed in F7.11 for the owner to see**, and it has not been reviewed. **S1** (SV-1 to SV-9, with F7.11's items 1 to 7) was approved at revision 7 and is **amended in revision 8**: by the owner's decision of 2026-11-18, a refused save reports every failing field with one reason from a closed list, and the connecting state's mark reads "ssh not confirmed"; from the S1 design and its reviews, the observation rule, the corrected quoting claim, Reopen of a server-named tab with no remote pane, the home folder, the changed-destination check at the press, and a process ADE may not signal. **Those changes to approved S1 text are pending the owner's sight of the list in F7.11.** S1 is **amended again in revision 9**: by the owner's decisions of 2026-11-18, "could not start a terminal" carries a fixed cause, Enter in every confirm question activates the focused button only with focus opening on Cancel (a change to existing behaviour outside F7), and the reload window is a stated limit; and what the approved design listed for the PRD (the changed-destination check on every connect request, a third teardown call site, `SIGTERM`, the home folder's additions, two lines for the user guide). **Revision 9's changes are listed in F7.11 for the owner to see.** **S1b** (SV-13, with items 8 to 13) was approved by the owner on 2026-11-18, after its re-check passed with six minors (answered in revision 8); it is not buildable before F4 slice S1 and F7 S1 are on `main`, and its text is re-checked against F4 before it is sharded. The approval does not cover the gated password slice (S2, SV-12), S3, S4, Windows or use inside an engagement. Revisions 8 and 9 have not been reviewed. Revision 7 answered the delta check of revision 6, which passed S1 with five minors and blocked S1b on one blocker. Revision 6 recorded the owner's two decisions of 2026-11-18: an open ade-brain hub's recorded SSH server is offered in the server list, read-only and marked as the hub's (slice S1b, SV-13), and the roles in ade-setup are told about the feature (follow-up work in that repository, F7.11). Before it, the final delta check, of revision 4, found S1 blocked on one blocker (1 blocker, 2 majors, 14 minors; every finding a text change) and the stored-password gate complete; revision 5 answered every finding (F7.12, fourth table), and the delta check of revision 6 found each resolved. **Every owner question is answered** (OQ-1 to OQ-22, F7.10): none is open. **S1, the saved list and the terminal, stores no password or passphrase**; a stored password is a later slice (S2), gated on the architect's spike, with no criteria yet and not buildable; key passphrases are not stored by ADE. Not available inside an engagement for now. Five slices (S1, S1b, S2, S3, S4); not sharded yet, S1 ready for sharding. F2 (PR #98), F4 (PR #113), F5 (PR #115) and F6 (`prd-token-cost`) add their rows when they merge |
 
 ---
 
@@ -3694,12 +3694,24 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
 
 ## F7: Saved servers (SSH)
 
-- **Status:** **Slices S1 and S1b approved by the owner 2026-11-18** (revision 9).
-  **The S1 design was approved by the owner on 2026-11-18**
-  (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`), **and its CI gate
-  is approved and in force** for the F7 stories that start processes
-  (`docs/architecture.md`, "F7 stories that start processes"); sharding of S1
-  follows, the UI stories waiting on the UX's review and approval (F7.11).
+- **Status:** **Slices S1 and S1b approved by the owner 2026-11-18** (revision 10).
+  **S1's PRD, design and UX are all approved by the owner, and S1 is ready for
+  sharding, the UI stories included.** **The S1 design was approved by the owner on
+  2026-11-18** (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`), **and
+  its CI gate is approved and in force** for the F7 stories that start processes
+  (`docs/architecture.md`, "F7 stories that start processes"). **The S1 UX was
+  approved by the owner on 2026-11-19**
+  (`docs/superpowers/specs/2026-11-18-saved-servers-ux.md`): the owner was told that
+  it passed its re-check with eight minor wording points and that it was verified in
+  a mockup only, ADE itself not run. Nothing waits on the UX any more (F7.11).
+  **Revision 10 amends approved S1 text** from the approved UX's questions for the
+  product manager, each at the UX's stated default: what the hand-over message may
+  state (SV-2 AC9), three more palette entries and one style declaration on the
+  palette row's label (SV-9 AC2), and how two compared destinations are shown (SV-3
+  AC4); with smaller confirmations (SV-1 AC1, SV-3 AC2 and AC3, SV-8 AC2, SV-9 AC1)
+  and the owner's decision of 2026-11-19 that no label is added to the other panes
+  of a split server tab (SV-3 AC5). **Revision 10's changes are listed in F7.11 for
+  the owner to see.** Revision 10 has not been reviewed.
   **S1** (SV-1 to SV-9, with items 1 to 7 of F7.11's "accept knowingly" list) was
   approved at revision 7 **and is amended in revision 8**: by the owner's decision
   of 2026-11-18, a refused save reports every failing field with one reason from a
@@ -3761,7 +3773,7 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
   proving its mechanism safe against a real test server, with no acceptance criteria
   yet and not buildable; key passphrases are not stored by ADE at all.** What the
   owner approved, what the owner has yet to see, and what approval does not cover,
-  is listed in F7.11. Not sharded yet.
+  is listed in F7.11. Not sharded yet; S1 is ready for sharding (revision 10).
 - **Number:** F2 is the PRD for agentic-environment onboarding (PR #98, branch
   `onboarding-prd`), F4 workspaces (PR #113, `prd-workspaces`), F5 prompt templates
   (PR #115, `prd-prompt-templates`) and F6 token cost guardrails (branch
@@ -3964,6 +3976,31 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
     behaviour is unchanged. The reason table was compared with the design's table of
     record and agrees row for row. What changed and where: F7.12, eighth table. Not
     reviewed.
+  - 2026-11-19: **the S1 UX approved by the owner**
+    (`docs/superpowers/specs/2026-11-18-saved-servers-ux.md`, with its mockup beside
+    it). The owner was told that it passed its re-check with eight minor wording
+    points and that it was verified in a mockup only, ADE itself not run. **The
+    owner also decided: no chip on the other panes of a split server tab; only the
+    server pane is marked.** With this, S1's PRD, design and UX are all approved,
+    and the UI stories no longer wait.
+  - 2026-11-19, revision 10: **amendments to approved S1 text, from the approved
+    UX's questions for the product manager, so that S1 is sharded against final
+    text.** Nothing is restructured or renumbered. **Recorded, the owner's decisions
+    of 2026-11-19:** the S1 UX approved (status, F7.11); no label on the other panes
+    of a split server tab (SV-3 AC5). **Written by the product manager, each at the
+    UX's stated default, and listed in F7.11 for the owner to see:** the hand-over
+    message states as fact only what Better Terminal observed (P9; SV-2 AC9, with
+    F7.1 and D4 following); three more palette entries for the active server pane,
+    Reconnect, End and Show message, with the rule on what a query may preselect
+    and its stated limit (P8; SV-9 AC2); one style declaration on the palette row's
+    label, a stated exception to "changes nothing else" (P11; SV-9 AC2); and two
+    compared destinations shown whole, with the differing fields named (the UX's
+    section 9.3; SV-3 AC4 and its test). **Smaller:** the tab switcher's search
+    matches a server tab by its name only (P3; SV-3 AC2); only Name and Port are
+    trimmed at save, confirmed (P4; SV-1 AC1); the list's filter field accepted (P5;
+    SV-9 AC1); an ordinary end shows the exit status when there is one (P6; SV-3
+    AC3); the "no SSH client found" message's title is hedged (P10; SV-8 AC2). What
+    changed and where: F7.12, ninth table. Not reviewed.
 
 ### F7.0 What exists today (checked on `origin/main` at 84389eb)
 
@@ -4460,8 +4497,9 @@ manager.
 - **Image:** what a process is running at one moment: its argument list, whose
   first word is taken as its program (SV-2 AC9). A process that replaces itself
   (`exec`) keeps its process id and changes image (W4).
-- **Hand-over message / End:** what a connecting pane shows when its start-up files
-  have not handed over to `ssh`, and the control beside it with which the engineer
+- **Hand-over message / End:** what a connecting pane shows when ADE has not seen
+  its start-up files hand over to `ssh` (what the message may state is SV-2 AC9's,
+  revision 10), and the control beside it with which the engineer
   ends what is running in that pane (SV-2 AC9). ADE ends nothing of its own accord.
 - **A process of the pane:** a process attached to the pane's terminal: its
   session's shell, or whatever replaced it, and the terminal's foreground job. A
@@ -4685,8 +4723,9 @@ consequence, it is labelled as a consequence and is not a reason the owner gave.
     or wait. So "the pane's process is the SSH client" is **not assumed: it is
     confirmed** before the pane is shown as live. A start that is not confirmed is
     **kept, not ended by ADE of its own accord** (owner, OQ-20 (2)): the pane stays
-    connecting, says that the
-    start-up files have not handed over to `ssh`, and offers End. A start whose
+    connecting, says that ADE has not seen the
+    start-up files hand over to `ssh` (the message's wording rule: SV-2 AC9,
+    revision 10), and offers End. A start whose
     process ends before `ssh` was seen says so, with the exit status (SV-2 AC9).
   - The arguments pass through a shell, so every word is quoted, always (SV-2 AC2,
     SV-7 AC3).
@@ -4883,6 +4922,10 @@ addresses in examples are invented and use documentation ranges.
    | Port | no | after trimming, 1 to 5 digits with no leading zero and no sign, value 1 to 65535. Stored as a number and passed in that canonical decimal form. Empty means ADE passes no port, and the SSH client's own default or the user's config decides |
    | User | no | 1 to 64 characters, each one of `A-Z a-z 0-9 . _ - @`; the first is not `-`. Empty means ADE passes no user. A user name outside this set (a Windows `DOMAIN\user`, a machine account ending `$`) is set in `~/.ssh/config` under an alias |
    | Identity file | no | a **path**, absolute or starting `~/`; 1 to 1024 characters, each in `0x20`-`0x7e`; no `%` and no `${` (the SSH client expands `%` tokens and `${VAR}` in an identity file, F7.0). `..` is allowed: it is the user's own path |
+
+   **Only Name and Port are trimmed at save** (confirmed in revision 10; the
+   approved S1 UX's question P4): Host, User and Identity file are checked as typed,
+   so a pasted host with a trailing space is refused.
 
    **Why User is this narrow (review B1):** the SSH client puts the user name into
    the user's own `ProxyCommand` and similar settings as `%r`, and a shell runs
@@ -5517,10 +5560,20 @@ AC1 to AC8 keep revision 2's numbers; AC9 and AC10 are new in revision 3. Revisi
 
    **The 30 s is kept, and it only times that message.** Nothing is ended, stopped,
    refused or changed at the bound; the pane is as much a connecting remote pane
-   after it as before. The message says that the shell's start-up files have not
-   handed over to `ssh`, that whatever is running in the pane is still running, that
-   the pane is treated as a server session meanwhile, and that `ssh` typed in a
-   terminal still works. **End appears only with the message.** For a shell that is
+   after it as before. **The message states as fact only what Better Terminal
+   observed; what it cannot tell, it gives as possibilities** (revision 10; the
+   approved S1 UX's question P9; a change to approved text, F7.11). For "not handed
+   over yet": that it has not seen the shell hand over to `ssh`. For "not handed
+   over: another program is running": that, when it looked, the program in the pane
+   was not one it recognises as `ssh` with the arguments it gave, which may be a
+   local program, the engineer's own `ssh` wrapper, or `ssh` started with other
+   arguments and possibly for another host. In both: that whatever is running in the
+   pane is still running, that the pane is treated as a server session meanwhile,
+   and that `ssh` typed in a terminal still works. (Before revision 10 the sentence
+   had the message say, for both kinds, that the shell's start-up files have not
+   handed over to `ssh`: more than Better Terminal knows in the "another program is
+   running" kind, which holds sessions that work. No rule changes, and no listed
+   test asserted the sentence's words.) **End appears only with the message.** For a shell that is
    still waiting there is therefore no End during the first 30 s: the way out then
    is to close the pane, which asks first (SV-3 AC6), while End, once it is there,
    asks nothing (review R4-M2; listed for the approval, F7.11).
@@ -5739,7 +5792,9 @@ AC1 to AC8 keep revision 2's numbers; AC9 and AC10 are new in revision 3. Revisi
    it in the pane, so that in a tab with splits the remote pane can be told from a
    local one. The mark says whether the connection is **connecting, live or ended**,
    in text or an accessible name, never by colour alone; a connecting pane is never
-   shown with the live mark (SV-2 AC9). **The live mark does not say "connected"**
+   shown with the live mark (SV-2 AC9). **The tab switcher's search matches a server
+   tab by its name only, not by its destination** (revision 10; the approved S1 UX's
+   question P3). **The live mark does not say "connected"**
    (review R3-m12): live means the `ssh` process is running, which is true while it
    is still reaching the server, asking about a host key or waiting for a password
    (F7.1). The words are the designer's, **with one decided by the owner
@@ -5758,6 +5813,9 @@ AC1 to AC8 keep revision 2's numbers; AC9 and AC10 are new in revision 3. Revisi
    local split.
 3. **Ending.** When the connection ends the pane keeps its output, prints today's
    `[Process exited]` line, changes its mark to ended, and offers **Reconnect**.
+   **An ordinary end, of an `ssh` that was running, shows the exit status when
+   there is one** (revision 10; the approved S1 UX's question P6; SV-2 AC4's
+   status), and says only that `ssh` ended when there is none.
    Tests: (TypeScript, store) after the process exit event the pane's record is
    remote and ended and the tab is still open; (component) the ended pane shows a
    Reconnect control with the destination summary beside it (AC4); a live one shows
@@ -5784,7 +5842,11 @@ AC1 to AC8 keep revision 2's numbers; AC9 and AC10 are new in revision 3. Revisi
    shows both destinations, says the destination changed, and the start needs the
    second confirmation. Two destinations that differ only in the identity file have
    one summary, so "shows both" then includes the two identity-file paths; how is
-   the designer's. So Connect, too, can ask the second question: only when the
+   the designer's. **Wherever two destinations are compared for the second
+   confirmation, both are shown whole, never shortened, with both identity-file
+   paths when the identity file differs, and the control names which of host, port,
+   user and identity file differ** (revision 10; the approved S1 UX, its section
+   9.3; a change to approved text, F7.11). So Connect, too, can ask the second question: only when the
    record changed after the list last showed it, or after the palette entry's label
    was built. **What remains is the stated residual risk** (SV-7 AC5): a rewrite of
    the store in the few milliseconds between that load and the client start goes to
@@ -5801,10 +5863,18 @@ AC1 to AC8 keep revision 2's numbers; AC9 and AC10 are new in revision 3. Revisi
    of its label, to another host and again to another identity file only, makes no
    connect request until confirmed, then one** (revision 9); (component) the changed
    case shows both summaries, **and when only the identity file differs it shows
-   both identity-file paths** (revision 8); (Rust) the client start after an edit
-   has the edited values.
+   both identity-file paths** (revision 8); **(component; revision 10) with two
+   destinations whose summaries are longer than a single-destination display would
+   show whole and that differ only at the start of the host, and again only in the
+   user, the text shown for the two differs and each summary is present in full;
+   with two identity-file paths that differ only in the middle, both paths are
+   present in full; and in each case the control's text names exactly the fields
+   that differ, of host, port, user and identity file**; (Rust) the client start
+   after an edit has the edited values.
 5. **Splits and sub-terminals** of a server tab are local shells started as today,
-   in the user's home folder, with no remote mark (D11). Test (TypeScript, store):
+   in the user's home folder, with no remote mark (D11). **The owner confirmed on
+   2026-11-19 that no label is added to them: only the server pane is marked**
+   (revision 10). Test (TypeScript, store):
    a split of a remote pane makes a `create_pty` request and no connect request,
    and the new pane's record is local.
 6. **Closing** (review R3-m8). Whether closing a remote pane asks is decided **from
@@ -6295,7 +6365,9 @@ local pane and behaves as today.
    same way: a start-up file's own failure, or an `ssh` that ran too briefly to be
    seen and returned 127 from the server. **A wrong message there is accepted**, and
    is kept truthful by its wording: it says the shell reported status 127, which
-   usually means no `ssh` on the `PATH`. Tests: (Rust, Unix, fixture `PATH` with no
+   usually means no `ssh` on the `PATH`. **Its title is hedged in the same way**
+   ("Possibly no SSH client"; revision 10, the approved S1 UX's question P10): the
+   kind's name, "no SSH client found", is not shown as a statement of fact. Tests: (Rust, Unix, fixture `PATH` with no
    `ssh`, under `zsh` and `bash`) a connect request gives the "no SSH client found"
    kind with status 127, the pane's process has ended, and an add still saves;
    (component) that kind shows the message with the status and the OS's instruction.
@@ -6319,7 +6391,10 @@ local pane and behaves as today.
    `deploy@db1.example.com:2222`. It offers Connect, Add, Edit and Remove.
    **It is an overlay**, opened and dismissed like Integrations, not a permanent
    side panel (owner, OQ-9: accepted as recommended, and the recommendation named an
-   overlay; review R4-m11). How the overlay is laid out is the designer's. Every
+   overlay; review R4-m11). How the overlay is laid out is the designer's. **The
+   list has a filter field, by name, host or user: the designer's addition,
+   accepted** (revision 10; the approved S1 UX's question P5); it changes nothing a
+   Connect does. Every
    action is
    reachable and operable from the keyboard. Tests: (Rust or TypeScript, pure,
    whichever side the architect gives the summary; one implementation) the summary
@@ -6335,7 +6410,30 @@ local pane and behaves as today.
    through the palette's existing match rule. F7 adds entries and changes nothing
    else: not the match rule, not the selection, and not the order of today's
    entries, which the saved-server entries follow (G1; revision 2's prefix rule is
-   removed, review N-m3). Tests: (TypeScript, store) with three saved servers the
+   removed, review N-m3). **With one stated exception to "changes nothing else"**
+   (revision 10; the approved S1 UX's question P11; a change to approved text,
+   F7.11): F7 adds one style declaration to the palette row's label, so that a long
+   label with no break point wraps inside the row instead of overflowing it. It
+   changes no existing entry's appearance, and no entry, match, selection or order.
+
+   **Three more entries, for the active server pane** (revision 10; the approved S1
+   UX's question P8; a change to approved text, F7.11). Beside the entry that opens
+   the list and the one entry per server, the palette has three entries that act on
+   the active pane when it is a server pane, **each present only while it applies**:
+   **Reconnect** (the pane is ended and offers Reconnect, SV-3 AC3 and AC4), **End**
+   (the pane shows the hand-over message, SV-2 AC9) and **Show message** (the pane
+   has a message showing). They carry today's "Panes" category, not the category of
+   F7's other entries. Each does what the pane's own control does and no more:
+   Reconnect by this entry is a connect request under SV-3 AC4, and End asks no
+   second question, as in SV-2 AC9. **The rule: no palette query that names the
+   feature preselects an entry that starts or ends a connection.** For that, the
+   entry that opens the list comes first among F7's entries and End comes last,
+   whatever the pane's state. **The stated limit:** a server's entry also matches by
+   the fixed words of its label, such as "connect", so that word typed and Enter
+   pressed connects to the first server in list order; and "end", when no server's
+   entry matches it, preselects End, which ends with no question. Each is a press
+   on a visible, selected entry whose label says what it does. The wording of all
+   F7's entries is the designer's. Tests: (TypeScript, store) with three saved servers the
    palette's entries include one per server with name and summary, after every entry
    it had before; with text typed that only one server's name contains, and again
    with text that only one server's host contains, that entry is the only one left
@@ -6344,6 +6442,19 @@ local pane and behaves as today.
    servers; running a server's entry makes exactly one connect request carrying that
    server's identifier and nothing else of it (with the store unchanged since the
    entry's label was built; a changed record is SV-3 AC4's case, revision 9).
+   **And** (revision 10; TypeScript, store): Reconnect's entry is present only when
+   the active pane is an ended server pane that offers Reconnect, End's only when
+   the active pane shows the hand-over message, and Show message's only when the
+   active pane has a message showing; none of the three is present when the active
+   pane is local; each has the category "Panes"; among F7's entries the one that
+   opens the list is first and End, when present, is last; and with each of "ssh",
+   "server", "servers", "saved" and "saved servers" typed, in each of those pane
+   states and with saved servers present, the preselected entry is one of today's
+   entries or the one that opens the list. (Component) the label element of a palette row carries the
+   wrapping declaration, for a server's entry and for one of today's entries alike,
+   and the row's other styles are today's. That a long label then wraps inside the
+   row is a layout fact the component test cannot measure: it was checked in the
+   UX's mockup only.
 3. **An empty list** says what the feature does and offers Add. It does not list
    hosts from anywhere else (S1b adds one source, an open hub's recorded server, in
    a marked group of its own: SV-13 AC2). Test (component).
@@ -7658,21 +7769,28 @@ are not held in this file; what is recorded is the choice.
 **S1 and S1b are approved by the owner (2026-11-18), and so is the S1 design**
 (`docs/superpowers/specs/2026-11-18-saved-servers-design.md`; owner, 2026-11-18),
 **with its CI gate approved and in force** for the F7 stories that start processes
-(`docs/architecture.md`, "F7 stories that start processes"). S1 is handed off.
-Revisions 8 and 9 amend its approved text, and the changes are listed below for the
-owner to see ("Changes to approved S1 text in revision 8" and "Changes to approved
-S1 text in revision 9"). S1b is approved and
+(`docs/architecture.md`, "F7 stories that start processes"). **The S1 UX is
+approved too** (`docs/superpowers/specs/2026-11-18-saved-servers-ux.md`; owner,
+2026-11-19: told that it passed its re-check with eight minor wording points and
+was verified in a mockup only, ADE itself not run). S1 is handed off.
+Revisions 8, 9 and 10 amend its approved text, and the changes are listed below for
+the owner to see ("Changes to approved S1 text in revision 8", "... in revision 9"
+and "... in revision 10"). S1b is approved and
 is not buildable yet. The delta check of revision 6 **passed S1 with five minors**
 and **blocked S1b on one blocker**; revision 7 answered every finding (F7.12, sixth
 table). **S1b's answers were then re-checked: the re-check passed them with six
 minors,** which revision 8 answers (F7.12, seventh table). Revision 9 writes in what
 the approved design still needed from the PRD and three owner decisions of
-2026-11-18 (F7.12, eighth table). Revisions 8 and 9 have not been reviewed.
+2026-11-18 (F7.12, eighth table). Revision 10 writes in the approved UX's
+questions for the product manager, at their stated defaults, and the owner's
+decisions of 2026-11-19 (F7.12, ninth table). Revisions 8, 9 and 10 have not been
+reviewed.
 
-**What follows** (revision 9). **S1: the design is approved (owner, 2026-11-18), so
-sharding follows**, against the PRD's text as revision 9 has it and against the
-design. **The UI stories (the design's W5 and W6) wait on the UX's own review and
-approval** and are not sharded before it. Done for a story is decided by the
+**What follows** (revision 10). **S1's PRD, design and UX are all approved by the
+owner (the design on 2026-11-18, the UX on 2026-11-19), so sharding follows**,
+against the PRD's text as revision 10 has it, the design and the UX. **Nothing
+waits on the UX any more: the UI stories (the design's W5 and W6) are sharded with
+the rest.** The UX was verified in a mockup only; ADE itself was not run. Done for a story is decided by the
 verification command in force and, for the F7 stories that start processes, also by
 the CI gate the owner approved with the design (`docs/architecture.md`, "F7 stories
 that start processes"); the PRD does not restate it, and nothing of it changes
@@ -7697,7 +7815,10 @@ sharded or built on these approvals.
   that waits for F4 slice S1 and F7 S1 on `main`, and for the check of SV-13 against
   F2 and F4 as merged (F7.9), whose corrections come back to the owner as a PRD
   change.
-- **Asked now: to see the changes revisions 8 and 9 make to approved S1 text.** They
+- **Asked now: to see the changes revisions 8, 9 and 10 make to approved S1 text.**
+  Revision 10's are under a heading of its own, after revision 9's: each is the
+  approved UX's stated default, written by the product manager, and stories are
+  sharded against the text as revision 10 has it. Revisions 8's and 9's
   are listed after item 14, revision 9's under a heading of its own; three of
   revision 9's are the owner's own decisions of 2026-11-18, written out. Of
   revision 8's, two are the owner's own decisions of 2026-11-18 (the reasons a
@@ -7967,6 +8088,54 @@ again; a saved server's Connect shows both and asks a second confirmation. The
 difference is deliberate for now and is stated in SV-13 AC4. Revision 9 does not
 change SV-13's behaviour; making the two alike is the owner's to ask for.
 
+**Changes to approved S1 text in revision 10, for the owner to see**
+
+S1's PRD, design and UX are approved. Each line below changes or adds to a sentence
+of the approved S1 text. Each is the default the approved UX states for a question
+it put to the product manager, and the product manager has decided each that way;
+the stories are cut to these defaults. None adds or moves a criterion number, and
+none changes what is run, stored or sent.
+
+- **What the hand-over message may say** (SV-2 AC9; the UX's P9). The approved text
+  had the message say, in both of its kinds, that your shell's start-up files have
+  not handed over to `ssh`. In the kind "another program is running" Better
+  Terminal does not know that. The message now states as fact only what Better
+  Terminal observed: there, that when it looked, the program in the pane was not
+  one it recognises as `ssh` with the arguments it gave. What it cannot tell it
+  gives as possibilities: a local program, your own `ssh` wrapper, or `ssh` started
+  with other arguments and possibly for another host.
+- **Three more palette entries** (SV-9 AC2; the UX's P8). Beside "open the list"
+  and one entry per server, the palette has Reconnect, End and Show message for
+  the active server pane, each present only while it applies, in today's "Panes"
+  category. They are how the keyboard reaches a server pane's message from the
+  terminal. No palette query that names the feature preselects an entry that
+  starts or ends a connection: "Open saved servers" comes first among the feature's
+  entries and End last. **The limit, stated:** a server's entry also matches by its
+  fixed words, so typing "connect" and pressing Enter connects to the first server
+  in the list; and typing "end", when no server matches, preselects End, which ends
+  what is running with no question. Each is a press on a visible, selected entry
+  whose label says what it does.
+- **One style change to the palette** (SV-9 AC2; the UX's P11). The approved text
+  says the feature "adds entries and changes nothing else". It now adds one style
+  declaration to the palette row's label, so that a long label with no break point
+  wraps instead of running off the row. No existing entry looks different.
+- **Two compared destinations are shown whole** (SV-3 AC4; the UX's section 9.3).
+  Wherever you are asked to confirm a changed destination, both destinations are
+  shown in full, never shortened, with both identity-file paths when the key
+  differs, and the control names which of host, port, user and identity file
+  differ. The approved text said only "shows both".
+- **Smaller, together:** the tab switcher's search finds a server tab by its name
+  only, not by its destination (SV-3 AC2; P3); only Name and Port are trimmed when a
+  server is saved, as before, so a pasted host with a trailing space is refused
+  (SV-1 AC1; P4, where the UX had recommended trimming all five); the list has a
+  filter field, the designer's addition (SV-9 AC1; P5); an ordinary end of `ssh`
+  shows its exit status when there is one (SV-3 AC3; P6); and the "no SSH client
+  found" message's title is hedged, "Possibly no SSH client" (SV-8 AC2; P10).
+
+Recorded, not a change: your decision of 2026-11-19 that no label is added to the
+other panes of a split server tab; only the server pane is marked (SV-3 AC5, which
+already said "with no remote mark").
+
 **Who does what next**
 
 - **Architect, S1: to settle in the design.**
@@ -8140,10 +8309,11 @@ change SV-13's behaviour; making the two alike is the owner's to ask for.
   name, so that it differs from a saved server's tab of the same name (SV-13 AC5);
   the placeholder "Hub server" in the row and the palette entry (SV-13 AC2); and how
   a row says that it changed while the list was open (SV-13 AC3).
-- **Scrum-master (the owner approved S1 and the architect's design on 2026-11-18):**
-  S1 only, **and not the UI stories (the design's W5 and W6) until the UX has been
-  reviewed and approved** (revision 9). Stories are written against the PRD's text
-  as revision 9 has it. S2, S3 and S4 have no criteria and are not sharded. **At
+- **Scrum-master (the owner approved S1 and the architect's design on 2026-11-18,
+  and the S1 UX on 2026-11-19):**
+  S1 only, **the UI stories (the design's W5 and W6) included: the UX is approved
+  and nothing waits on it** (revision 10). Stories are written against the PRD's
+  text as revision 10 has it. S2, S3 and S4 have no criteria and are not sharded. **At
   S1's sharding, write `.ade/context/f7-merges-second.md`** in the form of
   `.ade/context/f3-merges-second.md`: one row per criterion (the F7 story, the other
   story, whether it is sharded, where the mirror is written, the gate) and an "Until
@@ -8616,5 +8786,44 @@ folder that does not exist, the two OpenSSH cases, the UTF-8 limit); whether any
 guide page besides `docs/guide/terminal.md` describes closing; and that the list in
 F7.11 for revision 8 has been seen by the owner, which this revision was not told.
 **Revision 9 has not been reviewed.**
+
+**Revision 10 (2026-11-19): the approved S1 UX's questions for the product manager,
+and the owner's decisions of 2026-11-19.** Revision 10 was not prompted by a review.
+Its inputs are the owner's decisions of 2026-11-19 (the S1 UX approved; no chip on
+the other panes of a split server tab) and the approved UX
+(`docs/superpowers/specs/2026-11-18-saved-servers-ux.md`, draft 4): its section 17,
+questions P3 to P6 and P8 to P11, each with its stated default, and its section 9.3.
+**Every change to SV-1 to SV-9 here is an amendment to text the owner approved**,
+decided by the product manager at the UX's default and listed in F7.11 for the owner
+to see. Nothing is restructured or renumbered, and no rule about what is run, stored
+or sent changes.
+
+| Input | What changed | Where |
+|---|---|---|
+| **The owner, 2026-11-19:** the S1 UX approved (told: passed its re-check with eight minor wording points; verified in a mockup only, ADE itself not run) | Recorded. S1's PRD, design and UX are approved; sharding follows, the UI stories (W5, W6) included; nothing waits on the UX | Status; index row; History; F7.11 (opening, "What follows", "Asked now", Scrum-master) |
+| **The owner, 2026-11-19:** no chip on the other panes of a split server tab | Recorded in one line: no label is added to a split's local panes; only the server pane is marked. The criterion already said "with no remote mark" | SV-3 AC5; F7.11 (after the revision 10 list) |
+| **P9:** SV-2 AC9's sentence for the hand-over message said more than is known in the "another program is running" kind | Replaced with the UX's proposed wording: the message states as fact only what Better Terminal observed and gives the rest as possibilities, per kind; the old sentence is quoted as what stood before. The term and D4 follow. No rule and no test changes | SV-2 AC9 ("The 30 s is kept"); F7.1 ("Hand-over message / End"); F7.6 D4 |
+| **P8:** three palette entries beyond the two kinds SV-9 AC2 names | Accepted: Reconnect, End and Show message for the active server pane, each only while it applies, category "Panes"; the rule on what a query that names the feature may preselect, with the order that gives it; the stated limit ("connect", and "end" with no server matching); a store test | SV-9 AC2 (paragraph and test) |
+| **P11:** one style declaration on the palette row's label, against "adds entries and changes nothing else" | Accepted as a stated exception: a long label with no break point wraps; no existing entry's appearance, and no entry, match, selection or order, changes. A component test for the declaration; the wrapping itself is stated as checked in the mockup only | SV-9 AC2 (paragraph and test) |
+| **The UX's section 9.3** (its review finding U2-B1): "shows both" let two destinations read alike when shortened | One sentence: wherever two destinations are compared for the second confirmation, both are shown whole, never shortened, with both identity-file paths when the identity file differs, and the control names which of host, port, user and identity file differ; a component test | SV-3 AC4 (paragraph and test) |
+| **P3:** does the tab switcher's search match a server tab's destination | No: by its name only | SV-3 AC2 |
+| **P4:** trim all five fields at save | Not taken: only Name and Port are trimmed, as the table already says; confirmed in one line. The UX's recommendation was to trim all five; its stated default, to which the stories are cut, is the PRD as it stood | SV-1 AC1 (after the table) |
+| **P5:** the list's filter field is the designer's addition | Accepted in one line | SV-9 AC1 |
+| **P6:** an ordinary end shows the exit status | Yes, when there is one | SV-3 AC3 |
+| **P10:** the "no SSH client found" message's title is hedged | Accepted ("Possibly no SSH client"), as consistent with "kept truthful by its wording"; the kind's name is not shown as fact | SV-8 AC2 |
+
+**Not verified in revision 10.** Nothing was built and no test was run. Read for this
+revision: the approved UX's head, its sections 3, 5.4, 9.3, 17 and 20, and the rows
+of 5.6 that P6 and P10 concern; and, in the PRD, each changed passage and what it
+cites. **Not read:** the rest of the UX, the mockup, and the rest of F7, so a
+sentence elsewhere in F7 that repeats one of the changed ones may still read as
+before. Three were found and handled: F7.1's term and D4 now follow SV-2 AC9; F7.10's
+OQ-20 quotes the question as it was asked and is left. **Not checked:** that the
+palette's component can carry the three entries' "only while it applies" rule
+without a change beyond added entries (the architect's A6 covers only the style
+declaration); the component tests added here for SV-3 AC4 and SV-9 AC2 are new
+test text that no review has read; and that the list in F7.11 for revisions 8 and 9
+has been seen by the owner, which this revision was not told. **Revision 10 has not
+been reviewed.**
 
 <!-- F7 ends -->
