@@ -537,7 +537,7 @@ const MSG = {
   },
 };
 /* The short name of each reason (the PRD's words), for a list row, where five full messages would not fit. */
-const SHORT = { "empty": "empty", "too-long": "too long", "characters": "a character that is not allowed", "taken": "already used", "first-character": "its first character", "holds-port": "written with a port", "not-ipv6": "not an IPv6 address", "unspecified": "the unspecified address", "not-ipv4": "not an IPv4 address", "leading-0x": "a part written in hexadecimal", "not-a-port": "not a port number", "out-of-range": "out of range", "not-a-path": "not a path", "expands": "a token ssh expands", "home-unknown": "home folder not known" };
+const SHORT = { "empty": "empty", "too-long": "too long", "characters": "a character that is not allowed", "taken": "already used", "first-character": "first character", "holds-port": "written with a port", "not-ipv6": "not an IPv6 address", "unspecified": "the unspecified address", "not-ipv4": "not an IPv4 address", "leading-0x": "a part written in hexadecimal", "not-a-port": "not a port number", "out-of-range": "out of range", "not-a-path": "not a path", "expands": "a token the SSH client expands", "home-unknown": "home folder not known" };
 const KEY_WARN = {
   "not-found": "Its identity file: no file at this path right now. It is saved as written; ssh will say so when you connect.",
   "not-a-regular-file": "Its identity file: this path is not a regular file (a folder or a pipe). It is saved as written; ssh will say so when you connect.",
@@ -746,7 +746,7 @@ function barFor(p) {
     pair.push(line(late ? "The saved server now holds" : "It would now connect to", cur, row.summary, keys));
     return { key: "ask", ask: true, tone: "warn", title: late ? ["“", nm, "” changed as you pressed Reconnect. Nothing was started."] : "Connect this pane to a different destination?", pair,
       body: late ? "Better Terminal read the list again at your press and found a different destination. Go on only if you expected that." : ["The saved server “", nm, "” changed since this pane was last started. Go on only if you expected that."],
-      acts: [{ label: "Cancel", act: "cancel", run: () => { p.held = null; delete W.held[p.id]; updatePane(p, { focus: "reconnect" }); } },
+      acts: [{ label: "Cancel", act: "cancel", run: () => { p.held = null; delete W.held[p.id]; updatePane(p, { focus: "pane" }); } },
         { label: sameDest(cur, r.dest) ? "Connect to what it holds now" : "Connect to the new destination", act: "confirm", primary: true, run: () => reconnect(p, { confirmed: cur }) }] };
   }
   if (!sameDest(cur, r.dest)) { const keys = cur.key !== r.dest.key;
@@ -1244,7 +1244,7 @@ function drawGrid() {
     if (dest.tagName === "BUTTON") { dest.dataset.col = 9; dest.addEventListener("focus", () => { LIST.row = r; LIST.col = cellsOf(row).indexOf(dest); }); }
     const keys = held && held.shown.dest.key !== (s.key ?? null);
     const acts = held
-      ? [btn("Cancel", 0, () => { delete W.held[s.id]; drawGrid(); focusCellOf(s.id, 0); }, { act: "held-cancel", aria: "Cancel the connection to" }), btn("Connect to the new destination", 1, () => connect(s.id, shownOf(s), { confirmed: rowDest(s) }), { act: "held-confirm", cls: "ui-btn--primary", aria: "Connect to the new destination," })]
+      ? [btn("Cancel", 0, () => { delete W.held[s.id]; drawGrid(); focusCellOf(s.id, "edit"); }, { act: "held-cancel", aria: "Cancel the connection to" }), btn("Connect to the new destination", 1, () => connect(s.id, shownOf(s), { confirmed: rowDest(s) }), { act: "held-confirm", cls: "ui-btn--primary", aria: "Connect to the new destination," })]
       : [btn("Connect", 0, () => connect(s.id, shownOf(s)), { aria: "Connect to" })];
     acts.push(btn("Edit", acts.length, () => openForm(s), { cls: "ui-btn--ghost" }), btn("Remove", acts.length + 1, () => askRemove(s), { cls: "ui-btn--ghost" }));
     const row = h("div", { class: "grow", role: "row", "aria-rowindex": String(r + 1), "data-server": s.id, "data-held": held ? "changed" : null },
@@ -1275,7 +1275,7 @@ function askRemove(s) {
       if (S.store === "readonly" || S.store === "readonly0") { LIST.msg = saveFailMsg("Not removed"); drawList(); focusCellOf(s.id, "remove"); log("Remove failed: “the server list could not be saved”; the list is unchanged."); return; }
       S.servers.splice(S.servers.findIndex((x) => x.id === s.id), 1); log("Remove: one remove request, after the confirmation. Open tabs and ~/.ssh are untouched."); LIST.msg = null;
       serversChanged(s.id); say(["Removed ", named ? quoted(s.name) : "the unnamed server", "."]);
-      if (W.rows.length) focusCell(Math.min(idx, listRows().length - 1), 0); else focusListStart();
+      if (W.rows.length) focusCellOf(listRows()[Math.min(idx, listRows().length - 1)].id, "edit"); else focusListStart();
     } });
 }
 const saveFailMsg = (lead) => ({ tone: "bad", text: lead + ": the server list could not be saved" + (S.store === "readonly0" ? "" : " (system error 28)") + ". Nothing was changed, and the list shown is the one on disk. Check that the disk has room and that Better Terminal can write to its data folder, then try again." });
@@ -1287,7 +1287,7 @@ function openForm(s) {
   if (s && s.problems) for (const x of s.problems) { LIST.errors[x.field] = x.reason; if (!(x.field === "name" && x.reason === "taken")) LIST.withheld.push(LABEL[x.field]); }
   drawForm(); const first = FIELDS.find((f) => LIST.errors[f.id]); LIST.dlg.querySelector("#f-" + (first ? first.id : "name")).focus();
 }
-function leaveForm(focusId) { const s = LIST.edit, id = focusId || s?.id; LIST.page = "list"; drawList(); if (id && listRows().some((x) => x.id === id)) focusCellOf(id, focusId ? 0 : "edit"); else (LIST.dlg.querySelector('[data-act="add"]') || LIST.dlg).focus(); }
+function leaveForm(focusId) { const s = LIST.edit, id = focusId || s?.id; LIST.page = "list"; drawList(); if (id && listRows().some((x) => x.id === id)) focusCellOf(id, "edit"); else (LIST.dlg.querySelector('[data-act="add"]') || LIST.dlg).focus(); }
 function drawForm() {
   const d = LIST.dlg, s = LIST.edit, v = LIST.values, errs = LIST.errors; d.textContent = "";
   d.append(h("div", { class: "srv__header" }, h("h2", { id: "srv-title" }, s ? "Edit server" : "Add server"), h("span", { class: "srv__count" }, s ? (s.problems ? entryOf(s) : "") : W.rows.length + " of 200")));

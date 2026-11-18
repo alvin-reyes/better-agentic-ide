@@ -14,14 +14,25 @@ network requests; host, user and client names in it are invented).
 
 - The PRD at revision 8, including F7.11's "Changes to approved S1 text in
   revision 8".
-- Two owner decisions of 2026-11-18: the connecting state's word is **"ssh
-  not confirmed"**; a refused save reports **every failing field, each with
-  one fixed reason**.
-- The architect's design, revision 3, and its two context files
+- The owner's decisions of 2026-11-18:
+  - the connecting state's word is **"ssh not confirmed"**; the other two
+    are "ssh running" and "ended";
+  - a refused save reports **every failing field, each with one fixed
+    reason**: one message per (field, reason) pair, 23 pairs;
+  - **Enter in the shared confirm dialog activates the focused button only,
+    and focus opens on Cancel, for every dialog**, today's close questions
+    included (the design's D-15). This was decided after draft 2 was begun;
+    it is recorded here as answered, not asked;
+  - the changed-destination check runs on **every connect request**, a
+    palette entry's included;
+  - an identity-file path that starts `~/` is shown in its `~/` form
+    everywhere.
+- The architect's design and its two context files
   (`.ade/context/saved-servers.md`, `.ade/context/server-panes.md`) as they
-  stand on branch `arch-f7`. They are **proposed, not approved**, and one fix
-  in them awaits a re-check. Where this spec says "the design" it means that
-  proposal, and each place it leans on is named: the 23 reason codes; the row
+  stand on branch `arch-f7`. **The design was approved by the owner on
+  2026-11-18** (at its revision 3; revision 4 records the approval and is a
+  wording pass). That approval does not cover this spec. Where this spec says
+  "the design" it means that document, and each place it leans on is named: the 23 reason codes; the row
   the page receives (`problems`, `fileIndex`, withheld members); the held
   press (`ConnectCheck`); `refusal` as the whole kind; `origin`; `cause` on
   "could not start a terminal"; the shared dialog story C1 (design section
@@ -75,7 +86,7 @@ destinations and asked again.
 | U7 | A live pane has **no bar**, and a bar that stays is **bounded and can be closed to one line** (5.3). What is switched off is said where the user meets it (section 7) | A standing "this is a server session" bar: permanent chrome. An unbounded bar (draft 1): 527 px of a 654 px pane at four splits |
 | U8 | A refused Better Terminal write is **today's "Not sent" toast** with one body, the same for every caller | A message per panel: six wordings for one fact |
 | U9 | The changed-destination question is asked **in the bar** (a Reconnect) or **in the row** (a Connect), with focus on Cancel and Enter pressing only the focused button | A modal over the pane: it would hide the destination in the pane header that the question is about |
-| U10 | The close question and Remove use **the shared `ConfirmDialog` as the design's story C1 will leave it** (design section 22, proposed): in the Esc stack, `role="alertdialog"`, a focus trap, focus given back, **Enter presses the focused button only and focus opens on Cancel**. Remove's question is rendered inside the list's dialog element | `ConfirmDialog` as it is today (draft 1): over the list, Esc would close the list and leave the question; Tab would leave the overlay; and Enter would confirm while Cancel shows the focus ring. A second confirm component for F7: two patterns |
+| U10 | The close question and Remove use **the shared `ConfirmDialog` as the design's story C1 will leave it** (design section 22): in the Esc stack, `role="alertdialog"`, a focus trap, focus given back, **Enter presses the focused button only and focus opens on Cancel** (the owner's decision for every dialog, D-15). Remove's question is rendered inside the list's dialog element | `ConfirmDialog` as it is today (draft 1): over the list, Esc would close the list and leave the question; Tab would leave the overlay; and Enter would confirm while Cancel shows the focus ring. A second confirm component for F7: two patterns |
 | U11 | Duplicate and Move to New Window are **absent** from a server tab's menu, with one line that says why as the **menu's description** | Disabled items: SV-2 AC6's test asks for no such item. A `role="note"` line (draft 1): a keyboard or screen-reader user in the menu never meets it |
 | U12 | The bar is reachable from the keyboard through **palette entries that exist only while they apply** (section 3). They are additions beyond SV-9 AC2 (question P8) | A new shortcut: every ⌘ key near at hand is taken. Tab from the terminal: xterm keeps Tab |
 | U13 | No key press in an ended pane reconnects, **and no chain of Enters reaches a start or an ending** (section 10.1) | "Press Enter to reconnect": a stray Enter in a dead terminal would start `ssh` to a client's host |
@@ -194,7 +205,7 @@ at every Connect press (4.9).
   member matches nothing). No match: "No saved server matches the filter."
 - **The identity-file warning is shown only after a save** (4.5). A row in a
   list that was merely opened carries none: `servers_list` returns no warning
-  and must not look at up to 200 paths (design D-16, proposed; review U-m2).
+  and must not look at up to 200 paths (design D-16; review U-m2).
 
 ### 4.2 Empty (SV-9 AC3)
 
@@ -215,7 +226,7 @@ nothing that tells them apart). It replaces the rows; the header has no count
 and no Add server. `role="alert"`. The message names the file by the one
 name a message may use, `saved-servers.json`, "in its data folder", and no
 path: no kind and no command carries the folder's path (review U-m3; design
-section 9, proposed).
+section 9).
 
 > **The server list could not be read**
 > Better Terminal found saved-servers.json in its data folder, but the file
@@ -268,7 +279,7 @@ fields and nothing else**: no password, no passphrase, no options, no command.
   shows what comes back.
 - **A refused save changes nothing** (SV-1 AC3) **and reports every failing
   field, each with one reason code** (owner, 2026-11-18; PRD revision 8; the
-  design's `fields`, proposed). The form stays, with what was typed. A strip
+  design's `fields`). The form stays, with what was typed. A strip
   at the top, `role="alert"`: "**Not saved.** 2 fields need a change: Host,
   Port." Each refused field gets `aria-invalid="true"`, a 2 px outline in the
   error colour, and **the message for its reason** under it, tied by
@@ -290,8 +301,10 @@ fields and nothing else**: no password, no passphrase, no options, no command.
 
   It never blocks the save. It is kept until the overlay closes or the row is
   saved again, and it is not shown the next time the list is opened.
-- **After a save:** back to the list, focus on the saved row's Connect, and
-  the live region says "Saved “NAME”." (with the warning's sentence after it
+- **After a save:** back to the list, focus on the saved row's **Edit**, and
+  not on its Connect: Enter in a field saves, so a doubled or held Enter
+  must not go on to start `ssh` (10.1). Connect is one Left arrow away. The
+  live region says "Saved “NAME”." (with the warning's sentence after it
   when there is one).
 - **Could not be saved** (SV-1 AC4): the form stays with what was typed,
   focus on Save, and the strip reads "Not saved: the server list could not be
@@ -348,7 +361,7 @@ of a value**; each names the rule. The form composes it from the code alone.
 - The mockup's scenario "Reference: all 23 reasons" lists every pair with its
   message, built from the same table the form uses; its check asserts 23.
 
-### 4.6 A row that failed its checks (review U-M4; design D-8 and section 9, proposed)
+### 4.6 A row that failed its checks (review U-M4; design D-8 and section 9)
 
 A file changed outside Better Terminal can hold a record that fails the
 rules. Such a row is listed and never connected to. **The page is not sent a
@@ -414,15 +427,16 @@ One question, naming the server:
   destination is not shown, because it failed its checks." For every row with
   problems, "It is entry N in saved-servers.json." follows it.
 - **It is the shared `ConfirmDialog` as story C1 leaves it** (design section
-  22, proposed; review U-M1), not as it is today:
+  22; review U-M1), not as it is today:
   - rendered **inside the list's dialog element**, so the overlay's
     `aria-modal` does not hide it from assistive technology;
   - `role="alertdialog"`, `aria-modal="true"`, labelled by its title and
     described by its message;
   - it joins `useEscapeToClose`'s stack, so **Esc closes the question and
     leaves the list**; a second Esc closes the list;
-  - it has a focus trap, and only the trap mounted last handles Tab, so the
-    list's trap stands down while the question is open;
+  - it has a focus trap, and the trap that handles Tab is the last-mounted
+    one whose dialog holds focus, so the list's trap stands down while the
+    question is open;
   - `useFocusTrap` no longer counts a `tabindex="-1"` control as a stop, which
     is what lets the list's grid have one roving stop (4.10);
   - focus opens on **Cancel**, and **Enter presses the focused button only**:
@@ -431,11 +445,12 @@ One question, naming the server:
     click;
   - closing gives focus back to the row's Remove button.
 
-  Until C1 is built and D-15 decided, this question cannot be built as
-  specified: the story is a dependency of the list (section 17, A7).
+  Until C1 is built this question cannot be built as specified: the story
+  is a dependency of the list (section 17, A7). Its Enter rule is decided
+  (the owner, 2026-11-18; D-15).
 - No remove request is sent before the confirmation. Afterwards focus goes to
-  the next row's Connect (the previous one's when the last row was removed,
-  Add server when the list is now empty), and the live region says "Removed
+  the next row's **Edit**, never its Connect (10.1) (the previous row's when
+  the last row was removed, Add server when the list is now empty), and the live region says "Removed
   “NAME”."
 - If the write fails, the list keeps the row and the strip reads "Not
   removed: the server list could not be saved (system error N). Nothing was
@@ -443,8 +458,10 @@ One question, naming the server:
 
 ### 4.9 The row changed since it was shown: a held Connect (review U-M5)
 
-**Every connect request is checked at the press** (PRD revision 8, SV-3 AC4;
-design 8.4, proposed): the list is read again and the row's destination is
+**Every connect request is checked at the press, a palette entry's
+included** (the owner, 2026-11-18; PRD revision 8, SV-3 AC4, which words it
+for Reconnect and for Connect in an open list; design 8.4 and D-9, which
+make it every request): the list is read again and the row's destination is
 compared, in all four fields, with what the pressed control was showing: the
 row in the list, or the row a palette entry's label was built from. The list
 on screen can be stale: another program can rewrite the file, and no event
@@ -470,7 +487,8 @@ and the press is held** (`requestConnect` answers `held` with a
   and Connect to the new destination, and focus is on Cancel.** Enter and
   Space press the focused button only. Cancel drops the held press; the row
   is an ordinary row again, showing what it now holds, with focus on its
-  Connect. The confirming press reads the list once more: unchanged, it
+  **Edit**, not its Connect: the row's Connect now goes to the new
+  destination, and a second Enter must not press it (10.1). The confirming press reads the list once more: unchanged, it
   connects; changed again, the block is redrawn with the new lines.
 - **From a palette entry:** the palette has closed; **the list opens on that
   row**, scrolled into view, with the same block and focus on Cancel. The
@@ -631,7 +649,8 @@ never takes focus from a terminal when it appears, changes or goes.
     not typed into `ssh`'s prompt;
   - after **Reconnect** by keyboard, one Tab puts the user in the terminal.
   The one exception is a press that asks a question: focus goes to the
-  question's Cancel (5.6), because the user asked for that step. A bar that is
+  question's Cancel (5.6), because the user asked for that step. Cancel
+  there hands focus to the pane, like every other change. A bar that is
   only redrawn (the same message) keeps focus on the same button.
 
 ### 5.4 Connecting ("ssh not confirmed")
@@ -708,7 +727,7 @@ glyph is struck through, the header reads `▣ SERVER  ended  [destination]`
 below. The terminal takes no input and no key in it reconnects (U13).
 
 **Which bar, and whether it has Reconnect, follows the design's table**
-(design 8.4, proposed): the control reads the list the page holds. The rows
+(design 8.4): the control reads the list the page holds. The rows
 are in the order they are tried.
 
 | # | When | Title | Details | Controls |
@@ -735,7 +754,7 @@ are in the order they are tried.
   `terminal-not-started` and `list-not-saved` may carry no error number. Each
   sentence has the form without it, given above and in section 8.
 - **Restored and reopened are two bars**, told apart by the record's `origin`
-  (design D-18, proposed). Rows 2 to 5 take precedence over them.
+  (design D-18). Rows 2 to 5 take precedence over them.
 - *OS line* for row 8: on macOS, "macOS ships one at /usr/bin/ssh, so check
   the PATH your start-up files set."; on Linux, "Install your distribution's
   OpenSSH client package (openssh-client on Debian and Ubuntu, openssh-clients
@@ -766,7 +785,7 @@ no problem in the list:
 | could not start a terminal, cause `pane` | **Not started: this pane already has a connection or a start in progress** | Better Terminal keeps one connection per pane. Nothing new was started. |
 
 "Could not start your shell" is said only for cause `start`, the one cause for
-which it is true (design D-13, proposed). The design says a page that keeps
+which it is true (design D-13, accepted by the owner). The design says a page that keeps
 its rules never meets `pane`, and nobody is left to read `closing`; the words
 exist so the kind is never shown without any.
 
@@ -787,7 +806,7 @@ same. A key path is always shown in its saved `~/` form; the home folder's
 path never reaches the page.
 
 **The check at the press, and a held press** (review U-M5; design 8.4 and
-`ConnectCheck`, proposed). **Every** press of Reconnect, Reconnect… and the
+`ConnectCheck`). **Every** press of Reconnect, Reconnect… and the
 question's confirming button reads the list again before anything is sent. A
 press that finds anything but "the same destination, confirmed where it
 differs from the pane's" **starts nothing and is held**. What the user sees
@@ -819,7 +838,8 @@ is drawn from the held check (`why`, `shown`, `pane`, `now`):
   ("Connect to what it holds now" when the server has gone back to the
   pane's own destination.) Enter and Space press the focused button only.
   **Cancel** drops the held press and returns to the bar the list now gives
-  (row 5 or the plain Reconnect), with focus on its Reconnect button. The
+  (row 5 or the plain Reconnect), with focus on **the pane** (5.3), not on
+  its Reconnect button: a second Enter presses nothing. The
   confirming press reads the list once more; if it changed again, the
   question is asked again with the new lines. No connect request is made
   until a confirming press finds the list as the question showed it. The
@@ -893,11 +913,12 @@ name after "saved as", in quotes.
   scrollback holds.
 - **End asks nothing; a close asks.** Both are true for the same pane
   (F7.11, item 5). The spec does not soften either.
-- **Enter** (review U-M2 b; design D-15, open for the owner, question O3).
-  With C1's rule the question opens with focus on Cancel and Enter presses
-  the focused button, so **⌘W then Enter leaves the tab open**, and a
-  connection is ended only by Tab then Enter, or a click. Section 10.1 says
-  what changes if the owner keeps today's Enter for today's close questions.
+- **Enter** (review U-M2 b; decided by the owner, 2026-11-18; design D-15).
+  The question opens with focus on Cancel and Enter presses the focused
+  button only, so **⌘W then Enter leaves the tab open**, and a connection is
+  ended only by Tab then Enter, or a click. The rule is the same for every
+  question the shared dialog asks, today's close questions for local panes
+  and tabs included (10.1).
 
 ### 6.2 Quitting and closing the main window
 
@@ -1029,7 +1050,7 @@ never null: each sentence that prints one has a form without it.**
 
 ## 9. Text Better Terminal did not write
 
-**What reaches the page** (design, proposed; review U-M4). The page draws a
+**What reaches the page** (design; review U-M4). The page draws a
 saved server only from the rows Rust returns. **A value that failed its rule
 is not in the row**: a failing name is the empty string, a failing host, port,
 user or identity file is absent, and the summary is empty unless host, port
@@ -1064,6 +1085,15 @@ which is the user's. All of it is shown **without being applied**:
 - **Error messages never carry a value** (U3), so no refusal can be made to
   say something by the value that caused it.
 - **An identity-file path is shown in its saved `~/` form**, everywhere.
+- **Two things the rule leaves, stated so nobody reads "removed" as
+  "all":** B5 keeps one variation selector straight after a visible
+  character (an emoji keeps its style), and a joiner between letters of a
+  script that uses it or between emoji. And **the Edit form's fields hold the
+  stored values, not cleaned ones**, because a field has to save back what
+  it shows: a name that passed its rule can hold a run of combining marks or
+  a filler there. It cannot hold a control, direction, zero-width or
+  separator character, because the name rule refuses those and a refused
+  value is never sent (4.6).
 
 ### 9.1 A destination never loses its end (review U-B2)
 
@@ -1178,73 +1208,134 @@ or lives inside an overlay that has focus.
 |---|---|
 | Connect to a saved server | ⌘P, part of its name, host or user, Enter (G1's three actions) |
 | Open the list | ⌘P, "saved", Enter |
-| Add, edit, remove, connect in the list | section 4.8 |
+| Add, edit, remove, connect in the list | section 4.10 |
+| Make a split's server pane the active pane | today's ⌘← and ⌘→ |
 | Reconnect an ended server pane | ⌘P, "reconnect", Enter (`Servers: Reconnect this pane`) |
 | Answer the changed-destination question | the same entry puts focus on Cancel; Tab to the other button; Enter or Space presses the focused one |
-| End what is running in a connecting pane | ⌘P, "end", Enter (`Servers: End what is running in this pane`), once the message is showing |
+| End what is running in an unconfirmed pane | ⌘P, "end", Enter (`Servers: End what is running in this pane`), once the message is showing |
+| Read the bar's message, open or close it | ⌘P, "message", Enter (`Servers: Show this pane's message`), then Tab |
+| See a cut destination whole | Tab to its box and press it; in the list, Right past Remove; in the palette and the switcher, select the row |
 | Close a server pane or tab | today's ⌘⇧W and ⌘W; the question of 6.1 |
 | The tab's menu | as today (a right-click; the mockup also opens it with Shift+F10, which the build does not have today and S1 does not add) |
 
 - **The bar's buttons are also ordinary Tab stops**, for a user whose focus is
-  not in a terminal (the scratchpad, a panel). The palette entries exist
-  because Tab never leaves a terminal.
+  not in a terminal (the scratchpad, a panel, the pane itself). The palette
+  entries exist because Tab never leaves a terminal.
 - **Esc.** The bar has no key handler. With no overlay open, Esc does what it
   does today: the scratchpad closes if it is open and the terminal takes
   focus. So Esc with focus on the question's Cancel leaves the question
   showing and focuses the terminal; the palette entry leads back to it.
-- **A new shortcut for the list or for Reconnect is not proposed.** If one is
-  wanted it is the owner's to choose (none is asked for in section 17).
+- **A new shortcut for the list or for Reconnect is not proposed.**
+
+### 10.1 One key pressed twice, or held (review U-M2)
+
+No chain of Enters reaches a client start, a removal or the end of a
+connection. The three chains the review found, and what each does now:
+
+| Chain | Draft 1 | Now |
+|---|---|---|
+| focus on **End**, Enter, Enter | ended, then reconnected: focus went to Reconnect | ended; the second Enter does nothing. Focus is on the pane, which has no action (5.3) |
+| the palette's "Open saved servers", Enter, Enter, Enter | connected to the first server: Enter left the filter | the list is open with focus in the filter. Enter does nothing there; only Down leaves it (4.10) |
+| Enter on a row's **Remove**, Enter (or ⌘W, Enter on a running connection) | removed; closed and ended: `ConfirmDialog`'s Enter confirmed from anywhere | cancelled: focus opens on Cancel and Enter presses the focused button only (C1's change 4; design D-15) |
+
+**Focus never lands by itself on a control that starts a connection.** The
+three chains above were each a case of focus moving, unasked, onto Connect
+or Reconnect. Checking draft 2 for the same fault found four more places
+where it did, and each is changed:
+
+| After | Focus went to | Now | The chain it closes |
+|---|---|---|---|
+| a save (Enter in a field saves) | the saved row's Connect | the saved row's **Edit** (4.5) | Enter, Enter in the form started `ssh` to the server just saved |
+| a confirmed Remove | the next row's Connect | the next row's **Edit** (4.8) | a doubled Enter on Remove's confirm button started `ssh` to a different server |
+| Cancel on a held Connect (4.9) | the row's Connect, which by then shows the new destination | the row's **Edit** | Enter, Enter, Enter on Connect reached the changed destination with no deliberate second press |
+| Cancel on the bar's question (5.6) | the bar's Reconnect | **the pane** | when the server had gone back to the pane's own destination, Enter, Enter, Enter reconnected |
+
+Enter on a row's Edit opens the form, which starts nothing; a key held
+there opens and saves an unchanged form, and still starts nothing. Connect
+is one Left arrow from Edit. The mockup's check presses Enter five more
+times after each of the seven chains and counts the connect requests.
+
+Also: when a pane goes live while End has focus, focus goes to the pane and
+not into its terminal, so the Enter is not typed into `ssh`'s prompt; and
+the changed-destination questions (4.9, 5.6) open on Cancel.
+
+**The rule is the same for every dialog** (decided by the owner, 2026-11-18;
+design D-15 and section 22). Enter activates the focused button only and
+focus opens on Cancel, for every caller of the shared `ConfirmDialog`: F7's
+questions and today's five close questions (a tab, in two forms; a view; a
+pane; "Close others" and "Close to the right", which also asks about unsaved
+changes). No caller keeps the old key. What that changes outside F7, said
+here so nobody meets it as a surprise: **⌘W then Enter on a busy local pane
+or tab closes it today and will cancel**; closing takes Tab then Enter, or a
+click. Two questions that look alike never answer Enter differently, and the
+focus ring is true in all of them.
 
 ## 11. Accessibility
 
 - **The overlay:** `role="dialog"`, `aria-modal="true"`, labelled by its
-  heading; focus trapped; focus returned on close (4.8). The form is a
-  `<form>` labelled by the heading; every field has a visible `<label>`; hints,
-  refusals and warnings are tied by `aria-describedby`; a refused field has
+  heading; focus trapped; focus returned on close (4.10). The form is a
+  `<form>` labelled by the heading; every field has a visible `<label>`; hints
+  and refusals are tied by `aria-describedby`; a refused field has
   `aria-invalid="true"`.
 - **The rows:** `role="grid"` with `aria-rowcount`, rows with `aria-rowindex`.
-  Buttons are named "Connect NAME", "Edit NAME", "Remove NAME"; Connect is
-  described by the row's destination and identity file.
+  Buttons are named by 9.2 ("Connect to DESTINATION, saved as “NAME”");
+  Connect is described by the row's destination, identity file and problems.
 - **Messages in the overlay:** a refusal strip is `role="alert"`; the standing
-  "list is full" strip and the filter's "no match" line are `role="status"`.
+  "list is full" strip, the after-save warning and the filter's "no match"
+  line are `role="status"`. A held row's block is a group named "This server
+  changed since it was shown".
+- **Questions:** the shared `ConfirmDialog` after C1 (`role="alertdialog"`,
+  labelled, described, trapped, focus returned; 4.8).
 - **The mark on a tab** is an image with the accessible names of 5.1; in the
   switcher the state is in visible words, so its glyph there is decorative
-  (`aria-hidden`). **The pane** is a group named "Server session NAME,
-  starting ssh" (or "ssh running", "ended"); a local pane of a server tab is
-  "Local pane, FOLDER".
+  (`aria-hidden`) and the option is named by the tab's `title` string. **The
+  pane** is a group named "Server session, ssh not confirmed: DESTINATION,
+  saved as “NAME”" (or "ssh running", "ended"); it can take focus
+  (`tabindex="-1"`) and shows a focus ring when it has it.
 - **The bar** is a group labelled by its title. End's accessible name is "End
-  what is running in this pane"; Reconnect's is "Reconnect to NAME,
-  DESTINATION".
+  what is running in this pane"; Reconnect's is "Reconnect to DESTINATION,
+  saved as “NAME”"; the Less and More button has `aria-expanded`. Scrolling
+  details are a region that takes focus.
+- **The tab menu's reason line** is the menu's description (6.4).
 - **State changes are announced through one polite live region in the window,
-  and never by moving focus:**
+  and never by moving focus. Every announcement begins with the destination**
+  (9.2; review U-M9), written here as WHO = `DESTINATION, saved as “NAME”`:
 
   | Change | Announcement |
   |---|---|
-  | a client start | NAME: starting ssh. |
-  | live | NAME: ssh is running. |
-  | hand-over message, another program | NAME: your shell has not handed over to ssh. Another program is running. End is in the command palette. |
-  | hand-over message, not yet | NAME: your shell has not handed over to ssh yet. End is in the command palette. |
-  | `ssh` ended | NAME: ssh ended, exit status N. Reconnect is in the command palette. |
-  | ended before `ssh` was seen | NAME: ended before ssh was seen to start, exit status N. Reconnect is in the command palette. |
-  | no SSH client | NAME: no SSH client found, exit status 127. Reconnect is in the command palette. |
-  | the shell could not be started | NAME: could not start a terminal, system error N. Reconnect is in the command palette. |
-  | End pressed | NAME: ended. Reconnect is in the command palette. |
-  | a refused Reconnect | NAME: Reconnect was refused. Nothing was started. |
-  | saved, removed | Saved NAME. / Removed NAME. |
+  | a client start | WHO: started. ssh not confirmed. |
+  | live | WHO: ssh running. |
+  | hand-over message, another program | WHO: ssh not confirmed. The pane's program is not one Better Terminal recognises as ssh. Check the prompt before you type. With this pane active, End is in the command palette. |
+  | hand-over message, not yet | WHO: ssh not confirmed after 30 seconds. With this pane active, End is in the command palette. |
+  | `ssh` ended | WHO: ssh ended, exit status N. With this pane active, Reconnect is in the command palette. (Without a status: "ssh ended.") |
+  | ended before `ssh` was seen | WHO: ended before ssh was seen to start, exit status N. … (Without a status: "…to start.") |
+  | possibly no SSH client | WHO: the pane's program ended with status 127 before ssh was seen to start. There may be no SSH client on your PATH. … |
+  | End pressed | WHO: ended by you. With this pane active, Reconnect is in the command palette. |
+  | a Reconnect held, changed as pressed | WHO: the saved server changed as you pressed Reconnect. Nothing was started. It now holds DESTINATION. Cancel has focus. |
+  | Reconnect… pressed | WHO: Reconnect would go to a different destination, DESTINATION. Nothing was started. Cancel has focus. |
+  | a Reconnect held, gone, failing or unreadable | DESTINATION: Reconnect was not sent. The saved server no longer exists. (or "failed its checks.", "The server list could not be read.") Nothing was started. |
+  | a Reconnect refused by the start | WHO: Reconnect was refused. Nothing was started. |
+  | a Connect held, changed | WHO: this saved server changed since it was shown. Nothing was started. It was showing DESTINATION. |
+  | a Connect that started nothing | Nothing was started. *and the strip's words* |
+  | saved, removed | Saved “NAME”. / Removed “NAME”. |
   | the server pane of a tab was closed | The tab is now a local tab named Terminal. |
 
-  They are announced for a background tab's pane too. The polite region does
-  not interrupt what the terminal's own output is saying.
+  They are announced for a background tab's pane too. "With this pane active"
+  is said because the palette's entries exist only for the active pane (review
+  U-m5). The polite region does not interrupt what the terminal's own output
+  is saying.
 - **Focus is never taken from a terminal by a state change**: not by the bar
   appearing, changing or going, not by a toast, not by a mark changing. Focus
   moves only on the user's own action (Connect focuses the new tab's terminal;
-  Reconnect… focuses Cancel).
+  a press that asks a question focuses its Cancel) and, when a bar's button
+  that had focus goes away, to the pane (5.3).
 - **Not by colour alone:** the three states differ by glyph shape and by
   words; a warning bar has its triangle and its title as well as its strip; a
-  refused field has its icon, its "is not valid" text and a thicker outline.
+  refused field has its icon, its message and a thicker outline; a withheld
+  destination has its words and a dashed outline.
 - **Targets:** every control F7 adds is at least 24 by 24 px (buttons 28 px
-  high, the close button 28 by 28, menu items 26 px high). The marks and chips
-  are not controls.
+  high, the close button 28 by 28, menu items 26 px high, a cut destination's
+  button 24 px high). The marks and chips are not controls.
 - **Contrast:** section 12.
 - **Reduced motion:** section 13.
 
@@ -1258,7 +1349,7 @@ derived with `color-mix`, so each of the nine presets gets them:
 | `--srv-text` | `--text-secondary` 60% + `--text-primary` | body, hint and state text (today's `--text-secondary` is 4.22:1 on `--bg-elevated` in Solarized Dark; `--text-muted` fails everywhere) |
 | `--srv-edge`, `--srv-edge-2`, `--srv-control-edge` | `--text-primary` 60% + the surface it is on (`--bg-primary`, `--bg-secondary`, `--bg-elevated`) | outlines that have to reach 3:1: the chips, the destination box, inputs, secondary and ghost buttons |
 | `--srv-red`, `--srv-yellow` | `--red` / `--yellow` 60% + `--text-primary` | refusal and warning text and icons (raw `--red` is 3.42:1 on `--bg-secondary` in Nord) |
-| `--srv-focus` | `--accent` 60% + `--text-primary` | the focus ring, 2 px |
+| `--srv-focus` | `--accent` 60% + `--text-primary` | the focus ring, 2 px (on a pane it is drawn inside the pane's edge) |
 
 Scoped overrides, stated because `ui.css` is otherwise drawn verbatim: inside
 the overlay and the bar a `ui-btn--secondary` gets `--srv-control-edge` as its
@@ -1268,20 +1359,24 @@ border (its own `--border` edge is invisible on these surfaces), and a
 **Contrast is computed, not measured**: WCAG relative luminance over the
 token values of the nine presets in `src/stores/settingsStore.ts`, with
 `color-mix` and alpha compositing done in sRGB by a script. Minimum over the
-nine presets, and the preset it falls in:
+nine presets, and the preset it falls in. **Draft 2 adds no token and no new
+colour pair**: its new elements (the Less and More button, a cut
+destination's button, the withheld-destination box, the held block, the
+reasons list, the other pane's chip) reuse the pairs below, so these numbers
+are draft 1's, which the review recomputed independently and found to match.
+The one removed row is the pulse's low point: nothing pulses now.
 
 | Pair | Min | In | Needs |
 |---|---|---|---|
 | state words (`--srv-text`) on the pane | 6.01 | One Dark | 4.5 |
-| `SERVER` / `LOCAL` chip outline on the pane | 3.36 | One Dark | 3 |
+| chip outline on the pane (`SERVER`, and the other pane's chip) | 3.36 | One Dark | 3 |
 | tab glyph on the tab bar (inactive tab) | 5.62 | GitHub Dark | 3 |
 | tab glyph on a hovered tab | 4.86 | Solarized Dark | 3 |
 | tab glyph on the active tab | 6.57 | One Dark | 3 |
-| tab glyph at the low point of its pulse (70% opacity) | 3.14 | Solarized Dark, hovered | 3 |
 | bar title on the bar | 7.22 | One Dark | 4.5 |
-| bar body on the bar | 6.60 | One Dark | 4.5 |
+| bar body, reasons list and labelled lines on the bar | 6.60 | One Dark | 4.5 |
 | bar's warning strip and icon | 8.15 | One Dark | 3 |
-| bar button outline against the bar; against the pane | 3.94; 3.58 | One Dark | 3 |
+| bar button outline (secondary and ghost) against the bar; against the pane | 3.94; 3.58 | One Dark | 3 |
 | primary button: white on `--accent-solid` | 4.88 | GitHub Dark | 4.5 |
 | list name; destination text | 7.22; 6.60 | One Dark | 4.5 |
 | destination text on a focused row | 5.05 | One Dark | 4.5 |
@@ -1291,9 +1386,15 @@ nine presets, and the preset it falls in:
 | input text; input outline | 6.13; 3.79 | One Dark | 4.5; 3 |
 | hint text | 6.60 | One Dark | 4.5 |
 | focus ring on the overlay; on a focused row | 6.71; 5.12 | One Dark; Solarized Dark | 3 |
-| `Servers` chip `#56d4dd` on its fill; on a selected palette row | 6.02; 4.52 | Nord | 4.5 |
+| `SSH` chip `#56d4dd` on its fill; on a selected palette row | 6.02; 4.52 | Nord | 4.5 |
 | switcher state words on its selected row | 5.03 | One Dark | 4.5 |
-| menu note | 6.60 | One Dark | 4.5 |
+| menu line | 6.60 | One Dark | 4.5 |
+
+One pair is new in draft 2 and was computed for it (the same formula, over
+the nine presets' `--accent`, `--text-primary` and `--bg-primary`): **the
+focus ring on a pane, 6.10 in One Dark, needs 3.** A destination box on the
+bar is the "against the overlay" pair above: both surfaces are
+`--bg-secondary`.
 
 **What F7 reuses unchanged, with today's numbers** (computed the same way; not
 F7's to restyle, and said so that nobody reads the table above as covering
@@ -1302,22 +1403,27 @@ them):
 - `ConfirmDialog`: title 7.22, message 5.62, Cancel's label 4.86, the confirm
   label `#d29922` on its fill 4.52 (Nord). Its **button outlines are under
   3:1** (Cancel's fill against the dialog 1.06 to 1.32; the confirm outline
-  1.73 to 1.79): the labels carry the buttons, as today.
+  1.73 to 1.79): the labels carry the buttons, as today. C1 changes its
+  behaviour, not its colours.
 - `Toast`: title 5.52; **body `--text-secondary` on `--bg-elevated` 4.22 in
   Solarized Dark**, under 4.5, as today (the alerts proposal addresses it).
 
 ## 13. Motion
 
-- The connecting glyph pulses (opacity 1 to 0.7, 1.4 s). The overlay, the
-  palette and the switcher enter as they do today (180 ms).
-- **With `prefers-reduced-motion: reduce`: no pulse and no entry animation.**
-  The dashed outline alone says "starting ssh".
-- The bar appears and goes without animation in either mode: it moves the
-  terminal, and an animated move of terminal text is worse than a step.
+- **The marks do not move.** Draft 1's pulse on the unconfirmed glyph is
+  gone (5.1). The overlay, the palette and the switcher enter as they do
+  today (180 ms).
+- **With `prefers-reduced-motion: reduce`: no entry animation.**
+- The bar appears, goes, opens and closes without animation in either mode:
+  it moves the terminal, and an animated move of terminal text is worse than
+  a step. It is never opened or closed by a timer (5.3).
 - Nothing blinks, and nothing counts down: the 30 s bound is not shown as a
   timer (it only times a message).
 
-## 14. Room left for S1b (not designed, not approved)
+## 14. Room left for S1b (not designed, not approved here)
+
+S1b (a hub's server, SV-13) is approved by the owner and is **not designed in
+this spec**. Nothing is drawn for it. What S1 leaves free:
 
 - **A second group in the list.** The grid is one group with no heading. A
   second group would go **under** it, each group then getting a heading row
@@ -1327,8 +1433,10 @@ them):
 - **A source mark on a tab.** Between the glyph and the name in the tab bar
   and the switcher, and after the `SERVER` chip in the pane header, there is
   room for one short mark. Nothing is drawn there in S1.
-- The palette's `Connect to NAME (DESTINATION)` label leaves the category chip
-  and a prefix free.
+- The palette's `Connect to DESTINATION, saved as “NAME”` label leaves the
+  category chip and the words after "saved as" free.
+- A row that "changed while the list was open" (SV-13 AC3) can reuse 4.9's
+  block; that is for S1b's design to decide.
 
 ## 15. Every S1 criterion with something to see, and where it is
 
@@ -1338,104 +1446,173 @@ AC1, AC2, AC5, AC7, SV-6 AC3, SV-7 AC1 to AC4).
 
 | Criterion | What is seen | Section | Mockup |
 |---|---|---|---|
-| SV-1 AC1 | each field's refusal | 4.5 | add, refusals |
+| SV-1 AC1 | each reason's message; every failing field at once | 4.5 | add, refusals, reasons |
 | SV-1 AC2 | five fields, no others | 4.5 | add |
-| SV-1 AC3 | a refused save changes nothing; Remove asks once, naming the server | 4.5, 4.6 | refusals, remove |
-| SV-1 AC4 | full; could not be read; could not be saved | 4.4, 4.3, 4.5 | cap, unreadable, notsaved |
-| SV-1 AC5 | the identity-file warning | 4.1, 4.5 | list, edit |
+| SV-1 AC3 | a refused save changes nothing and reports every field; Remove asks once, naming the server | 4.5, 4.8 | refusals, remove |
+| SV-1 AC4 | full; could not be read; could not be saved, with and without the number | 4.4, 4.3, 4.5 | cap, unreadable, notsaved, notsaved0 |
+| SV-1 AC5 | the identity-file warning, after a save | 4.5 | savedwarn |
+| SV-2 AC1 | no home folder for a `~/` path: refused at the start | 4.5, 5.6, 8 | homeunknown |
 | SV-2 AC3 | ending and closing type nothing (said in the close question; the count is the demo log's) | 6.1, 6.2, 7 | closeconfirm, write |
 | SV-2 AC4 | no local prompt after `ssh` ends | 5.6 | ended |
-| SV-2 AC5 | failed its checks: from Connect, from Reconnect | 8 | failed (Connect); Reconnect's words are in 8 only |
+| SV-2 AC5 | failed its checks: in the list, from Connect, from Reconnect, in the Edit form | 4.6, 5.6, 8 | failedrows, failed, heldproblem, failededit |
 | SV-2 AC6 | nothing connects by itself; menu without Duplicate and Move | 6.3 to 6.5, 6.7 | restored, reopened, menu, workspace, closedremote |
-| SV-2 AC7 | a new tab, shown; a refusal opens none | 3, 4.7, 5.4 | quick, shell, failed |
-| SV-2 AC9 | connecting; the two messages and End; cleared when live; ended before `ssh` | 5.4, 5.6 | quick, another, waiting, child, before |
+| SV-2 AC7 | a new tab, shown; a start that is refused opens none | 3, 4.7, 5.4 | quick, shell, failed, spawn |
+| SV-2 AC9 | not confirmed; the two messages and End; cleared when live; ended before `ssh`, with and without a status | 5.4, 5.6 | quick, another, wrapper, waiting, child, before, signal |
 | SV-2 AC10 | unsupported shell, with and without its name | 8 | shell, shellnoname, refusedre |
 | SV-3 AC1 | the name; an unchanged commit keeps the mark | 6.6 | none (no new UI) |
-| SV-3 AC2 | the mark, three states, not "connected", absent on local | 5.1, 5.2 | marks, live, switcher, split |
+| SV-3 AC2 | the mark, three states, "ssh not confirmed", not "connected", absent on a local tab | 5.1, 5.2 | marks, live, switcher, split |
 | SV-3 AC3 | output kept, `[Process exited]`, Reconnect with the destination | 5.6 | ended |
-| SV-3 AC4 | current destination; changed shows both and asks again; removed | 5.6 | changed, keychanged, question, removed |
-| SV-3 AC5 | a split is local | 5.7 | split |
-| SV-3 AC6 | closing asks while starting or running, not when ended | 6.1 | closeconfirm |
+| SV-3 AC4 | current destination; changed shows both and asks again; the check at the press for Reconnect, for Connect and for a palette entry; both key paths when only the key differs; removed | 4.9, 5.6 | changed, keychanged, question, heldreconnect, heldthree, heldlist, heldpalette, heldkey, heldgone, removed |
+| SV-3 AC5 | a split is local, with no remote mark | 5.7 | split |
+| SV-3 AC6 | closing asks while not confirmed or running, not when ended | 6.1 | closeconfirm |
 | SV-3 AC7 | rename or removal of the saved server leaves the tab | 5.6 | removed |
 | SV-3 AC8 | no Move to New Window | 6.4 | menu |
 | SV-3 AC9 | the tab becomes "Terminal", a local tab | 6.5 | closedremote |
 | SV-4 AC2, AC3 | restored and reopened tabs are ended with Reconnect | 6.3 | restored, reopened |
 | SV-5 AC3 | the left-out count | 6.7 | workspace |
-| SV-5 AC4 | twelve kinds, each with its words, none carrying a value | 8 | the scenarios above |
+| SV-5 AC4 | twelve kinds, each with its words and each optional member's absent form, none carrying a value | 8 | the scenarios above; spawn, spawnre |
 | SV-5 AC8, SV-8 AC3 | not available: no list, no entries | 3 | unavailable |
 | SV-6 AC1 | file paths are not links | 7 | split |
 | SV-6 AC2 | no folder; the file browser's on-a-server state | 7 | write |
 | SV-6 AC4 | refused writes; the scratchpad's image case | 7 | write |
-| SV-7 AC5 | a changed row is visible: palette entry and Reconnect show the destination | 3, 5.6, 9 | palette, changed, hostile |
-| SV-8 AC2 | no SSH client, with the status and the OS line | 5.6 | nossh |
+| SV-7 AC5 | a changed row is visible and is caught at the press; hostile text in the file is never drawn | 4.6, 4.9, 9 | heldlist, failedrows, hostile, narrow4, narrow5, long |
+| SV-8 AC2 | possibly no SSH client, with the status and the OS line | 5.6 | nossh |
 | SV-9 AC1 | the list, name order, summary, every action by keyboard | 4 | list, long |
 | SV-9 AC2 | one entry for the list, one per server, matched by name, host and user | 3 | palette |
 | SV-9 AC3 | the empty list | 4.2 | empty |
 
 ## 16. What the mockup shows, and what it does not
 
-**Scenarios** (the selector at the top; Previous and Next step through them):
-empty; list; add; refusals (every field); edit with the identity-file warning;
-cap; unreadable; notsaved; remove; palette; quick (connecting, then live);
-another (the message at once); waiting (the message at the bound); live;
-ended; before; nossh; changed; removed; split; write; closeconfirm; restored;
-reopened; menu; switcher; shell; failed; hostile; long; marks; child; spawn;
-keychanged; question; refusedre; shellnoname; workspace; unavailable;
-closedremote.
+**Scenarios** (the selector at the top; Previous and Next step through them),
+59 of them: empty; list; add; refusals; reasons (all 23); edit; savedwarn;
+cap; unreadable; notsaved; notsaved0; remove; palette; quick; another;
+wrapper; waiting; live; ended; before; signal; nossh; changed; removed;
+split; write; closeconfirm; restored; reopened; menu; switcher; shell;
+shellnoname; spawn; spawnre; failedrows; failed; failededit; homeunknown;
+heldlist; heldpalette; heldkey; heldreconnect; heldthree; heldgone;
+heldproblem; keychanged; question; refusedre; hostile; long; narrow4;
+narrow5; barclosed; marks; child; workspace; unavailable; closedremote.
+
+**How the mockup models the contract.** It keeps "the file" and "what the
+page holds" apart. The file is a list of records; a stand-in for Rust turns
+them into rows, withholding every member that failed its rule, and the page
+draws **only** from those rows. "The next change to the file is made by
+another program" makes a change with no event, so the screen goes stale and
+the next press shows the held state. The demo log says, for each press,
+whether the list was read again, whether a connect request was made, and with
+what.
 
 **Controls:** the nine presets; reduced motion; what the start-up files do at
-the next Connect; the login shell; which feature attempts a write; and
-stand-ins for existing actions (split, close, quit and restart, reopen, the
-scratchpad with and without an image, the file browser, a change or removal of
-the saved server behind an open tab).
+the next Connect (twelve cases, the three causes of "could not start a
+terminal" among them); the login shell; "no home folder"; which feature
+attempts a write; a silent change to the file; and stand-ins for existing
+actions (split, close, quit and restart, reopen, the scratchpad with and
+without an image, the file browser, a change, a break or a removal of the
+saved server behind an open tab, an unreadable file).
 
 **The timer is sped up:** with "Fast timer" ticked (the default) the 30 s
 hand-over bound runs as 3 s. The mockup says so beside the tick box.
 
 **Not in the mockup:** a real terminal (the pane is drawn text, and its hidden
-textarea stands in for xterm's); the sub-terminal strip's own entry; the
-rename box; Close Others; the Linux line for "no SSH client"; a Reconnect
-refused for failed checks or an unreadable list (words in section 8); Settings
-beyond a stand-in for the Workspace save row. The validation in it is a
-stand-in for Rust's rules, checked against SV-1 AC1's table of examples. The
-tab menu opens with Shift+F10 in the mockup only.
+textarea stands in for xterm's, so the blank line on Reconnect and a re-fit
+are drawn, not exercised); the sub-terminal strip's own entry; the rename box;
+Close Others; the Linux line for "possibly no SSH client"; the local close
+questions (they get the same Enter rule, D-15; the mockup shows it on F7's
+questions only);
+Settings beyond a stand-in for the Workspace save row; a real screen reader.
+The validation in it is a stand-in for Rust's rules, checked against SV-1
+AC1's table of examples and its 23 reasons. The shared dialog components are
+drawn as C1 would leave them; today's components do not behave so. The tab
+menu opens with Shift+F10 in the mockup only.
 
 ## 17. Questions
 
-Each has the assumption this spec and the mockup work from.
+**Where each stands.** Answered by the owner: the state words (O1), the
+reasons (A1, P7), Enter in the shared confirm dialog (P2, O3), the check on
+every connect request, the `~/` form. Answered by the design, which the
+owner approved on 2026-11-18: A2 to A5, A7, A8 and the contract points of
+U-M10. **Still open: for the owner, O2 only; for the product manager, P8
+and P9 (both change what an approved criterion says), P3 to P6 and P10;
+for the architect, A6 (which 9.1 depends on), A9, A10, A13 and A14.** The
+product manager also has text to write that is decided, not asked: SV-3
+AC4's sentence widened to every connect request, and SV-5 AC4's row for
+"could not start a terminal" (the design's 15.4).
 
-### For the architect
+### Answered since draft 1
+
+| # | Question (draft 1) | Answered by | Answer, and what this spec does with it |
+|---|---|---|---|
+| A1, P7 | every failing field with a reason code | the owner (2026-11-18); PRD revision 8; the design | Yes: 23 pairs. 4.5 has one message per pair |
+| A2 | a check without a save | the design | No. Checks run at Save only (4.5) |
+| A3 | a warning call on blur and for every row | the design, D-16 | No: only a save returns a warning. The warning shows after a save (4.5) |
+| A4 | the exit event carries the status | the design | Yes, and it can be null: "ssh ended" (5.6) |
+| A5 | notices reach the page as record changes; Rust times the bound | the design | Yes |
+| A7 | the shared dialog components | the design, section 22, story C1 | Designed as C1 leaves them (4.8, 6.1). Its Enter rule is D-15, decided by the owner (O3, below) |
+| A8 | the page has the raw values of a failing row | the design, D-8 | No. 4.6 draws the row from what the page receives |
+| A11 | the two "Not sent" bodies | unchanged | recorded in `.ade/context/terminal-open.md` by the story that builds them |
+| A12 | Close Others counts server tabs | unchanged | assumed yes; not answered in the design's section 21 |
+| O1 | the three state words | the owner (2026-11-18) | "ssh not confirmed", "ssh running", "ended" (5.1) |
+| P1 | quitting ends connections unasked | not a question: the owner's accepted decision (F7.11 item 6) | said in the list's footer (4.1) |
+| P2, O3 | Enter in the shared confirm dialog: draft 1 asked the product manager (P2); it became the design's D-15 and a question for the owner (O3) | **the owner (2026-11-18)** | **The new rule everywhere**: Enter activates the focused button only and focus opens on Cancel, for every dialog, today's close questions included. No caller keeps the old key. 4.8, 6.1 and 10.1 are written to it; ⌘W then Enter on a busy local pane will cancel, where today it closes |
+| | the changed-destination check for a palette entry (the PRD's SV-3 AC4 words it for Reconnect and for Connect in an open list) | **the owner (2026-11-18)**; the design, D-9 | On every connect request, palette entries included (3, 4.9, 5.6). The PRD's sentence is the product manager's to widen (the design's 15.4) |
+| | how an identity-file path is shown | **the owner (2026-11-18)** | A path starting `~/` is shown in its `~/` form everywhere; the home folder's path never reaches the page (5.6, 9) |
+| U-M10 | "could not start a terminal" for a closed gate or a second start; the stored refusal; restored against reopened | the design, D-13 (accepted by the owner), `refusal`, D-18 | `cause` (`start`, `closing`, `pane`) chooses the words; the bar prints what `refusal` carries; two bars by `origin` (5.6, 8) |
+
+### For the owner (open)
+
+| # | Question | What each answer costs | Recommendation |
+|---|---|---|---|
+| **O2** | **The chip on the other panes of a server tab.** Draft 1 put `LOCAL` on every pane of a server tab that is not the server pane. Three choices: (a) keep `LOCAL`; (b) a wording that claims only what is known, **`NOT A SAVED SERVER`**; (c) no chip | (a) The user can type `ssh prod` by hand in that pane. It then reads `LOCAL` beside a pane that reads `SERVER`: a positive, wrong statement of where keys go, the mirror of the mistake the chip was meant to prevent. (b) True whatever runs in the pane, but it is still a new mark on ordinary panes, which SV-3 AC5 ("with no remote mark") did not ask for, and it is long (about 120 px in a narrow pane). (c) Nothing false and nothing new; the panes are told apart by the server pane's chip, the pane numbers and the other pane's folder, that is, by the absence of a mark | **(b)**, as designed in 5.7. If the new mark is not wanted, (c). Not (a) |
+
+### For the product manager (open)
+
+| # | Question | Recommendation |
+|---|---|---|
+| **P8** | **Three palette entries beyond SV-9 AC2.** SV-9 AC2 names one entry that opens the list and one per saved server. This spec adds `Servers: Reconnect this pane`, `Servers: End what is running in this pane` and `Servers: Show this pane's message`, each present only while it applies to the active pane (section 3). Draft 1 had the first two as an assumption; the third is new, and is how a keyboard user in the terminal reaches the bar's text now that the bar can be closed. Without them: Tab never leaves a terminal, so from the terminal the bar's buttons are reached only by the mouse, or by moving focus to the scratchpad or a panel first; End and Reconnect would have no keyboard route from where the user is | Add the three to SV-9 AC2 as entries F7 may add. If only two are accepted, drop "Show this pane's message" last: the title is announced, and the other two act |
+| **P9** | **The PRD's sentence for the hand-over message.** SV-2 AC9 says the message "says that the shell's start-up files have not handed over to `ssh`". For "another program is running" that is more than is known: the PRD itself puts working sessions in that kind. This spec says "ssh not confirmed" and "has not seen your shell hand over" (5.4) | Reword AC9's sentence to "has not seen" or "has not confirmed"; no rule changes |
+| P3 | The tab switcher shows a server tab's destination. Should its search match it? Today's match is name, folder, project | Yes, host and user, as the palette does. Until decided: name only |
+| P4 | Name and Port are trimmed; Host, User and Identity file are not, so a pasted host with a trailing space is refused (Host, "a character that is not allowed") | Trim all five at save |
+| P5 | The list's filter (U15) is the designer's addition | Keep; it is cut cleanly if not wanted |
+| P6 | "ssh ended (exit status N)" shows a status for an ordinary end. The sub-terminals decision of 2026-11-02 cut exit codes there | Show it here: 255 against 0 tells a dropped connection from a logout |
+| P10 | SV-8 AC2's kind is named "no SSH client found". The bar's title now hedges: "Possibly no SSH client: …" (5.6; review U-m1) | Accept the hedged title; the kind's name is not shown |
+
+### For the architect (open)
 
 | # | Question | Assumed |
 |---|---|---|
-| A1 | Can a refused save carry, for **every** failing field, the field's name and a **reason code from a closed list** (the reasons of 4.5; a code, never the value)? SV-5 AC4's table allows "the field's name". | Yes. If only the name: the whole-rule message per field. If only the first failing field: the form shows one refusal at a time |
-| A2 | Is there a check without a save, for a field on blur? | No. Checks run at Save only |
-| A3 | A call that tells, for an identity-file path, "no file" or "not a regular file" without opening it: for the form on blur, and for every row when the list opens (up to 200) | Yes, both. If only at save: the warning shows on the row after saving |
-| A4 | Does the pane's exit event carry the status for an ordinary end of a live `ssh`, as for the connecting kinds? | Yes (SV-2 AC4's contract); without it the title is "ssh ended" |
-| A5 | The two hand-over kinds, and "cleared", reach the webview as changes to the pane's record, and the 30 s bound is timed in Rust | Yes |
-| A6 | A palette row that draws a rendered label (name plus the destination box) while matching on the plain label string | Yes; otherwise the plain string, which section 9 keeps safe |
-| A7 | `ConfirmDialog` carries F7's two questions only if it gains `role="alertdialog"` with its title and message as label and description, a focus trap, and a place in `useEscapeToClose`'s stack: today it listens for Esc on `window` in the bubble phase, so **over the list overlay Esc would close the list and leave the question**. Separately, `useFocusTrap`'s selector counts a `tabindex="-1"` button as a stop, so with the grid's roving tab stop it mistakes the last stop and Tab leaves the overlay (found when the mockup's copy of that selector leaked focus) | Both fixed in the shared components, each a small change with its own test |
-| A8 | When Edit opens a row whose stored values fail the checks, the webview has the raw values | Yes; the form shows them cleaned and says so (4.5) |
-| A9 | The destination summary is available in the webview without a round trip per keystroke (the form's preview) | Yes; else the preview updates on blur |
-| A10 | The bar re-fits the terminal when it appears and goes, so the program in the pane gets a resize. A resize is not a write into the pane (SV-2 AC3) | Allowed, as the sub-terminal notice does today |
-| A11 | `writePty`'s refusal for a server pane raises today's "Not sent" notification with F7's body, and the scratchpad's image refusal the same with its own; `.ade/context/terminal-open.md` quotes the first body's sibling, so the two new bodies are recorded there | Yes |
-| A12 | The many-tab close question (Close Others) can count server tabs with a connection (6.1) | Yes |
+| **A6** | A palette row that draws a rendered label (the destination box and the name) while matching on the plain label string. Not answered in the design's section 21. **Section 9.1 needs it**: a plain label is end-cut by the row, and the end of a long destination is then lost | Yes. If no: the palette cannot meet 9.1 for a destination longer than its row, and the label would have to carry a text-cut summary ("…" and the end) in place of the whole, which stops a host being found by its beginning |
+| A9 | The destination summary is available in the page without a round trip per keystroke (the form's preview) | Yes; else the preview updates on blur |
+| A10 | The bar and the server pane's header re-fit the terminal when their height changes (the bar appears, goes, opens, closes; the destination takes a second row). A resize is not a write into the pane (SV-2 AC3) | Allowed, as the sub-terminal notice does today |
+| A13 | The held press when a palette entry was pressed "opens the overlay on that row" (design 8.4). Is the list the overlay shows read once for both, so that the row's block and the list agree? | Yes: one read at the press, and the overlay draws from it |
+| A14 | Does `ServerRow` for a failing row keep a member that passed when the summary is withheld (so the filter can match a host that passed while the user failed)? | Yes (the contract's wording). 4.6 does not draw such a member on its own |
 
-### For the product manager
+## 18. The review of draft 1: every finding, how it is answered, and where
 
-| # | Question | Recommendation |
+| Finding | How it is answered | Where |
 |---|---|---|
-| P1 | Quitting and closing the main window end running connections unasked (F7.11 item 6). This spec states it and designs no question | Keep for S1. A quit question is a change for every terminal, not an F7 detail |
-| P2 | In `ConfirmDialog` Enter confirms while Cancel has focus, today, for every close. F7's close question and Remove inherit it: ⌘W then Enter ends a running connection | Keep for S1 so that every close question behaves alike; change the dialog for the whole app as its own item. The one place where it mattered, the changed destination, does not use the dialog (U9) |
-| P3 | The tab switcher shows a server tab's destination. Should its search match it? Today's match is name, folder, project | Yes, host and user, as the palette does (F7.11 7h). Until decided: name only |
-| P4 | Name and Port are trimmed; Host, User and Identity file are not, so a pasted host with a trailing space is refused ("No spaces…") | Trim all five at save |
-| P5 | The list's filter (U15) is the designer's addition | Keep; it is cut cleanly if not wanted |
-| P6 | "ssh ended (exit status N)" shows a status for an ordinary end. The sub-terminals decision of 2026-11-02 cut exit codes there | Show it here: 255 against 0 tells a dropped connection from a logout, and the status is already a contract (SV-2 AC4) |
-| P7 | If A1 is yes, SV-5 AC4's row for "failed its checks" should read "the field's name and a reason code" | Amend the row; no value is carried either way |
-
-### For the owner
-
-| # | Question | Recommendation |
-|---|---|---|
-| O1 | The three state words: **starting ssh / ssh running / ended** | As designed. "ssh running" is the only claim Better Terminal can stand behind before a password is typed |
-| O2 | While a tab holds a server pane, its local panes show a `LOCAL` chip: a new mark on ordinary panes | Yes: it is what stops a local split being typed into as if it were the server |
+| **U-B1** (blocking): the "another program" message said where keys go | The message says only what is known: the pane's program is not one Better Terminal recognises as ssh with the arguments it gave; it may be a local program or your own wrapper, in which case the session works; Better Terminal cannot tell which, so check the prompt. Both overclaims are removed from the spec, the mockup and its scenario notes; a second scenario shows the same message over a working session. Every other message was re-read for the same fault: the "not yet" message, the close questions for an unconfirmed pane, the announcements and the image refusal were reworded | 5.4; 6.1; 7; 11; mockup `another`, `wrapper` |
+| **U-B2** (blocking): a destination lost its end in a narrow pane | The cut is made in the text ("…" and the end), never by CSS; the box takes a row of its own, then wraps inside itself; nothing clips it. Applied in the pane header, the palette row, the bar, the list and the switcher. The mockup's check asserts the box's whole text is inside every clipping ancestor at 4 and 5 panes and in the palette | 9.1; 5.2; mockup `narrow4`, `narrow5`, `palette`, `long` |
+| **U-M1**: Remove's question could not work on today's components | Designed on the shared components as the design's story C1 leaves them, and said so in place of "as it is today": rendered inside the list's dialog, in the Esc stack, a role, a trap, focus returned, `useFocusTrap` skipping `tabindex="-1"` | U10; 4.8; 6.1; 11 |
+| **U-M2**: three Enter chains | (a) after End focus goes to the pane, not to Reconnect; (b) a second Enter on a destructive question cancels: Enter activates the focused button only and focus opens on Cancel, which the owner has decided for every dialog (D-15); (c) only Down leaves the filter. Checking for the same fault found four more places where focus landed by itself on Connect or Reconnect (after a save, after a removal, after Cancel on a held Connect, after Cancel on the bar's question); each now lands on Edit or on the pane | 5.3; 10.1; 4.10; 4.5; 4.8; 4.9; 5.6; 6.1 |
+| **U-M3**: refusals assumed a contract that was not given | The contract is now given (owner; PRD revision 8; the design): one message per (field, reason) pair, 23 of them, true to each rule and never echoing a value | 4.5 |
+| **U-M4**: a failed row was drawn from values the page never receives | Drawn from what it does receive: "Unnamed server", "destination not shown", the failing fields with their reasons, and `fileIndex` to tell rows apart; its Edit form has each failing field empty with its reason | 4.6; 9; 9.2; mockup `failedrows`, `failed`, `failededit` |
+| **U-M5**: "the row changed since it was shown" was undesigned | Designed from `ConnectCheck` for Reconnect, for Connect in the list and for a palette entry: what was shown, what it holds now, the second confirmation, and `gone`, `problem`, `unreadable`; with words and announcements | 4.9; 5.6; 11; mockup `held…` |
+| **U-M6**: "starting ssh" was untrue for two cases | The owner's word, "ssh not confirmed", everywhere: tab, switcher, pane header, announcements; the bar carries the detail. The pulse is removed | 5.1; 5.4; 11; 13 |
+| **U-M7**: the `LOCAL` chip asserts what is not known | Put to the owner with the hand-typed `ssh` case and each answer's cost; the recommended wording, "NOT A SAVED SERVER", is designed | 5.7; O2 |
+| **U-M8**: the bar had no bound | Open, at most two fifths of the pane with its details scrolling; closed, its title and buttons; Less and More; closed when its tab is shown again. The 294 px case is in the mockup | 5.3; mockup `narrow4`, `narrow5`, `barclosed` |
+| **U-M9**: a legal name could pose as the destination in plain strings | In every plain string the destination comes first after fixed words and the name last after "saved as", in quotes; every announcement begins with the destination | 9.2; 11; 3 |
+| **U-M10**: kinds with optional or missing payload had no words | A form without the number for the three messages; "could not start a terminal" by `cause`; the bar prints `fields` and `shell` from `refusal`, which is now the whole kind; restored and reopened told apart by `origin` | 5.6; 8; 4.5 |
+| **U-m1**: titles stated what bodies hedged | "Possibly no SSH client: …"; "the pane's program ended", not "your shell ended" | 5.6; 11; P10 |
+| **U-m2**: the row warning had no source | The identity-file warning is shown only after a save | 4.1; 4.5; mockup `savedwarn` |
+| **U-m3**: "the file that worked" named no file | "saved-servers.json" in Better Terminal's data folder; no path | 4.3 |
+| **U-m4**: quitting ends connections unasked, said nowhere | One sentence in the list's footer | 4.1; 6.2 |
+| **U-m5**: palette entries announced for any pane | Announcements say "With this pane active"; ⌘← and ⌘→ reach a split's server pane | 5.7; 10; 11 |
+| **U-m6**: the menu's reason line was unreachable | It is the menu's description | 6.4 |
+| **U-m7**: going live moved focus into the terminal | Focus goes to the pane, not its input | 5.3; 5.4 |
+| **U-m8**: the Edit form loaded a half-cleaned hostile value | Moot: a failing field is empty; nothing of the stored value is shown | 4.6 |
+| **U-m9**: the category matched every F7 entry | The category is "SSH"; the remaining limit is stated | 3 |
+| **U-m10**: the blank line on Reconnect | A display-only write (`term.write`), 0 bytes to the terminal, squared with U6 | 5.6 |
+| **U-m11**: a cut destination's whole text was hover-only | A cut box is a button that shows the whole; in the palette and the switcher the selected row's box is whole | 9.1; 10 |
+| **U-m12**: "a cut never produces a different host" was too strong | The claim is withdrawn; what a cut can still show is stated as a limit. The attacker-chosen head is no longer drawn at all | 9.1 |
+| Mismatch table, rows 1 to 11 | 1: 4.5. 2: 4.6. 3: 4.5. 4: 4.9, 5.6. 5: 5.6 and 8 agree with the design ("the row has a problem: no Reconnect"). 6: 5.6, 8. 7, 8: the design moved; 5.6 uses `refusal` and `origin`. 9: 4.8. 10: none. 11: 9.2 (the label form for an empty summary) | as listed |
+| Decisions that sat as assumptions | The extra palette entries: P8. The blank line: 5.6. Enter leaving the filter: removed. Focus to Reconnect after End: removed | 3; 5.3; 5.6; 4.10 |
