@@ -4,13 +4,19 @@ What the user sees and does for F7 slice S1 (`docs/prd.md`, F7, **revision
 9**: SV-1 to SV-9). The PRD owns every rule about what is run, stored and
 sent; this spec says only how it looks, reads and is operated.
 
-Status: **draft 3, proposed, not approved, awaiting a re-check.** Draft 1 was
-blocked in adversarial review (two blocking findings, ten majors, twelve
-minors); section 18 lists every finding with how it is answered and where.
-Draft 2 was blocked in its delta review on one finding (U2-B1), with four
-majors and ten minors. Draft 3 is a correction pass for those fifteen and
-nothing else: no screen is redesigned. Section 19 lists each with how it is
-answered and where.
+Status: **draft 4. Approved by the owner on 2026-11-19. Verified in a mockup
+only** (a scripted check in a headless browser; Better Terminal itself was
+not run). Draft 3 passed its adversarial re-check with eight minor wording
+points (U3-m1 to U3-m8). The owner approved the S1 UX on being told that, and
+that it was verified in a mockup only (491 scripted checks at draft 3, ADE
+itself not run): it is approved once this wording pass is done, and slice 1
+can then be sharded, the UI stories included. Draft 4 is that pass and
+nothing else: no screen is redesigned. Section 20 lists the eight with how
+each is answered and where. Before it: draft 1 was blocked in adversarial
+review (two blocking findings, ten majors, twelve minors; section 18); draft
+2 was blocked in its delta review on one finding (U2-B1), with four majors
+and ten minors, and draft 3 was the correction pass for those fifteen
+(section 19).
 Mockup: `2026-11-18-saved-servers-mockup.html` beside this file (one file, no
 network requests; host, user and client names in it are invented).
 
@@ -31,12 +37,17 @@ network requests; host, user and client names in it are invented).
     palette entry's included;
   - an identity-file path that starts `~/` is shown in its `~/` form
     everywhere.
+- The owner's decisions of 2026-11-19:
+  - **the S1 UX is approved**, on the terms in the status line above;
+  - **O2: no chip.** In a split server tab the other panes carry no label;
+    only the server pane is marked (the server glyph, the state word and
+    the destination) (5.7).
 - The architect's design and its two context files
   (`.ade/context/saved-servers.md`, `.ade/context/server-panes.md`), all
   three on `main` (the design is
   `docs/superpowers/specs/2026-11-18-saved-servers-design.md`). **The design
-  was approved by the owner on 2026-11-18.** That approval does not cover
-  this spec. Where this spec says
+  was approved by the owner on 2026-11-18.** That approval did not cover
+  this spec, which the owner approved on 2026-11-19. Where this spec says
   "the design" it means that document, and each place it leans on is named: the 23 reason codes; the row
   the page receives (`problems`, `fileIndex`, withheld members); the held
   press (`ConnectCheck`, with its `differs`); `refusal` as the whole kind; `origin`; `cause` on
@@ -147,11 +158,21 @@ and Reconnect over an ended one. Now:
 - the same holds whatever the pane's state: the order does not change with
   what applies.
 
-What remains is a limit, not a chain: a query for one of the three can also
-match a server's entry by its name, host or user, and that entry then comes
-first ("end" with a saved host `backend.example.com`). The selected row is
-shown before Enter, and section 10 gives each action a query that names it
-alone ("end what", "reconnect this").
+What remains is a limit, not a chain, and it has two parts (re-check U3-m6):
+
+- **A server's entry is matched by every part of its label**: by its name,
+  host or user, and also by its fixed words, "connect", "to" and "saved as"
+  (and parts of them, such as "conn"). So a query for one of the three pane
+  actions can match a server's entry, which then comes first ("end" with a
+  saved host `backend.example.com`); and ⌘P, "connect", Enter starts a
+  connection to the first server in list order, whatever the pane's state.
+- **"end", when no server's entry matches it, preselects End**, and End ends
+  what is running with no question.
+
+Each is a press on a visible, selected entry whose label says what it does
+("Connect to DESTINATION, saved as “NAME”"; "Servers: End what is running in
+this pane"). The selected row is shown before Enter, and section 10 gives
+each action a query that names it alone ("end what", "reconnect this").
 
 - **Entries 3 to 5 are additions beyond SV-9 AC2**, which names one entry
   for the list and one per server. They are a question for the product
@@ -594,7 +615,10 @@ and the press is held** (`requestConnect` answers `held` with a
   from the check's `differs` (9.3; review U2-B1). When the identity file is
   among what differs, each line also shows its path, whole, since the
   summaries may read the same. **Connect is replaced by two buttons, Cancel
-  and Connect to the new destination, and focus is on Cancel.** Enter and
+  and Connect to the new destination, and focus is on Cancel.** When the
+  identity file is the only member that differs, the two destination boxes
+  read the same and the confirming button reads **Connect with the new
+  identity file** (re-check U3-m3). Enter and
   Space press the focused button only. **The row is scrolled so that the
   whole of it is in view**: the two buttons, both destinations and the
   sentence between them. Cancel drops the held press; the row
@@ -602,6 +626,13 @@ and the press is held** (`requestConnect` answers `held` with a
   **Edit**, not its Connect: the row's Connect now goes to the new
   destination, and a second Enter must not press it (10.1). The confirming press reads the list once more: unchanged, it
   connects; changed again, the block is redrawn with the new lines.
+  **When the list is drawn again and the row no longer equals the check's
+  `now`, the held press is dropped** (re-check U3-m2). That takes another
+  program rewriting the file once more and something else causing a fresh
+  read, such as a press on another row. The row is then an ordinary row
+  showing what it now holds; the user presses Connect again and gets a fresh
+  check. So the sentence and the two boxes always come from one check and
+  cannot disagree.
 - **From a palette entry:** the palette has closed; **the list opens on that
   row**, the whole row scrolled into view, with the same block and focus on
   Cancel. The
@@ -614,7 +645,12 @@ and the press is held** (`requestConnect` answers `held` with a
 - **Announced**, in every case: "DESTINATION, saved as “NAME”: this saved
   server changed since it was shown. Nothing was started. Host differs. It
   was showing DESTINATION." (the sentence that names what differs is the
-  block's) or "Nothing was started." and the strip's words.
+  block's) or "Nothing was started." and the strip's words. **When the
+  identity file is among what differs, the key paths are announced too**
+  (re-check U3-m3), since the destinations may read the same: "…Identity
+  file differs. It was showing DESTINATION with key PATH. It now holds key
+  PATH." Where there is none: "with no identity file", "It now holds no
+  identity file."
 - A held press is dropped when it is confirmed, cancelled, when the overlay
   closes, or when a later press of the same server finds nothing to hold.
 - **What is not caught** (PRD, SV-7 AC5; stated, not designed away): a
@@ -745,7 +781,9 @@ never takes focus from a terminal when it appears, changes or goes.
     destination it connects to was scrolled out of view. A question may take
     the pane's height down to the pane's header. Its last line, the
     destination the confirming button connects to, and its two buttons are
-    one block at its foot that never scrolls (5.6).
+    one block at its foot. The foot does not scroll while the pane is tall
+    enough for its own header, the question's title and the foot; 5.6
+    states that floor and what happens under it.
   - In the mockup: a 294 px pane (four splits) with the longest message has a
     bar of 261 px or less of a 654 px pane, open, and about 90 px closed
     (scenarios `narrow4`, `narrow5`, `barclosed`). Draft 1's was 527 px.
@@ -754,7 +792,8 @@ never takes focus from a terminal when it appears, changes or goes.
     (235 px), 407 px at four and 272 px at two, with every line in view,
     nothing scrolling and the pane's header still showing (scenario
     `question5`). In a pane 384 px high the lines above the foot scroll and
-    the foot stays whole.
+    the foot stays whole. Under about 290 px the whole bar scrolls (the
+    floor, 5.6).
 - When the bar appears, goes or changes form the terminal below is re-fitted,
   as it is for the sub-terminal notice.
 - **Mouse:** every button calls `preventDefault` on `mousedown`, so a click
@@ -799,11 +838,13 @@ started with other arguments**: the stub's record "whose last argument is
 arguments … given another host". A session then works, to a host other than
 the one in the pane's header. The image is judged **once**, so what is known
 is what was seen then, not what runs now. So the message says what was
-observed, in the past tense, names all three cases, and says nothing else
-(reviews U-B1 and U2-M3):
+observed, in the past tense, names all three cases, and states nothing else
+as fact (reviews U-B1 and U2-M3). The title keeps the body's qualifier,
+"with the arguments it gave", which is what makes it true of the third case
+(re-check U3-m4):
 
 > **ssh not confirmed: the program Better Terminal saw in this pane was not
-> one it recognises as ssh**
+> one it recognises as ssh with the arguments it gave**
 > When Better Terminal looked, the program in this pane was not one it
 > recognises as ssh with the arguments it gave. It may be a local program,
 > your own ssh wrapper (in which case the session works), or ssh started
@@ -996,7 +1037,10 @@ is drawn from the held check (`why`, `shown`, `pane`, `now`):
 
   ("Connect to what it holds now" when the server has gone back to the
   pane's own destination; the sentence then ends "It is the same as what
-  this pane was last started for.")
+  this pane was last started for.") **"Connect with the new identity file"**
+  when the identity file is the only member in which what the server now
+  holds differs from what this pane was last started for: the destination
+  boxes then read the same (re-check U3-m3).
 
   **What a question shows, and how it is laid out** (9.3; reviews U2-B1 and
   U2-M1):
@@ -1011,14 +1055,39 @@ is drawn from the held check (`why`, `shown`, `pane`, `now`):
     the characters of two destinations stand under each other.
   - **The last line is the destination the confirming button connects to,
     and the two buttons come straight after it.** That line and the buttons
-    are one block, the question's foot, which never scrolls and is never
-    separated: the confirming button is not in view without the whole
-    destination it connects to (review U2-M1).
+    are one block, the question's foot, which is never separated and, in
+    a pane above the floor stated below, never scrolls: the confirming
+    button is not in view without the whole destination it connects to
+    (review U2-M1).
   - **A question is not held to the bar's two-fifths bound** (5.3). It may
     take the pane's height down to the pane's header, which stays. The pane
     is ended, so its terminal takes no input, and its output is back as soon
     as the question is answered. Only in a pane too short for the whole
     question do the lines above the foot scroll.
+  - **The foot has a floor** (re-check U3-m1). The foot does not scroll
+    while the pane is at least as high as its own header, the question's
+    title and the foot together. In the mockup that is about 290 px for
+    the three-line question with 64-grapheme destinations in a pane 235 px
+    wide (five splits); it is more for longer destinations (the re-check
+    measured about 455 px at that width for the longest the rules allow,
+    323 graphemes). **Under the floor the whole bar scrolls, and two rules
+    hold:**
+    - **The confirming button is not enabled until the last line, the
+      destination it connects to (with its key path, when one is shown), is
+      whole in view.** While it is not enabled it is drawn dimmed and stays
+      in the Tab order (`aria-disabled="true"`); a press on it does
+      nothing; and a line under the buttons, which is also the button's
+      description, says why: "Scroll until the whole destination is in view
+      to connect." It is enabled as soon as that line is whole in view,
+      after a scroll or when the pane grows.
+    - **When the question appears, the bar is scrolled to the start of that
+      last line, not to Cancel.** Focus is still on Cancel, given without
+      scrolling to it, so in the shortest panes Cancel can have focus while
+      it is below the fold; Enter there cancels.
+    - Not covered, and stated: a pane so short that the last line cannot be
+      whole in view at any scroll position. The confirming button then
+      stays not enabled until the pane is made taller (a split closed, the
+      window enlarged). Cancel works throughout.
 
   Enter and Space press the focused button only.
   **Cancel** drops the held press and returns to the bar the list now gives
@@ -1027,13 +1096,19 @@ is drawn from the held check (`why`, `shown`, `pane`, `now`):
   confirming press reads the list once more; if it changed again, the
   question is asked again with the new lines. No connect request is made
   until a confirming press finds the list as the question showed it. The
-  question has no timer and is always open.
+  question has no timer and is always open. **When the bar is drawn again
+  and the row no longer equals the check's `now`, the held press is
+  dropped**, as in the list (4.9; re-check U3-m2): the bar is the one the
+  list now gives, and the user presses Reconnect again and gets a fresh
+  check.
 - **`gone`, `problem`, `unreadable`:** the list was read, so the bar is now
   row 3, 4 or 2, with no Reconnect. Its details begin "You pressed Reconnect,
   and nothing was started." Focus that was on Reconnect goes to the pane.
 - **Announced** (section 11), since a press that visibly does nothing must
   say so: "…: the saved server changed as you pressed Reconnect. Nothing was
-  started. It now holds DESTINATION. Cancel has focus."
+  started. It now holds DESTINATION. Cancel has focus." When the identity
+  file is among what differs: "It now holds DESTINATION with key PATH." (or
+  "with no identity file"; re-check U3-m3).
 - A second press while one is in flight makes no request and no list read
   (the design's per-pane mark).
 
@@ -1043,10 +1118,12 @@ bar's messages use the server's current name.
 ### 5.7 A split of a server tab (SV-3 AC5)
 
 The new pane is a local shell in the home folder, exactly as today, with no
-remote mark. **Whether its header carries a chip of its own is open for the
-owner** (question O2; review U-M7, and the delta review's note on it).
+remote mark. **Its header carries no chip: the owner's answer to question O2
+(2026-11-19).** In a split server tab the other panes carry no label; only
+the server pane is marked (the server glyph, the state word and the
+destination).
 
-**Designed, and recommended: no chip.** The other panes of a server tab look
+**No chip.** The other panes of a server tab look
 exactly as a local pane looks today: the pane number and the folder. The
 server pane is the one that is marked (`▣ SERVER`, its state, its
 destination, and no folder), so the panes are told apart by the mark on the
@@ -1054,12 +1131,14 @@ server pane and by its absence elsewhere, which is what SV-3 AC5 asks for
 ("with no remote mark"). The pane's accessible name is **"A shell started in
 FOLDER"**, the one thing Better Terminal knows about it.
 
-Every wording tried for a chip is wrong in the same case, the user typing
-`ssh` by hand in that pane. `LOCAL` (draft 1) then reads as where the keys
-go, and is false. `NOT A SAVED SERVER` (draft 2) can be read as a statement
-about the host, and is untrue if the `ssh` typed there is to a saved
-server's host. `LOCAL SHELL` says what was started and is still read as
-"local". Question O2 sets the four choices side by side.
+**The alternatives considered, and not chosen** (the designer's account of
+them, from review U-M7 and the delta review's note on it): three wordings
+for a chip on the other panes. Each is wrong in the same case, the user
+typing `ssh` by hand in that pane. `LOCAL` (draft 1) then reads as where the
+keys go, and is false. `NOT A SAVED SERVER` (draft 2) can be read as a
+statement about the host, and is untrue if the `ssh` typed there is to a
+saved server's host. `LOCAL SHELL` says what was started and is still read
+as "local". None of them is designed or drawn.
 
 File paths are links in the other pane and plain text in the server pane. A
 sub-terminal of a server tab is a local view and shows nothing new.
@@ -1625,17 +1704,17 @@ focus ring is true in all of them.
   |---|---|
   | a client start | WHO: started. ssh not confirmed. |
   | live | WHO: ssh running. |
-  | hand-over message, another program | WHO: ssh not confirmed. The program Better Terminal saw in this pane was not one it recognises as ssh. It may be for another host than the one shown. Check the prompt before you type. With this pane active, End is in the command palette. |
+  | hand-over message, another program | WHO: ssh not confirmed. The program Better Terminal saw in this pane was not one it recognises as ssh with the arguments it gave. A session in it may be for another host than the one shown. Check the prompt before you type. With this pane active, End is in the command palette. |
   | hand-over message, not yet | WHO: ssh not confirmed after 30 seconds. With this pane active, End is in the command palette. |
   | `ssh` ended | WHO: ssh ended, exit status N. With this pane active, Reconnect is in the command palette. (Without a status: "ssh ended.") |
   | ended before `ssh` was seen | WHO: ended before ssh was seen to start, exit status N. … (Without a status: "…to start.") |
   | possibly no SSH client | WHO: the pane's program ended with status 127 before ssh was seen to start. There may be no SSH client on your PATH. … |
   | End pressed | WHO: ended by you. With this pane active, Reconnect is in the command palette. |
-  | a Reconnect held, changed as pressed | WHO: the saved server changed as you pressed Reconnect. Nothing was started. Host differs from what Reconnect was showing. It now holds DESTINATION. Cancel has focus. |
-  | Reconnect… pressed | WHO: Reconnect would go to a different destination, DESTINATION. Host differs. Nothing was started. Cancel has focus. |
+  | a Reconnect held, changed as pressed | WHO: the saved server changed as you pressed Reconnect. Nothing was started. Host differs from what Reconnect was showing. It now holds DESTINATION. Cancel has focus. (When the identity file is among what differs: "It now holds DESTINATION with key PATH.", or "with no identity file".) |
+  | Reconnect… pressed | WHO: Reconnect would go to a different destination, DESTINATION. Host differs. Nothing was started. Cancel has focus. (When the identity file is among what differs: "…destination, DESTINATION with key PATH. Identity file differs.", or "with no identity file".) |
   | a Reconnect held, gone, failing or unreadable | DESTINATION: Reconnect was not sent. The saved server no longer exists. (or "failed its checks.", "The server list could not be read.") Nothing was started. |
   | a Reconnect refused by the start | WHO: Reconnect was refused. Nothing was started. |
-  | a Connect held, changed | WHO: this saved server changed since it was shown. Nothing was started. Host differs. It was showing DESTINATION. |
+  | a Connect held, changed | WHO: this saved server changed since it was shown. Nothing was started. Host differs. It was showing DESTINATION. (When the identity file is among what differs: "It was showing DESTINATION with key PATH. It now holds key PATH."; "with no identity file" and "no identity file" where there is none.) |
   | a Connect that started nothing | Nothing was started. *and the strip's words* |
   | saved, removed | Saved “NAME”. / Removed “NAME”. |
   | the server pane of a tab was closed | The tab is now a local tab named Terminal. |
@@ -1683,14 +1762,14 @@ token values of the nine presets in `src/stores/settingsStore.ts`, with
 nine presets, and the preset it falls in. **Draft 2 adds no token and no new
 colour pair**: its new elements (the Less and More button, a cut
 destination's button, the withheld-destination box, the held block, the
-reasons list, the other pane's chip) reuse the pairs below, so these numbers
+reasons list) reuse the pairs below, so these numbers
 are draft 1's, which the review recomputed independently and found to match.
 The one removed row is the pulse's low point: nothing pulses now.
 
 | Pair | Min | In | Needs |
 |---|---|---|---|
 | state words (`--srv-text`) on the pane | 6.01 | One Dark | 4.5 |
-| chip outline on the pane (`SERVER`; and a chip on the other panes, if the owner chooses one, O2) | 3.36 | One Dark | 3 |
+| chip outline on the pane (`SERVER`) | 3.36 | One Dark | 3 |
 | tab glyph on the tab bar (inactive tab) | 5.62 | GitHub Dark | 3 |
 | tab glyph on a hovered tab | 4.86 | Solarized Dark | 3 |
 | tab glyph on the active tab | 6.57 | One Dark | 3 |
@@ -1900,6 +1979,60 @@ by pressing Less; there is no negative control for the 23 messages; a held
 Reconnect with an unreadable list has no scenario of its own (the bar it
 gives is the `unreadable` scenario's, with its first sentence changed).
 
+**Added in draft 4** (re-check U3-m1 to U3-m4 and U3-m8; 21 checks, so
+512 in all; no scenario is added, the 65 stand):
+
+- **A comparison where only the port differs** (none to 2222), in the list
+  and in the bar's question: both sides whole, they read differently, and
+  the sentence is "Port differs."
+- **A redraw under a held block** (4.9): a row is held with its host
+  changed; another program changes it again (host back, another user); a
+  held press on another row draws the list again. The first row's held
+  press is gone, the row has its plain Connect and shows what it now holds,
+  and no connect request was made.
+- **The identity file in the words** (4.9, 5.6, 11): with only the identity
+  file changed the confirming button reads "Connect with the new identity
+  file", in the list (with its accessible name) and in the bar's question;
+  the announcement carries the key paths, whole, or "no identity file";
+  with a host changed the button and the announcement are as before; with
+  the identity file and the user changed the button is "Connect to the new
+  destination" and the key is announced.
+- **The floor** (5.6): the three-line question at 235 px wide in a pane
+  about 250 px high and in one about 194 px high. The bar scrolls and is
+  put at the start of the last line, not at Cancel; the start of the
+  destination is in view; focus is on Cancel; the pane's header stays. At
+  the top, the middle and the end of the bar's scroll the confirming button
+  is enabled exactly when the last line is whole in view, and carries its
+  reason when it is not; a press on it while it is not enabled makes no
+  connect request. Above the floor it is enabled and no reason shows.
+- The "another program" title and announcement, with their new words.
+
+**Negative controls added in draft 4**, each on a copy with the fault put
+in, each failing as it should: the IPv6 rule taken out of the cut; the
+quote rule taken out; the confirming button always enabled; the bar not
+placed (focus scrolls to Cancel); the held press not dropped at a redraw
+(the block then says "Host differs." over two destinations with one host).
+
+**What stays unchecked**, beside the gaps above:
+
+- The palette sweep runs against the mockup's 15 stand-ins for today's
+  entries. The re-check ran it against the real component's 33 fixed labels
+  and it held; the component's dynamic entries (themes, `Switch to:` a tab)
+  were not enumerated by either.
+- The palette's stated limit (section 3: "connect" then Enter; "end" with
+  no matching server) is stated and not asserted.
+- There is no negative control for the two-character indent of a wrapped
+  box.
+- The held press dropped at a redraw is exercised in the list only. In the
+  bar (5.6) the same rule is in the mockup's code and no scenario or check
+  reaches it.
+- The floor is checked at one width, two heights and 64-grapheme
+  destinations. The longest destinations the rules allow, a pane in which
+  the last line can never be whole in view, and a pane that grows while
+  the question is open are not checked.
+- A port-only comparison is checked for none to 2222 only (the re-check
+  also tried 22 to 2222 and none to 22 by hand).
+
 **Not in the mockup:** a real terminal (the pane is drawn text, and its hidden
 textarea stands in for xterm's, so the blank line on Reconnect and a re-fit
 are drawn, not exercised); the sub-terminal strip's own entry; the rename box;
@@ -1921,11 +2054,14 @@ owner approved on 2026-11-18: A2 to A5, A7, A8 and the contract points of
 U-M10. Written into the PRD at revision 9, so no longer asked of the product
 manager: SV-3 AC4's sentence for every connect request, and SV-5 AC4's row
 for "could not start a terminal" with its `cause`. Resolved in this draft:
-A9 (the form's preview is dropped). **Still open: for the owner, O2 only;
-for the product manager, P8, P9 and P11 (each changes what an approved
-criterion says), P3 to P6 and P10; for the architect, A6 (now one line of
-style, not a dependency), A10, A12, A13, A14 and A15.** None of them stops
-the rest of this spec being built as written: each has a stated default.
+A9 (the form's preview is dropped). **Answered by the owner on 2026-11-19:
+O2, no chip. Nothing is open for the owner. Still open: for the product
+manager, P8, P9 and P11 (each changes what an approved criterion says), P3
+to P6 and P10; for the architect, A6 (one line of style in the palette, not
+a dependency), A10, A12, A13, A14 and A15.** **No story waits on any of
+them: each has a stated default, and the stories are cut to the defaults.**
+"If an answer differs from the default", below, says which stories would
+change.
 
 ### Answered since draft 1
 
@@ -1947,18 +2083,25 @@ the rest of this spec being built as written: each has a stated default.
 | | how an identity-file path is shown | **the owner (2026-11-18)** | A path starting `~/` is shown in its `~/` form everywhere; the home folder's path never reaches the page (5.6, 9) |
 | U-M10 | "could not start a terminal" for a closed gate or a second start; the stored refusal; restored against reopened | the design, D-13 (accepted by the owner), `refusal`, D-18; PRD revision 9, SV-5 AC4's `cause` row | `cause` (`start`, `closing`, `pane`) chooses the words; the bar prints what `refusal` carries; two bars by `origin` (5.6, 8) |
 
-### For the owner (open)
+### For the owner: none open. O2 is answered
 
-| # | Question | What each answer costs | Recommendation |
+**O2, the chip on the other panes of a server tab: no chip** (the owner,
+2026-11-19). In a split server tab the other panes carry no label; only the
+server pane is marked (the server glyph, the state word and the
+destination). It is what 5.7 designs and the mockup draws (`split`). The row
+below is kept as the record of what was asked: the alternatives considered,
+(a) to (c), are not designed and not drawn.
+
+| # | Question, as asked | What each answer was said to cost | The designer's recommendation, as asked |
 |---|---|---|---|
-| **O2** | **The chip on the other panes of a server tab.** Draft 1 put `LOCAL` on every pane of a server tab that is not the server pane. The case that tests every wording: the user types `ssh` by hand in that pane. Four choices: (a) `LOCAL`; (b) `NOT A SAVED SERVER`; (c) `LOCAL SHELL`; (d) no chip. In all four the pane's accessible name is "A shell started in FOLDER", which states only what Better Terminal knows | **(a) `LOCAL`.** After a hand-typed `ssh prod` it reads `LOCAL` beside a pane that reads `SERVER`: a positive, wrong statement of where keys go, the mirror of the mistake the chip was meant to prevent. **(b) `NOT A SAVED SERVER`.** True of how the pane was opened, whatever runs in it. But it **can be read as a statement about the host**, and is then untrue when the `ssh` typed there is to a saved server's host (the delta review's cost). It is also a new mark on ordinary panes, which SV-3 AC5 ("with no remote mark") did not ask for, and it is long (about 120 px in a narrow pane). **(c) `LOCAL SHELL`.** It says what Better Terminal started there, which stays true: a hand-typed `ssh` runs under that shell. It is shorter (about 80 px). But it will be read as `LOCAL` is, as "what I type here stays on this computer", and a new mark on ordinary panes all the same. **(d) No chip.** Nothing false and nothing new. The panes are told apart by the server pane's own mark (`SERVER`, its state, its destination, no folder), by the pane numbers and by the folder the other panes show; that is, by the absence of a mark, which a user has to notice | **(d), no chip**, as now designed in 5.7 and drawn in the mockup: it is the only choice that cannot be wrong, and it is what SV-3 AC5 describes. If the owner wants a mark on the other panes, **(c) `LOCAL SHELL`**, with that accessible name. Not (a), and not (b) |
+| **O2** (answered: **(d), no chip**) | **The chip on the other panes of a server tab.** Draft 1 put `LOCAL` on every pane of a server tab that is not the server pane. The case that tests every wording: the user types `ssh` by hand in that pane. Four choices: (a) `LOCAL`; (b) `NOT A SAVED SERVER`; (c) `LOCAL SHELL`; (d) no chip. In all four the pane's accessible name is "A shell started in FOLDER", which states only what Better Terminal knows | **(a) `LOCAL`.** After a hand-typed `ssh prod` it reads `LOCAL` beside a pane that reads `SERVER`: a positive, wrong statement of where keys go, the mirror of the mistake the chip was meant to prevent. **(b) `NOT A SAVED SERVER`.** True of how the pane was opened, whatever runs in it. But it **can be read as a statement about the host**, and is then untrue when the `ssh` typed there is to a saved server's host (the delta review's cost). It is also a new mark on ordinary panes, which SV-3 AC5 ("with no remote mark") did not ask for, and it is long (about 120 px in a narrow pane). **(c) `LOCAL SHELL`.** It says what Better Terminal started there, which stays true: a hand-typed `ssh` runs under that shell. It is shorter (about 80 px). But it will be read as `LOCAL` is, as "what I type here stays on this computer", and a new mark on ordinary panes all the same. **(d) No chip.** Nothing false and nothing new. The panes are told apart by the server pane's own mark (`SERVER`, its state, its destination, no folder), by the pane numbers and by the folder the other panes show; that is, by the absence of a mark, which a user has to notice | **(d), no chip**, as now designed in 5.7 and drawn in the mockup: it is the only choice that cannot be wrong, and it is what SV-3 AC5 describes. If the owner wants a mark on the other panes, **(c) `LOCAL SHELL`**, with that accessible name. Not (a), and not (b) |
 
 ### For the product manager (open)
 
 | # | Question | Recommendation |
 |---|---|---|
 | **P8** | **Three palette entries beyond SV-9 AC2.** SV-9 AC2 names one entry that opens the list and one per saved server. This spec adds `Servers: Show this pane's message`, `Servers: Reconnect this pane` and `Servers: End what is running in this pane`, each present only while it applies to the active pane, in today's category "Panes", after the servers' entries, End last (section 3). Draft 1 had the first two as an assumption; the third is new, and is how a keyboard user in the terminal reaches the bar's text now that the bar can be closed. Without them: Tab never leaves a terminal, so from the terminal the bar's buttons are reached only by the mouse, or by moving focus to the scratchpad or a panel first; End and Reconnect would have no keyboard route from where the user is | Add the three to SV-9 AC2 as entries F7 may add. If only two are accepted, drop "Show this pane's message" last: the title is announced, and the other two act |
-| **P9** | **SV-2 AC9's sentence for the hand-over message needs changing.** It says, of the message for both kinds: "The message says that the shell's start-up files have not handed over to `ssh`, that whatever is running in the pane is still running, that the pane is treated as a server session meanwhile, and that `ssh` typed in a terminal still works." For the kind "not handed over: another program is running" the first clause is not what the message says, and must not be: the PRD itself puts in that kind sessions that work, and `ssh` started with other arguments, perhaps for another host. The "another program" message of 5.4 says what was observed instead. **This is approved text that the UX contradicts, so it is the product manager's to change, not a wording the designer may pick.** No listed test asserts the sentence's words, so no test changes | Replace the sentence with: "**The message says what Better Terminal observed and nothing more.** For 'not handed over yet': that it has not seen the shell hand over to `ssh`. For 'not handed over: another program is running': that, when it looked, the program in the pane was not one it recognises as `ssh` with the arguments it gave, which may be a local program, the engineer's own `ssh` wrapper, or `ssh` started with other arguments and possibly for another host. In both: that whatever is running in the pane is still running, that the pane is treated as a server session meanwhile, and that `ssh` typed in a terminal still works." No rule changes |
+| **P9** | **SV-2 AC9's sentence for the hand-over message needs changing.** It says, of the message for both kinds: "The message says that the shell's start-up files have not handed over to `ssh`, that whatever is running in the pane is still running, that the pane is treated as a server session meanwhile, and that `ssh` typed in a terminal still works." For the kind "not handed over: another program is running" the first clause is not what the message says, and must not be: the PRD itself puts in that kind sessions that work, and `ssh` started with other arguments, perhaps for another host. The "another program" message of 5.4 says what was observed instead. **This is approved text that the UX contradicts, so it is the product manager's to change, not a wording the designer may pick.** No listed test asserts the sentence's words, so no test changes | Replace the sentence with: "**The message states as fact only what Better Terminal observed; what it cannot tell, it gives as possibilities.** For 'not handed over yet': that it has not seen the shell hand over to `ssh`. For 'not handed over: another program is running': that, when it looked, the program in the pane was not one it recognises as `ssh` with the arguments it gave, which may be a local program, the engineer's own `ssh` wrapper, or `ssh` started with other arguments and possibly for another host. In both: that whatever is running in the pane is still running, that the pane is treated as a server session meanwhile, and that `ssh` typed in a terminal still works." No rule changes. (The first sentence is corrected in draft 4, re-check U3-m5: draft 3's "says what Better Terminal observed and nothing more" was a rule its own next clause, and both messages, exceed) |
 | **P11** | **One declaration on the palette row's label** (section 3; with A6). SV-9 AC2 says F7 "adds entries and changes nothing else". For a label with a run of more than about 60 characters that has no space and no hyphen, today's row lets the text run past its right edge. The label's `<span>` needs `overflowWrap: "anywhere"`. It changes no entry, no match, no selection and no order, and it changes how none of today's fixed labels is laid out | Accept it as a change to how a long label is drawn, and say so in SV-9 AC2. If it is refused: the stated limit of section 3 |
 | P3 | The tab switcher shows a server tab's destination. Should its search match it? Today's match is name, folder, project | Yes, host and user, as the palette does. Until decided: name only |
 | P4 | Name and Port are trimmed; Host, User and Identity file are not, so a pasted host with a trailing space is refused (Host, "a character that is not allowed") | Trim all five at save |
@@ -1977,7 +2120,40 @@ the rest of this spec being built as written: each has a stated default.
 | A13 | The held press when a palette entry was pressed "opens the overlay on that row" (design 8.4). Is the list the overlay shows read once for both, so that the row's block and the list agree? | Yes: one read at the press, and the overlay draws from it |
 | A14 | Does `ServerRow` for a failing row keep a member that passed when the summary is withheld (so the filter can match a host that passed while the user failed)? | Yes (the contract's wording). 4.6 does not draw such a member on its own |
 
+### If an answer differs from the default
+
+The stories are cut to the default in the middle column. The story names
+are the design's (its section on stories): W5 is the list overlay, its
+form, the held Connect and the palette entries; W6 is the marks, the bar,
+Reconnect and its question, the hand-over message, the tab menu and the
+close question; W3 holds `requestConnect`; R1 the rules; R2 the store; C1
+the shared dialog.
+
+| # | The default the stories are cut to | If the answer differs, what changes |
+|---|---|---|
+| P3 | the tab switcher's search matches the name only | **W6**: the switcher's search also matches host and user |
+| P4 | as the PRD has it: Name and Port trimmed; Host, User and Identity file not | **R1** (the rules and SV-1 AC1's examples) and the PRD; in **W5** only which message a pasted host with a trailing space gets |
+| P5 | the list has its filter | **W5**: the filter, its Down rule (U15) and its empty state are cut |
+| P6 | "ssh ended (exit status N)" shows the status | **W6**: the title, and the announcement, lose the status |
+| P8 | the three pane entries are in the palette ("Show this pane's message", "Reconnect this pane", "End what is running in this pane") | **W5**: the entries refused are not built. **W6**: the announcements lose "With this pane active, … is in the command palette", and End and Reconnect have no keyboard route from the terminal |
+| P9 | the "another program" message is the one in 5.4 | **W6**: none if the PRD's sentence is changed as proposed (or left: no listed test asserts its words). If the product manager wants the old first clause said, the message's first two sentences are rewritten, and this spec's 5.4 with them |
+| P10 | the title is hedged: "Possibly no SSH client: …" | **W6**: that one title and its announcement |
+| P11, A6 | the palette label's `<span>` gets `overflowWrap: "anywhere"` | **W5**: the declaration is left out, and section 3's stated limit applies (a run of over about 60 characters with no space or hyphen runs off the row). Nothing else in W5 changes |
+| A10 | the bar and a two-row header re-fit the terminal when their height changes | **W6**: the bar and the header's second row would have to lie over the terminal and not move it; 5.2, 5.3 and the floor of 5.6 would be redesigned. The largest change in this list |
+| A12 | a many-tab close counts server tabs in its one question | **W6** (the close question's sentence, 6.1) and **C1**'s caller list |
+| A13 | one list read at a palette entry's press serves both the check and the overlay | **W3** (`requestConnect` and `openServerTab`) and **W5**: a second read, and the dropped-press rule of 4.9 applied at once if the two differ |
+| A14 | a failing row keeps a member that passed when its summary is withheld | **R2** and the contract; in **W5** the filter no longer matches such a row by host or user |
+| A15 | the page compares the pane's destination with the row's four members | **W3** and the contract gain a `differsFromPane` member; **W6** reads it and no longer compares. No visible change |
+
 ## 18. The review of draft 1: every finding, how it is answered, and where
+
+**This table is draft 2's record of how draft 1's findings were answered.
+Where it differs from section 19, from section 20 or from the body of this
+spec, they supersede it** (re-check U3-m7). Four rows are known to be
+stale: U-B1 (the message is now in the past tense and names a third case:
+5.4), U-B2 (a palette row has no box: section 3), U-M7 (no chip, the
+owner's answer: 5.7) and U-m11 (in the palette the label is plain and
+whole: section 3).
 
 | Finding | How it is answered | Where |
 |---|---|---|
@@ -2011,7 +2187,8 @@ the rest of this spec being built as written: each has a stated default.
 ## 19. The delta review of draft 2: every finding, how it is answered, and where
 
 One blocking finding, four majors, ten minors, and two notes that asked for
-text. Nothing else was changed in this draft.
+text. Nothing else was changed in draft 3. Section 20 supersedes this table
+where they differ (the floor of a question's foot, U3-m1; O2, now answered).
 
 | Finding | How it is answered | Where |
 |---|---|---|
@@ -2033,3 +2210,21 @@ text. Nothing else was changed in this draft.
 | The note on **U-M7 / O2**: one cost of "NOT A SAVED SERVER" was missing | The cost is added (it can be read as a statement about the host, untrue if `ssh` is typed there to a saved server's host); "LOCAL SHELL" is offered beside `LOCAL` and no chip; **one recommendation: no chip**, which is now what is designed and drawn; the accessible name is "A shell started in FOLDER" | 5.7; O2; mockup `split` |
 | The note on **P9** | Stated plainly as a change the product manager has to make to SV-2 AC9's sentence, with the wording proposed | 17, P9; 5.4 |
 | The script's gaps | The comparison, the question's lines in view and the palette are now checked, each with a negative control; what is still not checked is listed | 16 |
+
+## 20. The re-check of draft 3: every finding, how it is answered, and where
+
+The re-check passed draft 3 with eight minors and no blocking or major
+finding. Draft 4 answers each as the re-check resolves it, records the
+owner's approval and the owner's answer to O2, and changes nothing else.
+
+| Finding | How it is answered | Where |
+|---|---|---|
+| **U3-m1**: the question's foot has a floor the spec did not state | The floor is stated: the pane's header, the question's title and the foot must fit the pane (about 290 px in the mockup's five-split case). Under it the whole bar scrolls; the confirming button is not enabled until the last line, the destination it connects to, is whole in view, and says why; the bar is scrolled to the start of that line, not to Cancel. The case it does not cover (the line can never be whole in view) is stated. Checked at about 250 by 235 px and at about 194 px, with negative controls | 5.6; 5.3; 16; the mockup's question in a short pane |
+| **U3-m2**: in the mockup "It now holds" was the live row, so after a second outside rewrite and a redraw the sentence could contradict the boxes | When the list is drawn again and the row no longer equals the check's `now`, the held press is dropped; the user presses again and gets a fresh check. The same in the bar. The mockup follows, and the check has the re-check's own case with a negative control | 4.9; 5.6; 16 |
+| **U3-m3**: a key-only change was announced without either key path, and its button said "new destination" | When the identity file is among what differs the announcement adds "with key PATH" or "with no identity file" (and, for the list, what it now holds); when it is the only member, the confirming button reads "Connect with the new identity file" | 4.9; 5.6; 11; mockup `heldkey`, `heldkeymid` |
+| **U3-m4**: the "another program" title and announcement were less careful than the body | The title keeps "with the arguments it gave". The announcement keeps it too, and says "A session in it may be for another host than the one shown." | 5.4; 11; mockup `another`, `wrapper` |
+| **U3-m5**: P9's proposed PRD sentence said "and nothing more", which its next clause and both messages exceed | "The message states as fact only what Better Terminal observed; what it cannot tell, it gives as possibilities." The rest of the proposed wording is kept | 17, P9 |
+| **U3-m6**: the palette's stated limit was narrower than what happens | The limit says both things: a server's entry also matches by its fixed words ("connect", "to", "saved as"), so "connect" then Enter starts a connection to the first server in list order; and "end", when no server matches, preselects End, which ends with no question. Each is a press on a visible, selected entry whose label says what it does | 3 |
+| **U3-m7**: section 18 stated draft 1's and draft 2's answers in the present tense | A paragraph at the head of section 18 says that sections 19 and 20 and the body supersede it where they differ, and names the four stale rows | 18 |
+| **U3-m8**: gaps in the check | Added: a port-only comparison; a redraw under a held block; the short pane under the floor; negative controls for the IPv6 rule and the quote rule (and for the three rules draft 4 adds). What stays unchecked is listed | 16 |
+| The owner's answer to **O2** | No chip. Recorded as answered; the other choices remain only as the alternatives considered, and none is drawn | the head of this file; 5.7; 12; 17 |

@@ -121,7 +121,8 @@ button.key { cursor: pointer; min-height: 24px; padding: 3px 5px; color: var(--s
 button.key:hover { color: var(--text-primary); }
 .differs { color: var(--text-primary); font-weight: 600; font-size: var(--text-xs); margin: 3px 0 2px; overflow-wrap: anywhere; }
 /* A question (spec 5.6; review U2-M1) is not held to the two-fifths bound: it may take the pane down to the pane's header. Its foot, the
-   destination the confirming button connects to and the two buttons, never scrolls; only the lines above it do, in a pane too short for all. */
+   destination the confirming button connects to and the two buttons, does not scroll above the floor of spec 5.6; only the lines above it
+   do, in a pane too short for all. Under the floor the whole bar scrolls (askGate). */
 .pane.asking .barslot { max-height: none; overflow-y: auto; }
 .pane.asking .pane-in { flex: 1 0 auto; }
 .pane.asking .term { flex: 1 1 0px; height: 0; }
@@ -131,6 +132,9 @@ button.key:hover { color: var(--text-primary); }
 .srv-bar[data-ask] .more { padding-bottom: 4px; }
 .srv-bar .qfoot .ui-btn { white-space: normal; height: auto; min-height: var(--control-h); padding-top: 4px; padding-bottom: 4px; line-height: 1.25; text-align: center; }
 @container (max-width: 420px) { .srv-bar .qfoot, .srv-bar[data-ask] .more { padding-left: 12px; } }
+/* Under the floor (spec 5.6; review U3-m1): the confirming button is not enabled until the last line is whole in view. */
+.srv-bar .qfoot .ui-btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.srv-bar .qfoot .qgate { margin-top: 4px; }
 ul.why { list-style: none; margin: 2px 0 4px; color: var(--srv-text); }
 ul.why li { padding: 1px 0; overflow-wrap: anywhere; }
 ul.why b { color: var(--text-primary); font-weight: 600; }
@@ -643,6 +647,10 @@ function keyEl(key, o = {}) {
 /* The members of a destination that differ, in the order host, port, user, identity file, and the sentence that names them (spec 9.3). */
 const MEMBERS = ["host", "port", "user", "key"];
 const diffOf = (a, b) => MEMBERS.filter((m) => (a[m] ?? null) !== (b[m] ?? null));
+/* Announced after a destination when the identity file is among what differs: the summaries may read the same (spec 11; review U3-m3). */
+const keySay = (differs, key) => (differs && differs.includes("key") ? (key ? " with key " + cleanText(key) : " with no identity file") : "");
+const keyOnly = (differs) => !!differs && differs.length === 1 && differs[0] === "key";
+const CONFIRM_NEW = "Connect to the new destination", CONFIRM_KEY = "Connect with the new identity file";
 function differsText(list, tail = "") {
   if (!list || !list.length) return "";
   const w = list.map((m, i) => (i ? LABEL[m].toLowerCase() : LABEL[m]));
@@ -742,6 +750,7 @@ function paneDom(p) {
   const head = h("div", { class: "phead" }), bar = h("div", { class: "barslot" });
   const root = h("div", { class: "pane", role: "group", tabindex: "-1" }, bar, h("div", { class: "pane-in" }, head, term));
   root.addEventListener("focusin", () => { const t = tabOf(p); if (t && t.activePane !== p.id) { t.activePane = p.id; markActive(t); } });
+  bar.addEventListener("scroll", () => askGate(p)); new ResizeObserver(() => askGate(p)).observe(root);
   d = { root, head, bar, lines, ta }; PANES.set(p.id, d); return d;
 }
 function markActive(t) { for (const p of t.panes) PANES.get(p.id)?.root.classList.toggle("active", p.id === t.activePane); renderSide(); }
@@ -756,8 +765,8 @@ function drawLines(p) {
   }
   if (!p.remote || p.remote.state !== "ended") d.lines.append(h("div", { class: "ln" }, h("span", { class: "cur" })));
 }
-const T_NOT_SEEN = "ssh not confirmed: the program Better Terminal saw in this pane was not one it recognises as ssh";
-const SAY_NOT_SEEN = ": ssh not confirmed. The program Better Terminal saw in this pane was not one it recognises as ssh. It may be for another host than the one shown. Check the prompt before you type.";
+const T_NOT_SEEN = "ssh not confirmed: the program Better Terminal saw in this pane was not one it recognises as ssh with the arguments it gave";
+const SAY_NOT_SEEN = ": ssh not confirmed. The program Better Terminal saw in this pane was not one it recognises as ssh with the arguments it gave. A session in it may be for another host than the one shown. Check the prompt before you type.";
 const B_NOT_SEEN = "When Better Terminal looked, the program in this pane was not one it recognises as ssh with the arguments it gave. It may be a local program, your own ssh wrapper (in which case the session works), or ssh started with other arguments, which may be for another host than the one shown here. Better Terminal cannot tell which, so check the prompt before you type. Whatever is running in this pane is still running, and Better Terminal leaves it running. This pane stays a server session: file links, the folder and Better Terminal's own typing stay off. " + SSH_STILL_WORKS;
 const T_NOT_YET = "ssh not confirmed after 30 seconds";
 const B_NOT_YET = "Better Terminal has not seen your shell hand over to ssh. Whatever is running in this pane is still running. It may be waiting for an answer from you; or ssh may be running under your shell, in which case the session works and you can go on using it. Better Terminal cannot tell which, so check the prompt before you type. This pane stays a server session: file links, the folder and Better Terminal's own typing stay off. " + SSH_STILL_WORKS;
@@ -772,7 +781,10 @@ function barFor(p) {
     return null;
   }
   /* ended: the control reads the current list (design 8.4's table) */
-  const row = rowById(r.serverId), held = p.held, pressed = held ? "You pressed Reconnect, and nothing was started. " : "";
+  const row = rowById(r.serverId);
+  /* The same rule in the bar (spec 5.6; review U3-m2): the row no longer equals the check's now, so the held press is dropped. */
+  if (p.held && p.held.why === "changed" && !(row && sameDest(rowDest(p.held.now), rowDest(row)))) { p.held = null; delete W.held[p.id]; }
+  const held = p.held, pressed = held ? "You pressed Reconnect, and nothing was started. " : "";
   const openList = { label: "Open saved servers", act: "list", run: () => openList_() };
   if (W.status !== "ok") return { key: "unreadable", tone: "warn", title: "The server list could not be read", body: pressed + (held ? "" : "Nothing was started and nothing was changed. ") + "Reconnect is off until " + FILE_NAME + " in Better Terminal's data folder can be read.", acts: [openList] };
   if (!row) return { key: "gone", tone: "warn", title: "This saved server no longer exists", body: [pressed + "It was removed from your saved servers, so this pane can't reconnect. It was last started for ", { dest: r.summary }, ". Its output stays until you close the pane."], acts: [openList] };
@@ -794,7 +806,7 @@ function barFor(p) {
     return { key: "ask", ask: true, tone: "warn", title: late ? ["“", nm, "” changed as you pressed Reconnect. Nothing was started."] : "Connect this pane to a different destination?", pair, differs,
       body: late ? "Better Terminal read the list again at your press and found a different destination. Go on only if you expected that." : ["The saved server “", nm, "” changed since this pane was last started. Go on only if you expected that."],
       acts: [{ label: "Cancel", act: "cancel", run: () => { p.held = null; delete W.held[p.id]; updatePane(p, { focus: "pane" }); } },
-        { label: sameDest(cur, r.dest) ? "Connect to what it holds now" : "Connect to the new destination", act: "confirm", primary: true, run: () => reconnect(p, { confirmed: cur }) }] };
+        { label: sameDest(cur, r.dest) ? "Connect to what it holds now" : keyOnly(dPane) ? CONFIRM_KEY : CONFIRM_NEW, act: "confirm", primary: true, run: () => reconnect(p, { confirmed: cur }) }] };
   }
   if (!sameDest(cur, r.dest)) { const keys = cur.key !== r.dest.key;
     return { key: "changed", tone: "warn", title: ["The destination of “", nm, "” changed since this pane was last started"], differs: differsText(diffOf(cur, r.dest)), pair: [line("Last started for", r.dest, r.summary, keys), line("Reconnect would go to", cur, row.summary, keys)], body: null, acts: [{ ...rec, label: "Reconnect…" }] }; }
@@ -829,7 +841,7 @@ function updatePane(p, o = {}) {
     d.head.append(h("span", { class: "chip" }, srvIcon(r.state), "SERVER"), h("span", { class: "pstate" }, STATE_WORDS[r.state]), destEl(r.summary));
     d.root.setAttribute("aria-label", "Server session, " + STATE_WORDS[r.state] + ": " + paneWho(p));
   } else {
-    /* The other panes of a server tab carry no chip (spec 5.7; question O2): they look as a local pane looks today. */
+    /* The other panes of a server tab carry no chip (spec 5.7; O2, answered by the owner on 2026-11-19: no chip): they look as a local pane looks today. */
     d.head.append(h("span", { class: "cwd" }, p.cwd || "~"));
     d.root.setAttribute("aria-label", "A shell started in " + (p.cwd || "~"));
   }
@@ -851,8 +863,8 @@ function updatePane(p, o = {}) {
       : h("div", { class: "more", id: mid }, diffEl, b.pair && pairEl(b.pair), b.list && reasonList(b.list), b.body && h("div", { class: "bd" }, parts(b.body)));
     const hasMore = details.childNodes.length > 0;
     const toggle = hasMore && !b.ask && h("button", { type: "button", class: "ui-btn ui-btn--md ui-btn--ghost", "data-act": "more", "aria-expanded": String(!closed), "aria-controls": mid, "aria-label": closed ? "Show the whole message" : "Show less of this message", on: { mousedown: pd, click: () => { p.barClosed = !closed; updatePane(p, { focus: "more" }); } } }, closed ? "More" : "Less");
-    const acts = h("div", { class: "acts" }, b.acts.map((a) => h("button", { type: "button", class: "ui-btn ui-btn--md " + (a.primary ? "ui-btn--primary" : "ui-btn--secondary"), "aria-label": a.aria, "data-act": a.act, on: { mousedown: pd, click: a.run } }, a.label)), b.beside && h("span", { class: "bd beside" }, parts(b.beside)), toggle);
-    const foot = b.ask && h("div", { class: "qfoot" }, pairEl(b.pair.slice(-1)), acts);
+    const acts = h("div", { class: "acts" }, b.acts.map((a) => h("button", { type: "button", class: "ui-btn ui-btn--md " + (a.primary ? "ui-btn--primary" : "ui-btn--secondary"), "aria-label": a.aria, "data-act": a.act, on: { mousedown: pd, click: (e) => { if (e.currentTarget.getAttribute("aria-disabled") === "true") return log("The confirming button is not enabled: the destination it connects to is not whole in view. Nothing was started."); a.run(); } } }, a.label)), b.beside && h("span", { class: "bd beside" }, parts(b.beside)), toggle);
+    const foot = b.ask && h("div", { class: "qfoot" }, pairEl(b.pair.slice(-1)), acts, h("div", { class: "bd qgate", id: "bg-" + p.id }, "Scroll until the whole destination is in view to connect."));
     d.bar.append(h("div", { class: "srv-bar", role: "group", "aria-labelledby": "bt-" + p.id, "data-tone": b.tone, "data-kind": b.key, "data-open": String(!closed), "data-ask": b.ask ? "true" : null },
       h("div", { class: "bh" }, b.tone === "warn" ? warnIcon() : infoIcon(), h("div", { class: "ttl", id: "bt-" + p.id }, parts(b.title)), !b.ask && acts), hasMore && !closed && details, foot));
     if (details.isConnected && details.scrollHeight > details.clientHeight + 1) { details.tabIndex = 0; details.setAttribute("role", "region"); details.setAttribute("aria-label", "Message details"); }
@@ -860,9 +872,24 @@ function updatePane(p, o = {}) {
   /* Focus. A press that asks a question goes to its Cancel. Otherwise a bar that changed under a focused button hands focus to the PANE: never to
      another button (a second Enter would press it) and never into the terminal's input (a second Enter would be typed). */
   const at = (act) => d.bar.querySelector('[data-act="' + act + '"]');
-  if (o.focus) (at(o.focus) || d.root).focus();
-  else if (hadFocus) ((b && prevKey === b.key && hadAct && at(hadAct)) || d.root).focus();
+  /* A question takes focus without scrolling: under the floor the bar is put at the start of its last line, not at Cancel (askGate). */
+  const fo = b && b.ask ? { preventScroll: true } : undefined;
+  if (o.focus) (at(o.focus) || d.root).focus(fo);
+  else if (hadFocus) ((b && prevKey === b.key && hadAct && at(hadAct)) || d.root).focus(fo);
   drawLines(p);
+  if (b && b.ask) askGate(p, true);
+}
+/* The floor of a question (spec 5.6; review U3-m1). When the pane is too short for the title, the foot and the pane's header, the whole bar
+   scrolls. It is then put at the START of the last line (the destination the confirming button connects to), and the confirming button is not
+   enabled until that line, its destination and its key path, is whole in view. Run when the question is drawn, when the bar scrolls and
+   when the pane changes size. */
+function askGate(p, place) {
+  const d = PANES.get(p.id), bar = d && d.bar, foot = bar && bar.querySelector(".qfoot"); if (!foot) return;
+  const lab = foot.querySelector(".pair > span"), line = foot.querySelector(".pairv"), ok = foot.querySelector('[data-act="confirm"]'), note = foot.querySelector(".qgate");
+  if (place && bar.scrollHeight > bar.clientHeight + 1) bar.scrollTop += lab.getBoundingClientRect().top - bar.getBoundingClientRect().top;
+  const v = bar.getBoundingClientRect(), r = line.getBoundingClientRect(), whole = r.top >= v.top - 1 && r.bottom <= v.bottom + 1;
+  ok.setAttribute("aria-disabled", String(!whole)); note.hidden = whole;
+  if (whole) ok.removeAttribute("aria-describedby"); else ok.setAttribute("aria-describedby", note.id);
 }
 function focusBar(p) { const d = paneDom(p); p.barClosed = false; updatePane(p); (d.bar.querySelector('[data-act="cancel"]') || d.bar.querySelector('[data-act="more"]') || d.bar.querySelector("button") || d.root).focus(); }
 function showTab(id, focus = true) {
@@ -947,7 +974,7 @@ function connect(serverId, shown, o = {}) {
     if (LIST) { LIST.msg = msg; LIST.page = "list"; LIST.filter = ""; drawList(); } else openList_({ msg });
     const d = LIST.dlg, at = (sel) => d.querySelector(sel);
     /* The whole row is brought into view: its two buttons, what differs and both destinations. */
-    if (held && held.why === "changed") { focusCellOf(serverId, 0); at('.grow[data-server="' + serverId + '"]')?.scrollIntoView({ block: "nearest" }); say([rowWho(row), ": this saved server changed since it was shown. Nothing was started. " + differsText(held.differs) + " It was showing ", { dest: held.shown.summary }, "."]); }
+    if (held && held.why === "changed") { focusCellOf(serverId, 0); at('.grow[data-server="' + serverId + '"]')?.scrollIntoView({ block: "nearest" }); say([rowWho(row), ": this saved server changed since it was shown. Nothing was started. " + differsText(held.differs) + " It was showing ", { dest: held.shown.summary }, keySay(held.differs, held.shown.dest.key) + "." + (held.differs.includes("key") ? " It now holds " + (row.key ? "key " + cleanText(row.key) : "no identity file") + "." : "")]); }
     else { (at('[data-act="msg"]') || at(".filter") || at("[data-first]") || d).focus(); say(msg ? ["Nothing was started. ", ...[].concat(msg.text)] : "Nothing was started. The server list could not be read."); }
     return;
   }
@@ -1004,7 +1031,8 @@ function reconnect(p, o = {}) {
     const c = res.check, late = c.why !== "changed" || !sameDest(c.shown.dest, rowDest(c.now));
     p.held = c; for (const t of S.tabs) for (const q of t.panes) if (q.remote && q !== p) updatePane(q);
     updatePane(p, c.why === "changed" ? { focus: "cancel" } : {});
-    if (c.why === "changed") say(late ? [paneWho(p), ": the saved server changed as you pressed Reconnect. Nothing was started. " + differsText(c.differs, " from what Reconnect was showing") + " It now holds ", { dest: c.now.summary }, ". Cancel has focus."] : [paneWho(p), ": Reconnect would go to a different destination, ", { dest: c.now.summary }, ". " + differsText(diffOf(rowDest(c.now), r.dest)) + " Nothing was started. Cancel has focus."]);
+    const dP = c.why === "changed" ? diffOf(rowDest(c.now), r.dest) : [], nowKey = c.why === "changed" ? keySay((c.differs || []).concat(dP), c.now.key) : "";
+    if (c.why === "changed") say(late ? [paneWho(p), ": the saved server changed as you pressed Reconnect. Nothing was started. " + differsText(c.differs, " from what Reconnect was showing") + " It now holds ", { dest: c.now.summary }, nowKey + ". Cancel has focus."] : [paneWho(p), ": Reconnect would go to a different destination, ", { dest: c.now.summary }, nowKey + ". " + differsText(dP) + " Nothing was started. Cancel has focus."]);
     else say([fullSum(r.summary), ": Reconnect was not sent. ", c.why === "gone" ? "The saved server no longer exists." : c.why === "problem" ? "The saved server failed its checks." : "The server list could not be read.", " Nothing was started."]);
     return;
   }
@@ -1293,6 +1321,9 @@ function drawGrid() {
   const grid = $("#srv-grid", LIST.dlg), rows = listRows(); grid.textContent = ""; grid.setAttribute("aria-rowcount", String(rows.length));
   if (!rows.length) { grid.append(h("div", { class: "empty", role: "status" }, h("p", null, "No saved server matches the filter."))); return; }
   rows.forEach((s, r) => {
+    /* Drawn again with a row that no longer equals the check's now: the held press is dropped, so the sentence and the boxes cannot disagree
+       (spec 4.9; review U3-m2). The user presses again and gets a fresh check. */
+    if (W.held[s.id] && W.held[s.id].why === "changed" && !sameDest(rowDest(W.held[s.id].now), rowDest(s))) delete W.held[s.id];
     const who = rowWho(s), held = W.held[s.id] && W.held[s.id].why === "changed" ? W.held[s.id] : null, kw = W.warn[s.id];
     const btn = (label, c, run, o = {}) => h("button", { type: "button", class: "ui-btn ui-btn--md " + (o.cls || "ui-btn--secondary"), tabindex: r === 0 && c === 0 ? "0" : "-1", "aria-label": (o.aria || label) + " " + who, "aria-describedby": c === 0 ? "gd-" + s.id : null, "data-act": o.act || label.toLowerCase(), "data-col": c, "data-server": s.id, on: { click: run, focus: () => { LIST.row = r; LIST.col = c; } } }, label);
     const dest = destEl(s.summary, { tabindex: "-1" }), keyp = s.key && keyEl(s.key, { tabindex: "-1" });
@@ -1300,7 +1331,7 @@ function drawGrid() {
     for (const [el, col] of [[dest, 9], [keyp, 10]]) if (el && el.tagName === "BUTTON") { el.dataset.col = col; el.dataset.server = s.id; el.addEventListener("focus", () => { LIST.row = r; LIST.col = cellsOf(row).indexOf(el); }); }
     const keys = held && held.shown.dest.key !== (s.key ?? null);
     const acts = held
-      ? [btn("Cancel", 0, () => { delete W.held[s.id]; drawGrid(); focusCellOf(s.id, "edit"); }, { act: "held-cancel", aria: "Cancel the connection to" }), btn("Connect to the new destination", 1, () => connect(s.id, shownOf(s), { confirmed: rowDest(s) }), { act: "held-confirm", cls: "ui-btn--primary", aria: "Connect to the new destination," })]
+      ? [btn("Cancel", 0, () => { delete W.held[s.id]; drawGrid(); focusCellOf(s.id, "edit"); }, { act: "held-cancel", aria: "Cancel the connection to" }), btn(keyOnly(held.differs) ? CONFIRM_KEY : CONFIRM_NEW, 1, () => connect(s.id, shownOf(s), { confirmed: rowDest(s) }), { act: "held-confirm", cls: "ui-btn--primary", aria: keyOnly(held.differs) ? CONFIRM_KEY + " to" : CONFIRM_NEW + "," })]
       : [btn("Connect", 0, () => connect(s.id, shownOf(s)), { aria: "Connect to" })];
     acts.push(btn("Edit", acts.length, () => openForm(s), { cls: "ui-btn--ghost" }), btn("Remove", acts.length + 1, () => askRemove(s), { cls: "ui-btn--ghost" }));
     const heldEl = held && h("div", { class: "gheld", role: "group", "aria-label": "This server changed since it was shown" }, h("div", { class: "gwarn" }, warnIcon(""), h("span", null, "This server changed since it was shown. Nothing was started.")),
@@ -1551,7 +1582,7 @@ const SCENARIOS = [
   ["heldcloud", "Connect held: two cloud hosts that differ at the start", "The two host names differ only in their first label. Both are drawn whole, wrapping, with their boxes one under the other, and the block says that the host differs. A box cut to its end would have drawn the same text twice.", async () => { reset(BASE().concat(CLOUD())); openList_(); const shown = shownOf(rowById("c1")); stale("c1", { host: EC2B }); connect("c1", shown); }],
   ["helduser", "Reconnect held: only the user changed on a long host", "Another program changed the user from deploy to root. The question says that the user differs, and both destinations are whole, so the two users can be read.", async () => { reset(BASE().concat(CLOUD({ user: "deploy" }))); await started("quick", "c1"); sshExits(); stale("c1", { user: "root" }); reconnect(activePane()); }],
   ["heldkeymid", "Reconnect held: two key paths that differ in the middle", "The summaries are the same and the two identity files differ in one folder name in the middle of the path. The question says that the identity file differs and shows both paths whole.", async () => { reset(BASE().concat(CLOUD({ host: "db9.example.com", user: "deploy", key: KEYA }))); await started("quick", "c1"); sshExits(); stale("c1", { key: KEYB }); reconnect(activePane()); }],
-  ["question5", "The three-line question at five panes", "At 235 px, three long destinations, each whole and wrapped. A question is not held to the bar's two-fifths bound: it takes what it needs of the ended pane. Its last line, the destination the confirming button connects to, and the two buttons are its foot, which never scrolls.", async () => { await narrow(5, "quick", "c1", BASE().concat(CLOUD())); const p = activePane(); sshExits(p); serverById("c1").host = EC2B; serversChanged("c1"); stale("c1", { host: EC2C }); reconnect(p); }],
+  ["question5", "The three-line question at five panes", "At 235 px, three long destinations, each whole and wrapped. A question is not held to the bar's two-fifths bound: it takes what it needs of the ended pane. Its last line, the destination the confirming button connects to, and the two buttons are its foot, which does not scroll in a pane tall enough for it (about 290 px here). In a shorter pane the bar scrolls to the start of that line, and the confirming button is not enabled until the line is whole in view.", async () => { await narrow(5, "quick", "c1", BASE().concat(CLOUD())); const p = activePane(); sshExits(p); serverById("c1").host = EC2B; serversChanged("c1"); stale("c1", { host: EC2C }); reconnect(p); }],
   ["palettelong", "The palette: a server found by the start of a long host", "Typing ec2-203 leaves one entry: the label is matched whole, so a host told apart by its beginning is found. The label is drawn whole, on as many lines as it needs, with both its ends.", async () => { reset(BASE().concat(CLOUD(), CLOUD({ id: "c2", name: "web 2", host: EC2B }), LONGS[0])); openPalette("ec2-203"); }],
   ["palettessh", "The palette: “ssh” typed over a working session", "A session that works behind an unconfirmed mark, with its message showing. Typing ssh preselects “Open saved servers”, the first of F7's entries. End and Reconnect are in today's category Panes and come last, so no query that names the feature preselects them.", async () => { reset(); await started("wrapper"); openPalette("ssh"); }],
   ["closedremote", "Closing the server pane of a split tab", "After the question, the tab keeps its other pane, is renamed “Terminal” and is a local tab again: its menu has Duplicate and Move to New Window.", async () => { reset(); await started("quick"); split(); const t = activeTab(); t.activePane = t.panes[0].id; showTab(t.id); closePane(); }],
