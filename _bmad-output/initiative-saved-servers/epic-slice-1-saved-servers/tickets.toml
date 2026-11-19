@@ -1,0 +1,827 @@
+# F7 slice S1: sixteen stories, in the design's build order (no two in parallel unless the story's `after` allows it).
+# Build order: c1, r1, w1, d1; then r2, r3a, w2, w4; then r3b, r6, w3a, w3b; then r4, w5, w6; then r5.
+# Design: docs/superpowers/specs/2026-11-18-saved-servers-design.md (section 17 is the story list and the criterion map).
+# PRD: docs/prd.md F7 revision 10, SV-1 to SV-9 (the criterion text is the PRD's; each entry names its criteria by id and the
+# PRD location of the item). Contracts: .ade/context/saved-servers.md, .ade/context/server-panes.md (both approved 2026-11-18).
+# Merges second: .ade/context/f7-merges-second.md. Mirror items: the S1 stories r2 (SV-5 AC8, availability), r6 (SV-5 AC7, the
+# outward name) and w3a (SV-5 AC8, serversAvailable), phone-watch ticket 8 and F1 ticket e29.
+#
+# Owner rule (in this epic file, "Coverage"): each S1 criterion has exactly one owning story, the last story in build order that
+# delivers one of its named tests. Earlier stories deliver their named tests as partial deliveries, marked "partial, owner <id>", and
+# are not Done for that criterion.
+#
+# Verification command in force (docs/architecture.md, "In force", seven lines, each from the repository root, each exits 0):
+#   npx tsc --noEmit
+#   npm test
+#   cd src-tauri && cargo test
+#   cd relay && cargo test
+#   cd mobile && npx tsc --noEmit && npx jest
+#   cd src-tauri && cargo check -p ade-hook
+#   cd src-tauri && cargo test -p ade-hook
+# Extra gate for r3a, r3b, r4 and r5 (docs/architecture.md, "F7 stories that start processes"): a green run of both backend CI jobs,
+# "Backend (cargo test)" (Linux, ubuntu-22.04) and "Backend on macOS (cargo test)", on the story's final commit, cited by the
+# procedure of F1's gate, item 4, applied to these two jobs. Every counted run has attempt 1.
+
+[[entry]]
+id = "c1"
+type = "story"
+title = "The shared dialog components"
+description = '''F7 slice S1, story 1 of 16. Design section 22 (story C1), section 17 (order: first, with R1, W1 and D1). It delivers no PRD criterion of its own: it is the shared confirm dialog that SV-1 AC3 (story w5) and SV-3 AC6 (story w6) rely on, and it changes existing behaviour for every caller, which F7.9 and the PRD's revision 9 say.
+
+Summary. ConfirmDialog joins the Escape stack, gains its role, labels, a focus trap and focus return, and loses its window-level Enter. useFocusTrap skips tabindex -1 controls and the trap that acts is the last-mounted one whose dialog holds focus. No key handler on the buttons, no new dependency (no user-event).
+
+Decided (the owner, 2026-11-18, D-15): Enter activates the focused button only, and focus opens on Cancel, for every caller, today's five close questions included. Story c1 is the one place this rule is built. There is no enterConfirms prop.
+
+Build, test first:
+1. The change list of design section 22, in its order: (a) ConfirmDialog calls useEscapeToClose(onCancel) and drops its own Esc handling; (b) the panel gets role alertdialog, aria-modal true, aria-labelledby (title) and aria-describedby (message), ids from useId, tabIndex -1; (c) it calls useFocusTrap on its panel and gives focus back to the opener on closing when the opener is still in the document and focus is not elsewhere; (d) the window-level Enter handler is removed, and the two buttons are type button with onClick only, no key handler anywhere; (e) useFocusTrap's selector excludes [tabindex="-1"]; (f) useFocusTrap keeps a module-level stack and the trap that acts on Tab is the last-mounted one whose dialog holds focus, with the two fallbacks of section 22 (focus on the page: the last-mounted trap brings it back; focus outside every dialog: none acts).
+2. Tests (design section 22, the C1 test table), written first, in the files named under Files.
+
+Acceptance (the tests that pin this story; each is a named test):
+(1) Esc over a panel that uses useEscapeToClose: the question's onCancel once, the panel's onClose not at all; a second Esc closes the panel.
+(2) role alertdialog, labelled by the title, described by the message.
+(3) Tab and Shift+Tab cycle between Cancel and the confirm button, also when the question sits in a panel with its own trap.
+(4) A click on Cancel calls onCancel once and never onConfirm; a click on the confirm button calls onConfirm once.
+(5) An Enter key-down sent to window, to the panel, to the focused Cancel and to the focused confirm button calls neither onCancel nor onConfirm; both controls are enabled button elements of type button.
+(6) A source test: ConfirmDialog.tsx holds no keydown, onKeyDown, onKeyUp or onKeyPress.
+(7) Focus opens on Cancel; on closing focus returns to the opener when it is still in the document.
+(8) useFocusTrap, a grid with one roving stop: Tab from the real last stop goes to the first; a tabindex -1 button is never a stop.
+(9) useFocusTrap, two nested traps: with focus in the inner dialog only the inner trap moves focus; after it unmounts the outer acts again.
+(10) useFocusTrap, a second dialog mounted while a question is open, outside it: with focus still in the question, Tab from its last stop goes to its first; with focus moved into the second dialog, Tab cycles there and the question's trap does nothing; Esc calls the second dialog's handler and not the question's onCancel.
+(11) Through App's wiring: an Enter key-down on window straight after the close question opens leaves the tab open (this is red on today's code, which confirms from the window, and it pins change 4).
+(12) The existing tests stay green and unchanged: SwitchConfirm, MethodologyPrompt, useEscapeToClose, useGuardedClose, and the three other files that render ConfirmDialog (closeConfirm, SubTerminalStrip, CommandPalette).
+
+Files (the design read these on this branch: src/components/ConfirmDialog.tsx, src/components/useEscapeToClose.ts, src/components/useFocusTrap.ts, src/hooks/useGuardedClose.ts, App.tsx at its ConfirmDialog render site, the five questions of design section 22's table):
+- src/components/ConfirmDialog.tsx (changed)
+- src/components/useFocusTrap.ts (changed)
+- src/components/useEscapeToClose.ts (read; expected unchanged)
+- src/components/__tests__/ConfirmDialog.test.tsx (new, expected name)
+- src/components/__tests__/useFocusTrap.test.tsx (new or extended, expected name)
+- src/__tests__/closeConfirm.test.tsx (extended for item 11; expected name, the design names it)
+- App.tsx (read at the render site, line 449 on main; expected unchanged)
+
+Dependencies. None (after = []). Stories r1, w1 and d1 may run beside it; w5 and w6 depend on it.
+
+Contracts. Reads .ade/context/saved-servers.md only for the dialog's use by W5 and W6. Records nothing new in the Context Store.
+
+Out of scope. The F7 components themselves (the list, the marks, the palette): stories w5 and w6. The five questions' texts. Any change to useEscapeToClose's own behaviour (not changed by C1; section 22 says Esc goes to the dialog opened last). A methodology prompt's Esc order over a question (section 22 states it, does not fix it). No new dev dependency. The user guide's sentence on closing: the guide change is written in this story as the design's C1 note says, in the same change, only for the sentence that says Enter confirms a close (docs/guide/terminal.md; PRD F7.11, "The user guide, with S1", Closing).
+
+Notes for the developer. jsdom does not turn Enter on a focused button into a click, so the test asserts what the component owns (no handler), not the platform's click. The manual check, which does not gate Done: with something running in a pane, Cmd+W then Enter leaves it open; Cmd+W, Tab, Enter closes it once.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (12) appear by name in the npm test output and pass. No CI gate: this story starts no process."
+covers = []
+after = []
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "r1"
+type = "story"
+title = "Rules with reason codes, the quoter, the grammar, the kinds and the wire types"
+description = '''F7 slice S1, story 2 of 16. INFRASTRUCTURE (Rust, pure): nothing else in S1 can be checked without it. It builds the rules every later Rust story calls, the one quoter, the one grammar, the twelve kinds and every type that crosses to the webview, with their checked-in fixtures. It starts no process, adds no command to lib.rs and reads and writes no file. Design sections 6, 7, 2.3, 9 (the log rules), 10 (the fixtures table) and 17 (row R1). Contracts: .ade/context/saved-servers.md (the record, the 23 reason codes, the kinds) and .ade/context/server-panes.md. ADR 0043 (the new crate is recorded there).
+
+Partial deliveries (their criteria are owned by later stories; the tests named here are the Rust and pure halves):
+- SV-1 AC1 (owner w5, which adds the form messages): the Rust table of rules.rs, every reason reached.
+- SV-2 AC1 (owner r4): the grammar table and the home-folder rows, as pure tests.
+- SV-7 AC1 (owner r4): no -o, -F, -J, -A, -X, -t, -v, -L, -R, -D, no user@host form and no remote command in any grammar.
+- SV-7 AC2 (owner r4): the hostile fixture, pure half.
+- SV-7 AC3 (owner r4): the quoter table and Word.
+- SV-5 AC4 (owner r5): the twelve kinds, their JSON and the 23 pairs in kinds.json, the redacting Debug.
+- SV-9 AC1 (owner w5): the summary and order tables.
+
+Build, in this order, each piece test first:
+1. The crate: unicode-normalization added to src-tauri/Cargo.toml with its lock file committed in the same change (CI builds with --locked). ADR 0043 cites it. The test is that cargo test --locked builds.
+2. quote.rs: Word has exactly two makers, Word::saved(&str) (a saved value is checked by check() first; the type takes the home folder's bytes only through under_home, design 2.3) and Word::under_home(home: &OsStr, rest) (the home folder's bytes followed by the saved value after ~). shell_quote(&Word) -> OsString works on bytes: maximal runs without ' or \ are single-quoted, and each of those two bytes is escaped outside quotes. The Rust test reads src/lib/shellQuote.cases.json with include_str! (new file; the rows: empty, plain words, every character 0x20-0x7e, runs of ' and \, a leading and a trailing quote, a space, non-ASCII: /Users/Zoë Q/.ssh/id, a CJK path, an emoji path, a path with ' beside a non-ASCII letter). The TypeScript test src/lib/__tests__/shellQuote.test.ts asserts the existing TypeScript quoter against the same file. A case added for one side is a test on both.
+3. rules.rs: check(input, existing) -> Result<Record, Vec<Failure>>, every field checked, one Failure per failing field, the first matching row of the table, in the order name, host, port, user, identityFile. Failure is one enum of the 23 (field, reason) pairs, serialised { "field", "reason" }; a pair not in the table cannot be built; it holds no value. The reason codes are those of .ade/context/saved-servers.md (empty, too-long, characters, taken, first-character, holds-port, not-ipv6, unspecified, not-ipv4, leading-0x, not-a-port, out-of-range, and the rest). existing is an input: the callers decide it (the table in saved-servers.md). The name key is NFC then str::to_lowercase. The name rule calls terminal_open::name_char_ok (terminal_open.rs:180); if that function is private to its module, it is made crate-visible in this story and nothing else in it changes.
+4. rules.rs: the summary [USER@]HOST[:PORT] (an IPv6 host in brackets when a port follows) and the list order (name key, then code points). Pure.
+5. grammar.rs: arguments(record, home: Option<&OsStr>) -> Result<Vec<Word>, Failure>: [-p PORT] [-l USER] [-i FILE] -- HOST, each pair only when its field is set, at most 8 words, -- always present, HOST last. A leading ~/ in the identity file is replaced by the home folder's bytes (Word::under_home), passed as they are. Home unset or empty with a ~/ identity file gives the failure { identityFile, home-unknown }. A record with no identity file, or an absolute one, does not need home. The expanded path exists only in the argument list.
+6. kinds.rs: Kind, one enum, serialised { "kind": "<id>", ...payload }, the twelve ids of design section 7: server-failed-checks (fields: 1 to 5 {field, reason}), list-unreadable, list-not-saved (errno absent or integer), list-full, server-gone, shell-not-supported (shell absent or the base name), not-in-engagement, terminal-not-started (cause always present: start, closing or pane; errno only with start, absent when the library's error holds none), no-ssh-client (status 127), ended-before-ssh (status integer, or absent), not-handed-over-another-program, not-handed-over-yet. An optional member is absent, never null. No variant holds text ADE did not choose, except the shell's base name under section 2.2's rule.
+7. wire.rs: every type that crosses to the webview with its serde shape (rename_all camelCase, deny_unknown_fields on arguments): ServerRow, SaveArgs, SaveResult, RemoveArgs, ConnectArgs, Connected, Destination, EndArgs (section 10). Each has a hand-written Debug that prints the type name and no member; Record, Destination and every error holding one too.
+8. Fixtures, checked in under src/lib/serverFixtures/ (Rust reads them with include_str!): kinds.json (each of the twelve kinds with every payload form, each cause, each of the 23 pairs, and one refusal listing five fields) and commands.json (the arguments of the five commands as the webview sends them; ServerRow whole, minimal, with problems and with withheld members; SaveResult with and without a warning; Connected). Rust: each Kind serialises equal to its row; a thirteenth variant fails; every arguments row deserialises into its struct and an extra member is refused. TypeScript side (in w3a, not here): each row parses as the union.
+9. The hostile fixture src-tauri/src/saved_servers/hostile.json, at least 40 values per field; the pure half (each value refused, or accepted with every character in the field's set) runs in rules.rs.
+10. The static tests (wiring.rs, cfg(test)): sources.list (the checked-in list of every .rs file under src-tauri/src/saved_servers/ that builds or makes a client start, with its inline tests) is checked against the directory: a file not in the list fails. The text test over the listed files: none contains keyring or find_command; the only reference to the vault module is named in the list (none yet in this story, since the reader is r4's). The no-panic scan: outside tests, no unwrap, expect, panic!, unreachable!, assert!, dbg!, println! or eprintln!, except .lock().unwrap(). The redacting-Debug unit test formats each type with {:?} and {:#?} holding markers and asserts none appears. fixture.rs and wiring.rs are test support and exempt from the scan.
+11. mod.rs with the module declarations, and one mod line in src-tauri/src/lib.rs (mod saved_servers;). No command is registered in this story.
+
+Acceptance (each a named test in the design's own words, written first):
+(1) SV-1 AC1, Rust, pure, the rules half: a table of accepted and refused values per field with each refusal naming field and reason: db1.example.com:2222 gives host holds-port; 2130706433 gives host not-ipv4; 022 gives port not-a-port; 0 gives port out-of-range; -l gives user first-character; ~/.ssh/%h gives identityFile a token the SSH client expands. Every reason of the closed list reached by at least one row; one record whose five fields each fail gives five field-and-reason pairs in the order name, host, port, user, identity file. Accepted and refused lists as PRD SV-1 AC1 gives them (db1.example.com, 192.0.2.7, 2001:db8::7, ::ffff:192.0.2.7, staging-db, xn--bcher-kva.example; a second server DB1 when db1 exists; and the refused values of the PRD, including ::, 254-character host, a name with a right-to-left override).
+(2) SV-2 AC1, partial (owner r4), the grammar table: {host db1.example.com, port 2222, user deploy} gives ["-p", "2222", "-l", "deploy", "--", "db1.example.com"]; for every valid record the list has at most 8 arguments and ends "--", HOST; home /Users/Zoë Q with ~/.ssh/id gives the one argument /Users/Zoë Q/.ssh/id; home rel/home gives rel/home/.ssh/id; no home with ~/ gives the home-unknown failure and no list; no home with an absolute identity file gives its list.
+(3) SV-7 AC1, partial (owner r4): no -o, -F, -J, -A, -X, -t, -v, -L, -R, -D, no user@host form, no remote command in any grammar the table produces.
+(4) SV-7 AC3, partial (owner r4): the quoter's table through shell_quote equals the file's expected column (the Rust half); Word has no third maker; wiring: shell_quote is the only function under saved_servers/ that emits a quote character into an instruction.
+(5) SV-7 AC2, partial (owner r4): the hostile fixture's pure half: every value refused or accepted with every character in its field's set; at least 40 values per field.
+(6) SV-5 AC4, partial (owner r5): each Kind serialises equal to its row in kinds.json; a thirteenth variant fails the test; each terminal-not-started cause is in the file, with errno only on start; the 23 pairs in the file match Failure's enum exactly.
+(7) SV-9 AC1, partial (owner w5): the summary table and the order table (name key, then code points) in rules.rs.
+(8) SV-7 AC4, partial (owner r4), the text test and sources.list (written here; r4 adds the vault-reference rows and the vault-index check): a .rs file under saved_servers/ not in sources.list fails; each file in the list is named.
+(9) The no-panic scan and the redacting-Debug test pass, over the files this story creates.
+(10) cargo test --locked builds with unicode-normalization, and the lock file change is in the same commit.
+
+Stop rule. If a row of the PRD's tables gives a different outcome from the one the design and saved-servers.md state, stop and write the difference into the Results; do not pick one.
+
+Files (expected unless marked read):
+- src-tauri/Cargo.toml (changed), src-tauri/Cargo.lock (changed, new crate and its own dependencies)
+- src-tauri/src/lib.rs (changed: one mod line)
+- src-tauri/src/terminal_open.rs (read; name_char_ok made crate-visible only if private)
+- src-tauri/src/saved_servers/mod.rs, rules.rs, grammar.rs, kinds.rs, wire.rs, quote.rs, wiring.rs, sources.list, hostile.json (new)
+- src/lib/shellQuote.cases.json (new), src/lib/__tests__/shellQuote.test.ts (changed: the case-file assertion)
+- src/lib/serverFixtures/kinds.json, commands.json (new)
+- .github/ no change; docs/ no change
+
+Dependencies. After c1 is not required (after = []); it may run beside c1 (the design's order starts them together). Story r2 and everything later need it.
+
+Out of scope. The store (r2), the five commands and their registration (r2 and r4), the client start, the supported shell, the home folder's lookup home_of (r4), the process code of any kind (r3a, r3b, r5), the TypeScript kinds mirror and its test (w3a), the vault reader (r4).
+
+Notes for the developer. Byte-wise quoting: the quoter takes bytes (OsStr), so a non-ASCII home folder works. Read the design's section 2.3 for the Word makers before writing quote.rs.'''
+verify = "The general verification command in force passes on the story's work, with cargo test --locked for src-tauri. The named tests (1) to (10) appear by name in the cargo test output and pass, and the TypeScript shellQuote test (item 4's file) passes in npm test. No CI gate: this story starts no process."
+covers = []
+after = []
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "d1"
+type = "story"
+title = "zsh on the Linux backend CI job"
+description = '''F7 slice S1, story 3 of 16 (DevOps; the design's D1; docs/architecture.md, "F7 stories that start processes", item 2: the runner prerequisite). INFRASTRUCTURE (CI). It delivers no PRD criterion. It makes the Linux Backend job able to run F7's process tests, which fail, and never skip, when zsh or bash is missing (SV-2 AC2). It must be Done before story r4's first step, and before the Linux runs of r3a and r5.
+
+Build. In .github/workflows/ci.yml, the job "Backend (cargo test)" (runs-on ubuntu-22.04), its step "Install Linux dependencies" (lines 108 to 119 on main): add zsh to the apt-get install list, beside the webkit and GTK packages. Nothing else in the workflow changes. The job already has bash; the Frontend job installs zsh and fish for shellQuote.test.ts and is not changed. Add a line to the same step, or a following step, that prints zsh --version and bash --version, so that the run's log shows both shells on the Linux job (this is evidence for the gate; it is not a test).
+
+Acceptance.
+(1) The Linux backend job's install step installs zsh (the change is visible in the workflow file on the story's commit).
+(2) The job's log, on the story's commit, shows the zsh and bash version lines and the job's result.
+(3) No other job, step or test changes.
+(4) The workflow file stays valid YAML (the workflow parses; the check is the CI run itself).
+
+Verification of the story. The general command in force passes on the story's work. Plus one green run of the CI workflow's job "Backend (cargo test)" on the story's final commit, attempt 1, with its log showing the zsh version line. This story is not one of the F7 stories that start processes, so the F7 gate's two-job requirement does not apply to it; QA cites the run by URL in the Verification section.
+
+Files (expected): .github/workflows/ci.yml (changed). docs/ops.md does not exist on main, so no ops note is written; the DevOps role owns docs/ops.md when it is written. ADE's devops agent is the owner of the change.
+
+Dependencies. after = []; it may run beside c1, r1 and w1 (the design's order starts them together). Story r4 depends on it.
+
+Out of scope. Installing fish or any other shell; changing the macOS job (macOS has zsh and bash); any test; any F7 code; the Windows job (SV-8 AC3: no Windows build of F7). Do not weaken or skip a test to get the job green.
+
+Stop rule. If the Linux job's package list cannot install zsh on ubuntu-22.04 with the job's apt source, stop and report it; do not swap the runner image.'''
+verify = "The general verification command in force passes on the story's work. One green run of the CI workflow's job Backend (cargo test) on the story's final commit, attempt 1, cited by URL, whose log shows zsh --version and bash --version output. Not an F7 process story: no two-job gate."
+covers = []
+after = []
+hitl = false
+risk = "low"
+refine = false
+
+[[entry]]
+id = "w1"
+type = "story"
+title = "Records, the server-tab fields and the pure store rules"
+description = '''F7 slice S1, story 4 of 16. Infrastructure-leaning (webview store, pure): the types of a remote pane and of a server tab, the pure helpers every webview story calls, the rename rule and the single update of closePane. It starts no process and sends nothing. Design section 8.1 (records), 8.3 (rename, close of the remote pane), 8.6 (the detach refusal and tabSetEntries), 8.9 (the outward name, the table), 17 (row W1). Contracts: .ade/context/server-panes.md (the record and the helpers), .ade/context/saved-servers.md.
+
+Build, test first:
+1. src/stores/tabStore.ts: Pane gets remote?: RemoteRecord and Tab gets serverNamed?: true, with RemoteRecord exactly as design 8.1 states it (serverId, destination, summary, state, and the never-saved notice, end, refusal and origin). A pane is remote from creation and never becomes local; a local pane never becomes remote.
+2. src/lib/serverTabs.ts (new, pure): paneKind(pane) gives local, connecting, live or ended; remotePane(tab) the tab's remote pane or null; isServerTab(tab) is tab.serverNamed === true || remotePane(tab) !== null; sameDestination(a, b) (design 8.4: host, port, user and identityFile compared as stored, and the summary not compared); outwardName is in step 4.
+3. renameTab(id, name): when name equals tab.name the state is returned unchanged (the same object, so no subscriber fires and no save is scheduled); otherwise it sets the name and removes serverNamed. The rule is in the store, so every route has it (SV-3 AC1's store half).
+4. src/lib/outwardName.ts (new, pure) and src/lib/outwardName.cases.json (new, the table of design 8.9, seven rows). The TypeScript test reads the table. Rust reads the same file in story r6; the file is created here and is not changed by r6.
+5. closePane: when the removed pane is remote, the same set that removes it also removes serverNamed and, only if the mark was set, renames the tab "Terminal" (the name addTab gives). A renamed tab keeps its typed name. closePane reads pane.remote !== undefined from the pane it found before its set (next to where it reads ptyId today, tabStore.ts:522), and passes that fact; in this story the fact is read and not yet used by destroyInstance (story w3b passes it on). One store update only: a subscriber never sees the pane gone with the mark or the server's name still on the tab.
+6. detachTabToWindow (src/lib/detachWindow.ts:19): returns before anything else when isServerTab(tab): no window, no detachTab, the PTY untouched.
+7. tabSetEntries(tabs) -> { entries, leftOut } (pure, in src/lib/tabSets.ts or next to saveCurrentWorkspace's helper, expected name): it drops server tabs and counts them. SettingsPanel.tsx:195-205 calls it (the call is changed in this story; the component is not otherwise changed).
+
+Acceptance (the PRD's criteria, by item, in .../docs/prd.md F7 section SV-3 and SV-5; each test is named as the design names it):
+(1) SV-3 AC7 (owner of the criterion: this story; PRD SV-3 item 7, "When the saved server is renamed or removed while a tab is open"): rename and remove of the server leave the tab's name and mark unchanged (TypeScript, store). The server's rename and remove change no tab: a tab holds the identifier and its own name.
+(2) SV-3 AC9, partial (owner r6; PRD SV-3 item 9): after the sequence Connect, split, close the remote pane, the tab's name is "Terminal", it is not server-named, it holds no remote pane, and tabCwd is the local split's folder; a subscriber never sees a state in which the remote pane is gone and the tab still has the mark or the server's name; with the tab renamed before the close, the typed name is kept; with a marker as the server's name, the marker is in none of the saved session, a tab set saved then, the record a close of the tab leaves for Reopen, and the name Duplicate gives. (The store half of the sequence; the Rust export test is r6's.)
+(3) SV-3 AC1, partial (owner w6; PRD SV-3 item 1): renameTab with an unchanged name returns the same state object; a changed name sets it and removes the mark; both rename boxes already trim (TabBar.tsx:126-131, SettingsPanel.tsx:208-209), and the store test pins the rule for every route.
+(4) SV-3 AC2, partial (owner w6; PRD SV-3 item 2): paneKind returns each of its four results for a local pane, a connecting remote pane, a live one and an ended one; isServerTab for a tab with a remote pane, for a server-named tab with none, and for a local tab.
+(5) SV-5 AC3, partial (owner w6; PRD SV-5 item 3): tabSetEntries drops every server tab from entries and counts them in leftOut; a tab set saved with a server tab in it holds no server tab.
+(6) SV-3 AC8, partial (owner w6; PRD SV-3 item 8): detachTabToWindow called for a server tab opens no window, the tab stays in the main window's store, and its pane's process id is unchanged (src/lib/__tests__/detachWindow.test.ts).
+(7) SV-9 AC1 and the outward table, partial: the seven rows of outwardName.cases.json through the TypeScript function (the Rust side is r6's).
+
+Existing tests this story changes: the View literals gain nothing here (they are the sub-terminal shapes of another initiative); the Pane and Tab literals in the store tests keep compiling because the new members are optional. Run npx tsc --noEmit after the type change.
+
+Files (expected unless marked read):
+- src/stores/tabStore.ts (changed: the types, renameTab, closePane)
+- src/lib/serverTabs.ts (new)
+- src/lib/outwardName.ts (new), src/lib/outwardName.cases.json (new)
+- src/lib/detachWindow.ts (changed: the refusal)
+- src/lib/tabSets.ts (new, or the helper beside saveCurrentWorkspace; expected)
+- src/components/SettingsPanel.tsx (changed: the call to tabSetEntries only, SettingsPanel.tsx:195-205)
+- tests: src/stores/__tests__/tabStore.server.test.ts (new, expected name), src/lib/__tests__/serverTabs.test.ts (new), src/lib/__tests__/outwardName.test.ts (new), src/lib/__tests__/detachWindow.test.ts (changed: one case added), src/lib/__tests__/tabSets.test.ts (new)
+
+Dependencies. after = [] (the design starts W1 with C1, R1 and D1). The Rust reader of the table file is r6. Story w2 depends on this story; r6 and w3a depend on it too.
+
+Contracts. Reads .ade/context/server-panes.md. Records nothing new: the helpers are its own contract, already written there.
+
+Out of scope. ClosedTab and Reopen (w2); session save and restore (w2); destroyInstance's use of the remote fact (w3b); the marks, the menu and the rename boxes' rendering (w6); the Rust side of the outward name (r6). No store change that the saved shape would show.
+
+Notes for the developer. Read design 8.3 for the exact order of closePane's reads: the pane is found and its remote fact read before the set.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (7) pass by name in npm test. No CI gate: this story starts no process."
+covers = ["SV-3 AC7"]
+after = []
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "r2"
+type = "story"
+title = "The store and the list commands"
+description = '''F7 slice S1, story 5 of 16. VERTICAL in Rust for the server list's data (no webview component; the list's form is w5). No process is started. Design section 5 (the store, ADR 0043), 6 (the rules' callers and existing), 7 (the kinds this story reaches), 10 (the three list commands), 11 (availability) and 17 (row R2). Contracts: .ade/context/saved-servers.md ("The record", "Why a value was refused", the kinds). Needs R1 (rules.rs, grammar, kinds, wire.rs, quote.rs and the fixtures).
+
+Build, test first:
+1. store.rs: load(path) -> Result<List, Kind> exactly as design section 5's table states (no file gives an empty list; any unreadable, newer or malformed file gives list-unreadable and nothing is written by any command until it loads; a member other than id and the five is dropped on load; a row whose values fail check is loaded with problems; two rows with one name key: the first keeps its name, each later one gets taken, checked against the rows earlier in the file; more than 200 rows loads and Add is refused). The file is saved-servers.json in the instance's app-data folder, beside vault-index.json, outside state/ (not a persisted key; not exported by ADE sync). Format version 1, as section 5's example.
+2. Mutations add, edit, remove, under one process-wide mutex: load from disk, check, apply, write through state::atomic_write (sibling temp file, fsync, rename). Nothing is cached between calls. add refuses at 200 rows with list-full. A refused check writes nothing (byte-identical file). A failed write returns list-not-saved with the error number when there is one (absent otherwise) and the next load gives the list as it was. After every successful mutation Rust emits the Tauri event servers-changed with no payload to the main window.
+3. Rows for the webview: ServerRow built from the record with problems (each failing field with its reason code, fileIndex) and withheld members: a value that fails its field's rule is left out of the row (a failing name is sent as the empty string). Rows are ordered by the name key then code points, with rows whose name is withheld last. The summary of section 6 is in the row.
+4. identity_warning(path) -> Option<Warning>: std::fs::metadata only, never open; "not found" or "not a regular file". Returned by servers_save beside the saved row, never as a refusal. servers_list returns no warning (section 6).
+5. mod.rs: availability(platform, engagement: bool) (the table of section 11: macOS and Linux with no engagement are available; an engagement gives not-in-engagement; Windows gives no, and the commands are registered only under cfg(unix)); instance_is_engagement() returns the constant false in S1. The three commands servers_list (rejects list-unreadable, not-in-engagement), servers_save (rejects server-failed-checks, list-unreadable, list-full, list-not-saved, server-gone for an edit of a removed row, not-in-engagement) and servers_remove (rejects list-unreadable, list-not-saved, not-in-engagement), each #[tauri::command(async)], each checks that the calling window is main and that availability holds, each takes one serde struct from wire.rs. Registered in lib.rs under cfg(unix). server_connect is not in this story (r4).
+6. The kinds this story reaches, with the log test: server-failed-checks at a save, list-unreadable, list-not-saved, list-full, not-in-engagement. The log test uses a log helper that captures ade.log's lines for the call; it asserts the kind name is logged where design 7's log rule says and that no value appears (or nothing is logged by F7's code: the rule is in section 7, "The log").
+7. sources.list and the wiring test (r1's) updated for the new files in the same commit (store.rs and the rest).
+
+Acceptance (the PRD's text, by item; each test named as the design names it):
+(1) SV-1 AC2, owner of the criterion: a record carrying added members password, options, command and proxyCommand loads to the five fields; after one save through ADE the store holds none of those member names or values (Rust). The grammar built from it has none of their values (the grammar part is r1's; this story asserts the store).
+(2) SV-1 AC4, owner of the criterion: with a corrupt store and with a newer-version store, every write action (add, edit, remove) leaves the file byte-identical and returns the "could not be read" kind (list-unreadable); the 201st add is refused with list-full. A list that cannot be written: with the store's folder made read-only (Unix), an add, an edit and a remove each return list-not-saved, the file is byte-identical, and a load afterwards gives the list as it was.
+(3) SV-1 AC3, partial (owner w5, which adds Remove's question; PRD SV-1 item 3): after an add, an edit and a remove the list holds what was asked (Rust), and a refused save leaves the store byte-identical. The refusal's content is r1's rules; the add/edit/remove tests are this story's.
+(4) SV-1 AC1, partial (owner w5): a save whose five fields each hold a marker and each fail a rule returns five field-and-reason pairs and no marker, and ade.log holds no marker.
+(5) SV-1 AC5, partial (owner r4): identity_warning on a FIFO with no writer, and on a regular file of mode 000, returns (the call does not block; bound 30 s, a generous one), the FIFO case warns "not a regular file", and the saved path is kept. (The client start's half is r4's.)
+(6) SV-5 AC1, partial (owner r6): the store file is in no folder-keyed or ADE-sync key: the sync key list of sync.rs does not name saved-servers.json; markers saved through add are absent from the export of the ade-sync keys (the export is r6's).
+(7) SV-7 AC4, partial (owner r4): vault-index.json is byte-identical after add, edit, remove and a load (the fixture: a checked-in vault-index.json with a marker name).
+(8) SV-5 AC4, partial (owner r5): the log test of the kinds this story reaches (server-failed-checks at a save, list-unreadable, list-not-saved, list-full, not-in-engagement) with the log helper; no marker appears in ade.log.
+(9) SV-5 AC8, partial (owner w5; PRD SV-5 item 8): with the engagement input true, the three commands refuse with not-in-engagement, read no store and write nothing (Rust, pure through availability(platform, true)); the default profile's list is not readable from an engagement, which this story states and whose instance test is the merges-second item below.
+(10) SV-8 AC3, partial (owner w5): availability for macOS and Linux with no engagement is yes; with an engagement is no; for Windows is no (pure, every platform).
+
+CONDITIONAL MIRROR, F7 SV-5 AC8 (engagements; the PRD's F7.11 mirror, "Merges second", D15; written at the S1 sharding 2026-11-19). If F1 ticket e29 (_bmad-output/initiative-personas-and-engagements/epic-profile-and-rule, ticket e29) is merged to main when this story is reviewed, and again before merge if it lands in between, this story also carries SV-5 AC8's instance test: connect instance_is_engagement() to F1's real signal, so that the answer is no by F1 slice 1's gate; then, in A's instance of e29's scenario, a connect request is refused with not-in-engagement and makes 0 client starts (the connect is r4's; this story adds the list commands' refusal), and a marker in the default profile's server list is found nowhere in A's instance. Until e29 is on main, the constant false stays and the S1 test (9) above is the criterion's test. Gate: this story's verification command; F1's side is F1 D28. Item (11) names the carrier; the item passes by name if its condition held at review. Its item in this file is (11).
+(11) CONDITIONAL, SV-5 AC8 instance test (see the mirror above): by name, "a list command in an engagement's instance is refused not-in-engagement and reads no store" and the instance test of e29's scenario, if e29 was on main at review; otherwise the item is not in this story's gate.
+
+Files (expected unless marked read):
+- src-tauri/src/saved_servers/store.rs (new), mod.rs (changed), sources.list (changed), wiring.rs (changed for the list)
+- src-tauri/src/lib.rs (changed: the three commands registered under cfg(unix); the servers-changed emit)
+- src-tauri/src/state.rs (read: atomic_write, state.rs:63-84; not changed)
+- src-tauri/src/sync.rs (read: the key list at sync.rs:36-47; not changed here)
+- src-tauri/src/saved_servers/store_fixtures/ or tests inline (expected; a checked-in vault-index.json with a marker name, and a corrupt, a newer and a 200-row store, built in the test)
+
+Dependencies. after = ["r1"] (rules, kinds, wire types and fixtures). Story r4 depends on this story. It is built after the W1, W2 and W4 group starts in the design's order only where it does not touch them; it touches no webview file.
+
+Contracts. Reads .ade/context/saved-servers.md; records nothing new unless the store's file name or format differs from it (then the story stops and reports).
+
+Out of scope. The client start, server_connect, the supported shell, the hand-over (r4, r5); the form and Remove's question (w5); the webview list store (w3a); the export strip (r6); the Windows build of the commands (not registered, by design).
+
+Notes for the developer. "Byte-identical" means the file's bytes before and after: the test reads the file as bytes and compares. A failed read-only write needs the store's folder mode set back to writable in the test's cleanup, or the temp directory is left behind.'''
+verify = "The general verification command in force passes on the story's work. The named tests (1) to (10) appear by name in cargo test and pass. Item (11) is in the gate only if e29 was on main at review. No CI gate: this story starts no process."
+covers = ["SV-1 AC2", "SV-1 AC4"]
+after = ["r1"]
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "r3a"
+type = "story"
+title = "The remote terminal, its monitor and end"
+description = '''F7 slice S1, story 6 of 16. INFRASTRUCTURE (Rust): the primitive every later process story starts a remote terminal with, and the one routine that ends it. Nothing is shown to the engineer. It starts real processes (fixture programs: sh and the recording stub), so the F7 CI gate applies (docs/architecture.md, "F7 stories that start processes"): the local lines plus a green run of both backend CI jobs on the final commit, zsh on Linux (story d1).
+
+FIRST STEP (before the rest of the story is built, from the design's section 17, R3a): push the fixture terminal and end (the five cases of 1.4 with sh, the last-step case, the stoppable reader) to the branch, and run them on the Linux "Backend (cargo test)" job. Record in the story's Verification section: the set found, the times to "none alive", the kill's time, 0 bytes, the reader's end, with the run's URL. If the ending routine does not hold there (a member missed, a byte written, a process left, the reader not stopping), the story stops and the finding goes to the owner with the architect. It is not patched inside the story.
+
+Design: docs/superpowers/specs/2026-11-18-saved-servers-design.md, sections 1.2 (the four rules, ADR 0045), 1.3 (a process of the pane, in code), 1.4 (the routine, steps 1 to 5, the runs), 1.5 (who calls it; the invariant, the four ways out of the table), 1.7 (the test rows assigned here, and the forking-form fixture), 3.4 (the monitor, one thread, one state machine), 3.6 (the pane's events and the exit status) and 17 (row R3a). Contracts: .ade/context/server-panes.md, .ade/context/terminal-open.md (the exit event and ADR 0014 are edited here, as the design's section 17 says), ADR 0045.
+
+Build, test first:
+1. pty.rs: the remote constructor (a second constructor on PtyInstance with remote: Some(Remote { pane, leader, started, ending, .. })): ADE's own writer (a duplicate of the master's descriptor in a std::fs::File, never the library's take_writer); a stoppable reader (a second duplicate of the master and the read end of a wake pipe, read with poll on both; the instance holds the write end); the instance's remote member. The local constructor and the local terminal's kill are unchanged.
+2. The exit event: PtyEvent's exit carries the three fields for every terminal (kind, by, status), serialised as events.json (the shape of design 3.6). ptysink.rs: an exit that carries the fields, and output without an exit for a remote reader. The context file .ade/context/terminal-open.md and ADR 0014 (the decision file under .ade/context/decisions/0014-*.md) are edited for the new exit shape, in this story only.
+3. The waiter (one thread per remote terminal, blocking on the leader's exit) and the monitor: step's unwatched rows, EndedByUser, GaveUp (so a remote terminal's exit has its final sender here, 3.4). The monitor's two removals, with their test: after a natural exit it removes the terminal, then sends the exit; it never removes a terminal marked ending; it touches nothing when the instance is already gone (design 1.7, the monitor row).
+4. ending::end(table, gate, id) -> Ended (1.4, steps 1 to 5): under the table lock, NotRemote for an absent or non-remote instance, AlreadyEnding at once for a second call; mark ending; read leader, start time and fg; tell the monitor EndedByUser. The set of 1.3 (pure, over a table of rows, with the start-time check); SIGHUP then SIGCONT to each member by pid, EPERM noted and the routine going on; poll every 50 ms or to the 2 s deadline, whichever is sooner; SIGKILL at 2 s to any member still alive, once; stop polling at 5 s; the last step, closing the handles, joining the reader through the wake pipe, dropping the master and the writer's duplicate. GaveUp is told to the monitor when members were left at 5 s; the pane's exit then has by "ended" and no kind.
+5. ending::start(id) (the mark and the facts, step 1 under the lock, from kill_pty for a remote id), ending::wait_gone(id), and server_terminal_end(id) (#[tauri::command(async)], main window only; it resolves when the terminal has left the table or 5 s have passed, 1.5; rejects never).
+6. Delegation: kill in pty.rs for a remote id calls ending::start (1.5); a local terminal's kill is unchanged. write_to (pty.rs:374-379) refuses while a remote terminal is ending or connecting (the check, 1.4 step 1), and type_line refuses for a remote terminal. A write to a remote terminal is refused, never sent.
+7. The input-queue wiring test (the design's 1.5 and SV-6 AC4's input-queue list, the Rust half): every path that writes to a PTY's input queue is listed, and a remote terminal's queue is written only by the user's own input path (the list is checked-in, as the design states).
+8. The stub example (a Cargo example target built by cargo test, the recording stub that puts its terminal in raw mode and appends every byte it reads, and stays running), the fixture module fixture.rs (test support: the fixture home, the stub, sh and the forking form of 1.7), and the reader.rs stoppable reader. The fixture asserts the forking form: the stub's process id differs from the leader's and its parent is the leader, and it panics with "the fixture shell did not fork" otherwise, on any platform.
+
+Acceptance (the design's test rows assigned to this story in 1.7, each named as there). PRD criteria are partial deliveries here; the owners are r5 (SV-2 AC3, AC4), w4 (SV-6 AC4) and r3b (the gate and end_all): this story owns none.
+(1) 1.3's set, pure over a table: leader, foreground members, other-session and zombie rows, a changed start time is not a member.
+(2) end against fixture programs started directly in a remote terminal (the recording stub as leader; the stub as a child of sh through the forking form; each ignoring the hangup; an own-session process): 0 bytes recorded; none alive at 5 s; the kill only in the ignoring cases; the own-session process alive. Lower bounds and the 5 s upper bound only (1.7, wall-clock rule).
+(3) The last step: a stub as leader with every signal to it refused through the routine's signal seam, ending when it reads end of input: end returns GaveUp at 5 s; the reader thread has ended; the stub reads end of input and is not alive 1 s later; one exit with by "ended" was sent.
+(4) The monitor and the table: (a) a fixture terminal whose process exits by itself; (b) one terminal, the stub a hangup-ignoring child of the forking sh, ended by end; (c) a fixture terminal whose process exits by itself while a background process holds the terminal. Each asserts the table and the exit, by order, never by a sampled time.
+(5) kill for a remote id with a hangup-ignoring stub: kill returns before the 2 s deadline with the terminal marked ending and still in the table, and it is gone before the 5 s stop. kill for a local terminal's id: the instance is out of the table when kill returns and its process is gone.
+(6) SV-2 AC3, partial (owner r5): end, and kill for a remote terminal, each leave 0 bytes in the stub's record for each of the cases in the design's run table (1.4): the stub as the pane's own process, as a child of the shell, ignoring the hangup, and the fixture the start-up file put in the shell's place (the fixture-in-place case is r5's: here the fixture is started directly).
+(7) SV-2 AC4, partial (owner r5): the exit event of a remote terminal carries the three fields (events.json rows for exit 0, 255 and null, with by "process" and by "ended", and the gave-up form); a local terminal's exit carries them too.
+(8) The write refusal: write_to and type_line refuse for a remote terminal that is ending or connecting; 0 bytes reach the terminal.
+(9) SV-6 AC4, partial (owner w4): the input-queue wiring test (item 7) passes, and the list it checks is the design's.
+(10) events.json (R3a's fixture, the event rows of design 10: output; live; both notice kinds; exit with status 0, 255 and null, each kind, by process and ended, and the gave-up form; a local terminal's exit; error): each PtyEvent serialises equal to its row (Rust). The TypeScript side (each row gives the session object's state) is w3b's.
+
+Gate and verification. The general verification command in force passes on the story's work (the local lines). Plus the F7 gate: a green run of the CI workflow's two backend jobs, "Backend (cargo test)" (Linux) and "Backend on macOS (cargo test)", on the story's final commit, attempt 1 each, cited by URL per the procedure of F1's gate item 4 applied to these two jobs. Every test here is #[cfg(unix)]; the tests needing sh and a terminal fail, never skip, when sh is missing.
+
+Files (expected): src-tauri/src/pty.rs (changed: the remote constructor, the remote member, kill's delegation, the write checks), src-tauri/src/ptysink.rs (changed), src-tauri/src/saved_servers/ending.rs (new: set, end, start, wait_gone, the table ownership of ending), handover.rs (new, the monitor and waiter threads only; the hand-over judgement is r5's), reader.rs (new), fixture.rs (new, test support), mod.rs and wiring.rs (changed: the input-queue list), sources.list (changed), events.json under src/lib/serverFixtures/ (new), src-tauri/examples/ or the example target named in Cargo.toml (new: the stub), src-tauri/src/lib.rs (changed: server_terminal_end registered under cfg(unix); the mod lines), src-tauri/Cargo.toml (changed: the example target and any dependency sysinfo or libc needed, recorded in the lock file in the same commit), the context file .ade/context/terminal-open.md and the ADR 0014 file under .ade/context/decisions/ (changed: the exit shape).
+
+Dependencies. after = ["r1", "r2"] (the kind type in the event, the list module's mod.rs, the fixture and wire types). Story r3b depends on this story; w2 and w4 are built in the design's order before r3b, so they do not depend on it at the code level.
+
+Out of scope. end_all, the gate (closed, page, starting), the three handlers in lib.rs for the window's close, the page load and exit (r3b); the wiring test of the three end_all call sites (r3b); the client start and the connect command (r4); the hand-over judgement and the sampling of the pane's own process (r5); the webview's remote branch and the session object (w3b); the marks and messages (w6).
+
+Notes for the developer. Read design 1.2 to 1.4 in full before writing the routine; the table of runs in 1.4 is the evidence to match. Wall-clock bounds are lower bounds, the requirement, or upper bounds that are the routine's own deadlines, never tight numbers (1.7).'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (10) pass by name in cargo test. Gate: the first Linux run's record (item FIRST STEP) cited in the Verification section, then a green run of both backend CI jobs (Backend (cargo test) on ubuntu-22.04, and Backend on macOS (cargo test)) on the final commit, attempt 1, cited by URL. Any finding of the first step that the design's routine does not hold on Linux stops the story and goes to the owner."
+covers = []
+after = ["r1", "r2"]
+hitl = false
+risk = "high"
+refine = false
+
+[[entry]]
+id = "w2"
+type = "story"
+title = "Session save, restore and Reopen"
+description = '''F7 slice S1, story 7 of 16. VERTICAL (store): a server tab is saved, restored ended, closed and reopened, and the saved shape is a checked-in fixture. No process is started and no connect request is made (SV-2 AC6 forbids a start by restore or Reopen). Design sections 8.1 (the record, origin), 8.3 (closeTab, reopenClosedTab, decision D-1 as PRD revision 8 now states it), 8.5 (session save and restore; the fixture) and 17 (row W2). Needs W1 (the types and serverTabs.ts).
+
+Build, test first:
+1. saveSession (tabStore.ts, about lines 735-830): a remote pane is saved as { id, serializedBuffer, remote: { serverId, destination, summary, state } }; it is not asked for a folder and gets no savedCwd. A tab is saved with serverNamed: true when set. Nothing else changes; the session has no version field and gains none. The never-saved members (notice, end, refusal, origin) are not written.
+2. The fixture src/lib/serverFixtures/session.json, written by the test from a fixed state (a local tab; a server tab; a server tab the engineer renamed; a server tab with a local split; each remote record holding markers), with UPDATE_FIXTURES=1 regenerating it (the pattern of scripts/bmadTextFixture.test.ts). The test asserts that saveSession's output equals the file, byte for byte.
+3. loadSession: a pane with remote comes back with state "ended", origin "restored", ptyId null, no initialCwd. Mounting it takes the remote branch, which is w3b's; this story only sets the state.
+4. closeTab for a server tab: the ClosedTab entry gains server?: { serverNamed, serverId, destination, summary } and its cwd is null. reopenClosedTab then opens a tab with that name and mark whose first pane has remote with state "ended", origin "reopened" and no PTY: no create_pty, no connect request.
+5. A server-named tab with no remote pane (only a session not written by this build can hold one) is remembered as a local tab named "Terminal" with no mark and no folder (PRD SV-4 AC3 as revision 8 states it; design D-1, now the PRD's text). Duplicate stays not offered for it (W6's menu).
+6. Mutation-free reads: the save and restore code reads the store once per action; nothing here calls a Tauri command.
+
+Acceptance (PRD SV-4, SV-2 and SV-3 items; each named test as the design gives it):
+(1) SV-4 AC1, owner of the criterion (PRD SV-4 item 1, "Saved"): a remote pane is saved with its tab's name and server-named mark, its serverId, destination, summary and state, and no savedCwd; the saved record equals session.json (TypeScript, saveSession against a stubbed store). A marker in the record's destination appears only where the fixture has it.
+(2) SV-4 AC2, partial (owner w3b; PRD SV-4 item 2, "Restored ended"): a restored remote pane is ended, with origin "restored" and no PTY; the create_pty count for it is 0 (the mount test is w3b's).
+(3) SV-4 AC3, partial (owner w6; PRD SV-4 item 3, "Reopen Closed Tab and Duplicate"): a closed server tab reopens as a server tab whose remote pane is remote and ended with no process and no connect request; for a server-named tab that held no remote pane, it reopens as a local tab named "Terminal" with no mark; an edited Host between close and reopen makes no request until confirmed (the confirmation is w6's and w3b's).
+(4) SV-2 AC6, partial (owner w6; PRD SV-2 item 6, the table's Close then Reopen row): for that row the tab's pane is remote and ended, with no process, and the store test asserts 0 connect requests and the state in the row, on the tab's and the pane's records.
+(5) SV-3 AC9, partial (owner r6): the save after the close-and-reopen sequence holds no marker of a server name where the tab is local; the Rust export test is r6's.
+(6) Tests named as the design gives them: a single-view tab and a server tab save and restore; the fixture equals saveSession's output; closeTab then reopenClosedTab for a server tab (state ended, origin reopened, cwd null); the server-named no-pane case reopens as "Terminal" with no mark.
+
+Gate: the general verification command in force. No process is started. No CI gate.
+
+Files (expected unless marked read):
+- src/stores/tabStore.ts (changed: saveSession, loadSession, closeTab, reopenClosedTab, ClosedTab)
+- src/lib/serverFixtures/session.json (new; the fixture)
+- src/stores/__tests__/sessionServer.test.ts (new, expected name), and src/stores/__tests__/session.test.ts (read: the existing save tests stay green)
+- scripts/bmadTextFixture.test.ts (read only, the regeneration pattern)
+
+Dependencies. after = ["w1"]. Story r6 reads session.json (its export test); story w3b depends on this story (the restored and reopened states, and the fixture); w4 is independent of it.
+
+Contracts. Reads .ade/context/server-panes.md (the record) and .ade/context/saved-servers.md. Records nothing new.
+
+Out of scope. The mount's remote branch and the connect request (w3b); the Reopen menu item and its marks (w6); the export strip (r6); the older-build behaviour (a stated limit, F7.9, not testable here); Duplicate (not offered: w6).
+
+Notes for the developer. The fixture is the contract for r6: changing its shape changes both stories' tests in one commit.'''
+verify = "The general verification command in force passes on the story's work, and the named tests in item (6) pass by name in npm test; the fixture test fails if saveSession's output differs from session.json. No CI gate: this story starts no process."
+covers = ["SV-4 AC1"]
+after = ["w1"]
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "w4"
+type = "story"
+title = "Writes, file links, the folder and the close question's paneKind"
+description = '''F7 slice S1, story 8 of 16. VERTICAL (webview: the write rule, file links, the folder's facts and readers, the close question's decision). No process is started by this story and no connect request is made. Design section 8.7 (close confirm, paneKind), 8.8 (writes, file links, the folder, every reader) and 17 (row W4). Needs W1 (serverTabs.ts: paneKind, remotePane, isServerTab).
+
+Build, test first:
+1. Writes. writePty(id, text, opts?) (src/lib/terminalCommands.ts:43) looks the pane up by PTY id; when it is remote and opts?.userSend !== true it shows the server-session message and rejects with RemotePaneError. Callers that resolve the active pane before they have a PTY id (sendToActiveTerminal, the agent picker's "This terminal") ask remoteRefusal(pane) first, so an ended remote pane (no PTY) refuses with the same message. The checked-in list src/lib/ptyWriters.sites.json (new) names every call of writePty(, writePtyInput( and invoke("write_pty" under src/ outside tests, by file and enclosing function, with the classes of design 8.8's table: terminal input; named user send; refused in a remote pane. A static test compares the list with the source. The scratchpad's send to a remote pane with an image attached sends nothing, keeps the text and says why.
+2. File links. registerFileLinks(term, getCwd, open, enabled) (src/lib/terminalFileLinks.ts:179) gains a predicate; the provider returns no links while it is false; useTerminal passes () => paneKind(pane) === "local". URL links are another provider and are untouched.
+3. The folder, three facts, each with its own test: F1, getPtyCwd(paneId) gives null for a remote pane without an invoke (useTerminal.ts:743); F2, the folder store (usePaneCwd's cwds) never holds an entry for a remote pane (a store test asserts no entry after three polls of TerminalPane's 3 s poll); F3, a remote pane never has initialCwd or savedCwd (a store test asserts both absent after creation, save and restore, and Reopen).
+4. Two readers change: tabCwd (src/lib/tabDisplay.ts:33-39) is null when the own view's active pane is remote; useOwnFolderCwd (src/hooks/useOwnFolderCwd.ts:28-36) sets null when the folder pane is remote (today it keeps the last folder when the read gives none). App's activeCwd (App.tsx:100-441) is null while a remote pane is active. FileBrowser shows its on-a-server state when the pane it follows is remote (its poll at FileBrowser.tsx:167-169 changes nothing on null today).
+5. Every reader of design 8.8's table is covered by one of the three facts or the changes above; the readers the table marks "not read beyond the call" are checked by the store test of F2 and F3, not by reading them again.
+6. The close question's decision (design 8.7): useGuardedClose (src/hooks/useGuardedClose.ts:19-23, 154) asks paneKind first: connecting or live asks, ended does not, and paneBusy is not called for a remote pane in either case; a local pane goes through today's path unchanged; a tab asks when any pane would. The question's component test is w6's.
+
+Acceptance (PRD SV-6 items 1 to 4 and SV-5 item 5, each named as the design gives it):
+(1) SV-6 AC1, owner of the criterion (PRD SV-6 item 1, "File links are off"): in a remote pane, text that looks like a file path gets no link, in any state; URL links still work (TypeScript, terminalFileLinks with the predicate; the provider's returned links are empty for a remote pane).
+(2) SV-6 AC2, owner of the criterion (PRD SV-6 item 2, "No folder"): a remote pane reports no folder in any state; a tab reports no folder label; the active folder is null; the three facts F1 to F3 each have their test; FileBrowser shows its on-a-server state (component test in src/components/__tests__/FileBrowser.test.tsx, expected name).
+(3) SV-6 AC4, owner of the criterion (PRD SV-6 item 4, "ADE initiates no write into a remote pane"): writePty refuses for a remote pane, and the test drives each ADE-initiated writer of the list once: the count of write_pty calls for a remote pane is 0 and each returns its refusal (TypeScript, store; a live remote pane and a connecting one). The site list ptyWriters.sites.json matches the source (static test). The user's own sends (userSend true, the named sends of design 8.8) still write. The Rust input-queue list is r3a's (partial).
+(4) SV-5 AC5, owner of the criterion (PRD SV-5 item 5, "Not in the folder-keyed stores"): recent projects, the agent tracker and the orchestrator's keys are byte-identical across a Connect and its end. NOTE for the developer: the Connect path of the webview (w3b) is not built when this story runs; the test drives a hand-built remote pane in the state a Connect leaves (the design's own note that the store can be exercised with a hand-built tab), and the same assertion is re-run through the real Connect in w6's test suite. Owner: this story.
+(5) SV-3 AC6, partial (owner w6; PRD SV-3 item 6): the useGuardedClose three cases: a connecting remote pane asks; a live remote pane asks; an ended remote pane does not ask; paneBusy is not called for a remote pane. A local pane is unchanged.
+
+Gate: the general verification command in force. No process is started. No CI gate.
+
+Files (expected unless marked read):
+- src/lib/terminalCommands.ts (changed: writePty and remoteRefusal), src/lib/ptyWriters.sites.json (new)
+- src/lib/terminalFileLinks.ts (changed: the predicate), src/hooks/useTerminal.ts (changed: the predicate, the F1 null, the file-links' enabled argument)
+- src/lib/tabDisplay.ts (changed: tabCwd), src/hooks/useOwnFolderCwd.ts (changed)
+- src/App.tsx (changed: activeCwd), src/components/FileBrowser.tsx (changed: the on-a-server state), src/components/TerminalPane.tsx (read: the 3 s poll, unchanged)
+- src/components/Scratchpad.tsx (changed: the image case, the send's refusal)
+- src/hooks/useGuardedClose.ts (changed: the paneKind decision)
+- tests: src/lib/__tests__/terminalCommands.remote.test.ts (new), src/lib/__tests__/ptyWriters.sites.test.ts (new, expected name), src/lib/__tests__/terminalFileLinks.test.ts (changed: the predicate case), src/hooks/__tests__/useOwnFolderCwd.test.tsx (changed: the remote case), src/hooks/__tests__/useGuardedClose.test.tsx (changed: the three cases; existing cases unchanged), src/components/__tests__/FileBrowser.test.tsx (changed or new)
+
+Dependencies. after = ["w1"] (the paneKind and remotePane helpers). It is built in the design's order after w2, and does not depend on w2's code. Story w6 depends on this story (the question's component test) and w3b uses its writePty rule.
+
+Contracts. Reads .ade/context/server-panes.md (the write rule and the folder facts). Records nothing new.
+
+Out of scope. The Connect path and the remote branch of useTerminal (w3b); the question's component and its Enter test (w6, on C1's dialog); the rename boxes and marks (w6); the Rust input-queue list (r3a); the agent status (none, by r4's tests).
+
+Notes for the developer. Read design 8.8's reader table before changing a reader; a reader not listed there is a finding for the architect, not a silent change.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (6) pass by name in npm test. No CI gate: this story starts no process."
+covers = ["SV-5 AC5", "SV-6 AC1", "SV-6 AC2", "SV-6 AC4"]
+after = ["w1"]
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "r3b"
+type = "story"
+title = "End all, the start gate and the app's three handlers"
+description = '''F7 slice S1, story 9 of 16. INFRASTRUCTURE (Rust): the teardown that ends every remote terminal when the main window closes, when its page is replaced, and when ADE exits, and the gate that keeps a start from landing after that. It starts processes in its tests (the fixture terminals and sh), so the F7 CI gate applies: the local lines plus a green run of both backend CI jobs on the final commit, with zsh on the Linux job (story d1). Design section 1.5 (who calls it; the gate; the table of paths; end_all; the four ways out of the table), 1.7 (the rows assigned here), 2.5 step 7 (the insert, as the gate reads it) and 17 (row R3b). Needs R3a (the routine, the reader, the monitor, the waiter).
+
+Build, test first:
+1. ending::Gate (beside the table, read and written only under the table lock): closed (the main window was destroyed, or ADE is exiting), page (a count of the main webview's page loads), starting (client starts between admission and insert, subtracted on every way out of a start by a guard, a failed spawn included). Its condition variable is used with the table's mutex and notified when a remote terminal leaves the table or starting drops.
+2. end_all(table, gate, wait) -> the teardown routine: calls ending::start for every remote terminal not already ending (each on its own thread); with Wait::Yes it blocks until no remote terminal is left in the table and no client start is in progress, or 5 s have passed, whichever is first; Wait::No returns at once. wait_gone(id, limit) is the same wait for one id.
+3. main_closed (sets gate.closed, calls end_all(.., Wait::No)), main_page_loaded (adds 1 to gate.page, calls end_all(.., Wait::No)) and app_exiting (sets gate.closed, calls end_all(.., Wait::Yes)).
+4. The three handlers in lib.rs: tauri::Builder::on_window_event for WindowEvent::Destroyed of the window labelled main (main_closed); tauri::Builder::on_page_load for PageLoadEvent::Started of the webview labelled main (main_page_loaded); App::run's callback for RunEvent::Exit (app_exiting). This needs the change from .run(...) to .build(...) followed by .run(...) with the callback, as design 1.5 states. The gate is managed state.
+5. ending::admit(pane) -> Admission (under the table lock: refuses with closing when gate.closed, with pane when another remote terminal for the pane is in the table or admitted and not ending; grants otherwise and counts gate.starting up by one) and ending::insert(admission, instance) (under the same lock: refuses with closing when gate.closed or the page count moved since admit, refuses with pane when the pane has got another terminal; on success puts the instance in the table and subtracts starting). Every path that drops an admission without an insert (a failed spawn; a monitor thread that could not start) subtracts starting through a guard. The refusals return the cause of terminal-not-started (design 7: closing and pane; no errno). The command that calls them is r4's.
+6. The teardown wiring test (static, wiring.rs): the three end_all call sites are exactly main_closed, main_page_loaded and app_exiting, each called from its named handler in lib.rs; a build that lacks any of the three calls fails (SV-2 AC3's static test, the list of three call sites of design 1.5 and PRD revision 9).
+7. The manual check of design 1.6 is written into this story's notes and is not part of the gate.
+
+Acceptance (the design's test rows assigned to this story in 1.7, each named as there):
+(1) SV-2 AC3, partial (owner r5): the two one-terminal tests, end_all(No) then at once end_all(Yes): (a) the child case: ONE remote terminal with its monitor and waiter running, the stub a hangup-ignoring child of the forking sh that obeys the hangup; the first call returns with the terminal still in the table and before the 2 s deadline, and the second returns after it has left, no sooner than the requirement; the stub's record holds 0 bytes; (b) the leader case: ONE remote terminal, a hangup-ignoring stub as the pane's own process; the same assertions, bar the "leader no longer alive" clause. (Rust, Unix, real PTY, sh.)
+(2) SV-2 AC3, partial (owner r5): end_all(Yes) with an empty table, and with a start counted in gate.starting that inserts 300 ms later: returns before the 2 s deadline; returns only after the late instance has left.
+(3) The gate's two functions on fixture terminals: ending::admit(pane) then ending::insert(admission, instance), with main_closed, and again with main_page_loaded called between the two: insert returns the closing refusal; the instance is in the table already marked ending and is ended by the teardown.
+(4) gate.starting on every way out: an admission dropped without an insert (a failed spawn; a monitor thread that could not start): starting is back to its value before, and a waiting end_all(Yes) is woken and returns.
+(5) main_page_loaded with two live remote terminals and one local terminal: both remote terminals are ended; the local terminal is untouched and still in the table.
+(6) The per-pane rule on fixture terminals: admit for a pane whose remote terminal is not ending; two admissions for one pane, both granted before either insert, so the second insert is refused pane; admit for the same pane called from the handler of a naturally exited terminal's exit event (granted, so a pane may reconnect after its process ended by itself).
+(7) The wiring test of item 6 (static): the three end_all call sites and their three callers.
+(8) The handlers are wired in lib.rs: the on_window_event, on_page_load and RunEvent::Exit calls exist (the static test of item 6 reads them).
+(9) The shared gate tests through the command (the late start, the closed gate) are r4's; this story does not register a command.
+
+Gate and verification. The general verification command in force passes on the story's work. Plus the F7 gate: a green run of the CI workflow's two backend jobs, "Backend (cargo test)" (Linux) and "Backend on macOS (cargo test)", on the story's final commit, attempt 1 each, cited by URL per F1's gate item 4 applied to these two jobs. No first-step finding is required here (the Linux first step is R3a's); if R3a's first step stopped on a finding, this story does not start.
+
+Files (expected unless marked read):
+- src-tauri/src/saved_servers/ending.rs (changed: Gate, end_all, wait_gone, admit, insert, main_closed, main_page_loaded, app_exiting, the guard)
+- src-tauri/src/lib.rs (changed: the gate's managed state, the builder's on_window_event and on_page_load, the run callback)
+- src-tauri/src/saved_servers/wiring.rs (changed: the teardown wiring test, the handler test)
+- src-tauri/src/saved_servers/fixture.rs (changed: fixture terminals for the gate tests)
+- sources.list (changed when a file is added)
+
+Dependencies. after = ["r3a"]. Story r6 and w3a are built in the design's order after this story only in sequence, not at the code level. Story r4 depends on this story (the insert and the admit it calls).
+
+Out of scope. server_terminal_end and the command's registration (r3a); the client start (r4); the webview's close paths (w3b); the hand-over (r5); the export (r6); the quit's behaviour for the window (F7 leaves a close and a quit asking nothing for any terminal, as the PRD says; only the ending is added).
+
+Notes for the developer. The gate's tests are timing-sensitive; they use the lower bounds and the routine's own deadlines only (design 1.7). A quit or a window close waits for the ending up to its 2 s when a process is alive (SV-2 AC3): Wait::Yes in app_exiting is that wait.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (8) pass by name in cargo test. Gate: a green run of both backend CI jobs (Backend (cargo test) on ubuntu-22.04, and Backend on macOS (cargo test)) on the final commit, attempt 1, cited by URL. Not started until r3a's first Linux step has been recorded without a finding that stops it."
+covers = []
+after = ["r3a"]
+hitl = false
+risk = "high"
+refine = false
+
+[[entry]]
+id = "r6"
+type = "story"
+title = "The session export strip and the outward name in Rust"
+description = '''F7 slice S1, story 10 of 16. VERTICAL (Rust, the session export): the rule that gives a server tab its outward name ("Remote server") and that leaves every remote record out of the export, with one table shared with the webview. No process is started. Design section 8.9 (the outward-name rule, the table, the two implementations), 8.5 (the fixture session.json, written by w2) and 17 (row R6). Needs W1 (the table file outwardName.cases.json and the webview's outwardName) and W2 (session.json).
+
+Build, test first:
+1. src-tauri/src/sync.rs: the export of ade-session per device. (a) For each tab, the name is set to the outward name; (b) every remote member is dropped at every depth (the design adds it to SESSION_LOCAL_FIELDS, sync.rs:69, so it is stripped with the other local fields). Rust decides the two facts from the saved JSON alone: "the tab object has serverNamed: true, or any pane object in its root or subViews trees has a non-null remote".
+2. sync::outward_name(tab JSON) -> String: the Rust side of the rule, reading src/lib/outwardName.cases.json through include_str! (the file is W1's, not changed here). A case added for one side is a test on both.
+3. The test inputs are two: the hand-built tabs of PRD SV-5 AC2 (a session not written by this build is the point of two of them), and src/lib/serverFixtures/session.json (W2's fixture, the session the TypeScript store really saves), for which the export holds none of the fixture's markers, "Remote server" for each of its server tabs, and the local tab's name.
+4. The export of the other ade-sync keys is unchanged in content for a local-only session (the byte-identical check of the existing sync tests stays green).
+5. The Context Store: nothing new is recorded; the outward-name rule is the one stated in .ade/context/server-panes.md.
+
+Acceptance (PRD SV-5 items 1, 2, 7 and SV-3 item 9; each test named as the design gives it):
+(1) SV-5 AC1, partial (owner of the criterion: this story; PRD SV-5 item 1, "Not in ADE sync": the server list is in no store ADE sync exports): the sync key list does not name saved-servers.json, and markers saved through the store are absent from the ade-sync export (the store is r2's; this story asserts the export side).
+(2) SV-5 AC2, owner of the criterion (PRD SV-5 item 2, "The session's export"): Rust, on ade-session JSON alone: with a marker as the name of a server-named tab, of a second whose saved server was renamed, of a third whose saved server was removed, of a fourth built by hand that is server-named and holds no remote pane, and of a fifth renamed to a typed marker that holds a remote pane, and with markers in each pane's remote record, the export holds none of them and holds "Remote server" five times; a local tab's typed name is still there; for the session saved after SV-3 AC9's sequence, the export holds no marker and the tab's name is "Terminal"; for the fifth tab after the same sequence, its typed name is exported. Plus serverFixtures/session.json: the export of the file holds none of its markers.
+(3) SV-5 AC7, owner of the criterion (PRD SV-5 item 7, "[Second] The phone"): the Rust side of the outward-name table: sync::outward_name against every case of outwardName.cases.json; the export test of item (2) is the Rust side of the payload's rule. The phone's payload is the merges-second item below.
+(4) SV-3 AC9, owner of the criterion (PRD SV-3 item 9): the Rust export test over the session saved after the sequence (the store half is w1's and w2's).
+
+CONDITIONAL MIRROR, F7 SV-5 AC7 (the phone; PRD F7.11, "Merges second", written at the S1 sharding 2026-11-19). The relay's tab payload (phone-watch ticket 8, "ADE's Remote bridge", remote_tabs_set) and this story merge to main in whichever order; the second one carries the criterion. If phone-watch ticket 8 is on main when this story is reviewed, or lands before this story merges, this story also carries SV-5 AC7's payload test: the payload for a server-named tab, for a renamed server tab holding a remote pane, for the hand-built tab of item (2) and for the tab after SV-3 AC9's sequence holds no marker, and the first three are titled "Remote server" (the webview's outwardName is the function the payload calls). Until then, the obligation sits in ticket 8's item (10) (the mirror written at this sharding). Gate on this side: this story's verification command; ticket 8's gate is its own. Item (5) carries it, by name, if its condition held at review.
+(5) CONDITIONAL, SV-5 AC7 payload test (see the mirror above): by name, "the relay tab payload holds no marker and titles a server tab Remote server", only if phone-watch ticket 8 was on main at review or landed before this story merged; otherwise it is not in this story's gate.
+
+Gate: the general verification command in force. No process is started. No CI gate.
+
+Files (expected unless marked read):
+- src-tauri/src/sync.rs (changed: the strip, the outward name for each tab; SESSION_LOCAL_FIELDS gains the remote member; read: sync.rs:36-47 and :69)
+- src-tauri/src/saved_servers/mod.rs or a new outward module (the expected home of sync::outward_name is sync.rs itself, as the design's 8.9 names sync::outward_name)
+- sources.list (changed if a file is added under saved_servers/)
+- src/lib/serverFixtures/session.json (read; W2's), src/lib/outwardName.cases.json (read; W1's)
+- tests: src-tauri/src/sync.rs inline tests (changed), or src-tauri/tests/ (expected)
+
+Dependencies. after = ["w1", "w2"] (the table file and session.json). Story w3a, w3b and later stories do not depend on it at the code level; it is built in the design's order after r3b, before w3a.
+
+Contracts. Reads .ade/context/server-panes.md and PRD F7.11's mirror. Records nothing new unless the table's rows differ from the design; then the story stops and reports.
+
+Out of scope. The phone's relay payload (ticket 8, its own gate); the F4 S0b strip (another branch: the design says whichever merges second records it; not this story's to change); the webview's outwardName (w1); saved servers' list (r2).
+
+Notes for the developer. The Rust side derives the two facts from JSON, never from the store or the server list (PRD SV-5 item 2: "no look at the server list").'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (4) pass by name in cargo test; item (5) is in the gate only if phone-watch ticket 8 was on main at review or landed before merge. No CI gate: this story starts no process."
+covers = ["SV-3 AC9", "SV-5 AC1", "SV-5 AC2", "SV-5 AC7"]
+after = ["w1", "w2"]
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "w3a"
+type = "story"
+title = "Server commands, kinds, availability and the list store"
+description = '''F7 slice S1, story 11 of 16 (the first half of the design's W3, cut at sharding, see the epic file, "Story cuts"). VERTICAL-LEANING (webview leaves and the list store, no component): the typed wrappers of the five commands, the kinds mirror, the availability function, the list store, the fixed text for a rejection that is not a kind, and the rejection's logging rule. No process is started. Design sections 7 (the log; the rejection rules), 9 (the list store contract), 10 (the fixtures table: kinds.json, commands.json), 11 (serversAvailable) and 17 (row W3, the cut "W3a"). Needs W1 (serverTabs.ts) and R1 (kinds.json, commands.json).
+
+Build, test first:
+1. src/lib/serverKinds.ts (new): the twelve kind ids as a union type, and a parser for a Kind; its mirror test reads src/lib/serverFixtures/kinds.json (R1's) and fails when an id in the file and not in the union, or the reverse, exists; each row parses as the union.
+2. src/lib/serverInvoke.ts (new): five wrappers (servers_list, servers_save, servers_remove, server_connect, server_terminal_end), each taking its serde struct from commands.json's shape (the arguments as the webview sends them). Each wrapper catches a rejection, and a rejection that is not an object whose kind is one of the twelve ids is replaced by the fixed Error("server command failed") (SERVER_COMMAND_FAILED); callers show their generic failure text for it. A kind is passed through as it arrived (the whole object with its payload, the refusal form of 8.1).
+3. src/lib/crashReport.ts (new): rejectionMessage(reason): string, extracted from src/main.tsx (the inline arrow at main.tsx:15-17 that logs String(reason)); main.tsx calls it. Its behaviour for an Error and for a string is pinned by a test first, unchanged.
+4. src/lib/serverAvailability.ts (new): serversAvailable(f: { platform: "macos" | "linux" | "windows"; engagement: boolean }): boolean, the table of design 11. In S1 the engagement input is the constant false, supplied from one place (a function in the webview, matching instance_is_engagement() in Rust, r2).
+5. src/stores/serverListStore.ts (new, zustand, not persisted): { status: "idle" | "ok" | "unreadable", servers: ServerRow[], held: Record<string, ConnectCheck> }, with load(), reloaded on servers-changed, when the overlay or the palette opens, and on every Connect or Reconnect press before the request (the press's load is w3b's call). The ServerRow type is design 9's (id, fileIndex, name, host?, port?, user?, identityFile?, summary, problems?). ConnectCheck is the type design 8.4 declares; read 8.4 before writing it.
+6. The list store's rows: a row with problems lacks the members that failed; rows with a withheld name are ordered last by fileIndex (the store keeps the order servers_list gives; it sorts nothing itself).
+7. The "could not be read" text names the constant file name saved-servers.json (SERVER_LIST_FILE_NAME) in Better Terminal's data folder; no command gives the folder's path.
+
+Acceptance (each named test as the design gives it):
+(1) SV-5 AC4, partial (owner r5; PRD SV-5 item 4, "Logs, and the fixed list of kinds"): the TypeScript log test: unhandled rejections through rejectionMessage, for each rejection of server_connect from the fixture (kinds.json), hold no marker; a rejection that is not a kind leaves serverInvoke.ts as the fixed text, and rejectionMessage of that text holds no marker; the message holds the server's name, the kind does not (the name is composed in the webview). W5 adds the rows for the three list commands.
+(2) The fixed-text rule: each of the five wrappers, against a stubbed invoke that rejects with a string holding a marker, with an Error holding one, and with an object of an unknown kind, rejects with exactly SERVER_COMMAND_FAILED's text; rejectionMessage of it holds no marker.
+(3) SV-8 AC3, partial (owner w5; PRD SV-8 item 3): serversAvailable for macOS and Linux with engagement false is true; with engagement true it is false; for Windows it is false; the one-function rule with its input set: with the engagement input true the function answers no (the merges-second input of r2's item (9) on the webview side).
+(4) The kinds mirror: the union and kinds.json agree (item 1).
+(5) The list store: status "unreadable" when servers_list rejects with list-unreadable; "ok" with the rows in the order given; a row with problems keeps its fileIndex and lacks the failing members; a withheld name's row is last. Changes on servers-changed: a load on the event (store test with a stubbed event).
+(6) rejectionMessage: its behaviour for an Error and for a string is unchanged (pinned first, then main.tsx calls it; the existing main.tsx behaviour is the test's baseline).
+
+CONDITIONAL MIRROR, F7 SV-5 AC8 (engagements; PRD F7.11, "Merges second", written at the S1 sharding 2026-11-19). serversAvailable (item 4) is the one function that decides whether the feature is available, on the webview side; the palette, the overlay's opener and requestConnect all ask it. If F1 ticket e29 (_bmad-output/initiative-personas-and-engagements/epic-profile-and-rule, ticket e29) is on main when this story is reviewed, or lands before it merges, this story connects the engagement input to F1's real signal, so that the answer is no by F1 slice 1's gate, and carries SV-5 AC8's webview half: with the engagement input set, the palette has none of F7's entries and requestConnect is refused with the not-in-engagement kind with 0 starts. Until then the constant false stays and item (3)'s "with the engagement input true" test is the criterion's test. Gate: this story's verification command; F1's side is F1 D28. Item (7) carries it by name if its condition held at review.
+(7) CONDITIONAL, SV-5 AC8 webview half (see the mirror above): by name, "a palette with an engagement input set has none of the saved-server entries" and "requestConnect in an engagement is refused not-in-engagement with 0 starts", only if e29 was on main at review or landed before this story merged; otherwise not in this story's gate.
+
+Gate: the general verification command in force. No process is started. No CI gate.
+
+Files (expected unless marked read):
+- src/lib/serverKinds.ts (new), src/lib/serverInvoke.ts (new), src/lib/serverAvailability.ts (new), src/lib/crashReport.ts (new), src/stores/serverListStore.ts (new)
+- src/main.tsx (changed: the rejection handler calls rejectionMessage)
+- src/lib/serverFixtures/kinds.json, commands.json (read; R1's)
+- tests: src/lib/__tests__/serverKinds.test.ts, serverInvoke.test.ts, serverAvailability.test.ts, crashReport.test.ts, src/stores/__tests__/serverListStore.test.ts (all new, expected names)
+
+Dependencies. after = ["r1", "w1"] (the fixtures and the types; serverTabs). Story w3b depends on this story (the wrappers, the list store, the availability). Story w5 depends on it (the list store and the availability function).
+
+Contracts. Reads .ade/context/saved-servers.md and the design's section 9 contract. Records nothing new: the TypeScript mirror of the kinds is the design's, and the shapes are the fixtures'.
+
+Out of scope. The session object, the connect request and the remote branch (w3b); the list's component and the palette entries (w5); the Remove question (w5); the rows' messages (w5).
+
+Notes for the developer. serverInvoke.ts is the only place a server command's rejection is turned into a value the UI shows; a caller never sees a raw rejection from these commands.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (6) pass by name in npm test; item (7) is in the gate only if e29 was on main at review or landed before merge. No CI gate: this story starts no process."
+covers = []
+after = ["r1", "w1"]
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "w3b"
+type = "story"
+title = "Connect, the session object, the remote branch and Reconnect's store side"
+description = '''F7 slice S1, story 12 of 16 (the second half of the design's W3, see the epic file, "Story cuts"). VERTICAL (webview store and hook): the connect request, the session object that keeps what arrives before and after the resolve, the new server tab, the remote branch that never calls create_pty, the end of a remote pane on a close, and Reconnect's store side. No component is built here (the marks, the menu and the messages are w6's); the server list's component is w5's. The Connect path needs the Rust command, which is r4's: this story's tests run against a stubbed invoke (serverInvoke.ts), as the design's section 17 allows for a webview story. Design sections 8.2 (Connect, steps 1 to 7), 8.3 (the remote fact to destroyInstance), 8.4 (the pre-send check, the held press, Reconnect), 8.5 (restore: the remote branch) and 17 (row W3). Needs W3a (the wrappers, the list store, serversAvailable), W2 (restore and Reopen states) and R3a (the event shape, events.json).
+
+Build, test first:
+1. src/lib/serverSessions.ts (new): requestConnect({ serverId, paneId?, shown, confirmed? }) as design 8.4 and 8.2 step 1 state it: sets the pane's in-flight mark at the press, synchronously (a Reconnect); asks serversAvailable; runs the pre-send check (a fresh servers_list, the row found by serverId, compared with shown; sends only when the row exists, has no problems, equals shown, and either equals the pane's destination or equals confirmed); otherwise sends nothing, clears the mark and answers { outcome: "held", check } with the ConnectCheck of 8.4, put in serverListStore.held. While the mark is set a second press makes no request and no list read.
+2. The connect request: a Channel and a session object for this call; invoke server_connect with { args: { serverId, paneId, rows: 24, cols: 80 }, onEvent } and nothing else of the server. paneId is the ended pane's id for a Reconnect and a newly made pane id for a Connect.
+3. The session object (events before the resolve): it keeps the state (connecting, or live, or ended with its end), the notice and the output chunks, and nothing else; no pane exists yet. Events after the resolve update the store on arrival, mounted or not: live sets state live and clears notice; notice sets it; exit writes today's "[Process exited]" line, sets state ended, end, and ptyId null. Only output goes to the terminal, never to the store.
+4. Rejected: the kind is returned to the caller (the overlay or the palette shows the message); no store update happened, so no tab exists. For a Reconnect the pane stays ended and shows the kind (refusal).
+5. Resolved, Connect: openServerTab makes, in one set, a new active tab named after the server (the name from the list the webview holds), serverNamed true, whose first pane has the id paneId, the returned ptyId, and remote with the state the session object holds. In the same step the xterm is created with no container, as createSubTerminalInstance does (useTerminal.ts:620-626), the buffered output is written to it, and its input is wired.
+6. Resolved, Reconnect: one set gives the pane the new ptyId, destination, summary and the session's state, and clears end and refusal; a new xterm takes the saved scrollback's place; the blank line written to the xterm is a write to the display only (term.write), not writePty, not in ptyWriters.sites.json, and sends 0 bytes to the PTY. Resolved and the pane is gone or no longer that (closed while in flight): the same step sends server_terminal_end for the id, drops the session object and its output, and updates nothing.
+7. The remote branch of useTerminal: when the pane mounts and pane.remote is set, it never calls create_pty; with an instance for the pane it seats it and sends one resize_pty; without one (restored, reopened) it shows the saved scrollback and starts nothing.
+8. destroyInstance(paneId, storePtyId, remote) (useTerminal.ts:158-163): with remote true it sends server_terminal_end in place of kill_pty, not awaited. closePane and closeTab read "this pane is remote" from the pane's record before the store update that removes it, and pass it (w1 read it; this story passes it on).
+9. Splits and sub-terminals of a server tab go through today's paths and are local: their panes have no remote, start in the home folder, and call create_pty (SV-3 AC5).
+
+Acceptance (PRD SV-2, SV-3 and SV-4 items; each named test as the design gives it):
+(1) SV-2 AC7, owner of the criterion (PRD SV-2 item 7, "Where it opens"): the tab count rises by one, the new tab is active, server-named, and its first pane is remote and connecting; each refusal named there (a record that fails its checks; an unsupported shell; a list that could not be read; a saved server that no longer exists; not in an engagement) leaves the tab count unchanged and the store with no new tab (TypeScript, store, with the stubbed invoke rejecting with each kind).
+(2) SV-4 AC2, owner of the criterion (PRD SV-4 item 2, "Restored ended"): a restored remote pane is ended and has no process; the create_pty count for it is 0 after every mount, and 0 connect requests after every mount (TypeScript, store and hook).
+(3) SV-4 AC3, partial (owner w6; PRD SV-4 item 3): the Reconnect-after-Reopen row: a reopened server tab's Reconnect runs one request for its pane and the pane is the one reopened; an edited Host between close and reopen makes no request until confirmed (the held press; the store test).
+(4) SV-3 AC5, owner of the criterion (PRD SV-3 item 5, "Splits and sub-terminals"): a split of a server tab is a local pane: create_pty is called for it, it starts in the home folder, and it has no remote record.
+(5) SV-2 AC3, partial (owner r5): a confirmed close of a remote pane and a close of its tab each make exactly one server_terminal_end request for that pane's PTY id, 0 kill_pty and 0 write_pty for it; a local pane's close still sends kill_pty; the pane is gone at the resolve (TypeScript, store).
+(6) SV-2 AC5, partial (owner r4): Reconnect with a changed row (held) leaves the pane remote and ended, and Connect with the held result leaves the tab count unchanged (TypeScript, store, the stubbed invoke).
+(7) The Reconnect store test: 0 write_pty calls across a Reconnect; one request per pane at a time (a second press with the mark set makes no request and no list read); a Reconnect whose pane was closed before the connect resolved sends exactly one server_terminal_end, for the id the connect returned, by closePane and by closeTab.
+(8) SV-3 AC3, partial (owner w6; PRD SV-3 item 3, "Ending"): a process exit of a remote pane writes "[Process exited]", sets state ended with end and ptyId null, for the events before and after the resolve (events.json rows, through the session object: each row gives the state the row names).
+
+Gate: the general verification command in force. No process is started by the webview; the processes are the Rust commands' (stubbed here). No CI gate.
+
+Files (expected unless marked read):
+- src/lib/serverSessions.ts (new)
+- src/hooks/useTerminal.ts (changed: the remote branch, destroyInstance's remote argument, the xterm at resolve; lines 158-163, 620-626, 671)
+- src/stores/tabStore.ts (changed: openServerTab, the Reconnect set, closePane and closeTab's remote fact)
+- src/lib/detachWindow.ts and src/components/TerminalPane.tsx (read; not changed here)
+- tests: src/lib/__tests__/serverSessions.test.ts (new), src/stores/__tests__/serverTabsOpen.test.ts (new), src/hooks/__tests__/useTerminal.remote.test.tsx (new), src/stores/__tests__/reconnect.test.ts (new); each expected names
+- src/lib/serverFixtures/events.json (read; R3a's)
+
+Dependencies. after = ["w3a", "w2", "r3a"]. Story r4 depends on this story (the webview half of Connect it calls); w5 and w6 depend on it.
+
+Contracts. Reads .ade/context/server-panes.md (the session object and the remote branch). Records nothing new.
+
+Out of scope. The Rust command (r4); the list's component, the Remove question and the palette entries (w5); the marks, the tab menu, the messages, the Reconnect control's look and the close question's component (w6); the server-restored pane's scrollback display's visual (w6).
+
+Notes for the developer. Read design 8.2 and 8.4 before writing; the order of the session object's events and the command's answer is not fixed (review A-m10), so a test must run both orders.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (8) pass by name in npm test, both orders of events and resolve tested. No CI gate: the process starts are the Rust commands', stubbed here."
+covers = ["SV-2 AC7", "SV-3 AC5", "SV-4 AC2"]
+after = ["w3a", "w2", "r3a"]
+hitl = false
+risk = "high"
+refine = false
+
+[[entry]]
+id = "r4"
+type = "story"
+title = "The client start: server_connect, the environment and the shell's instruction"
+description = '''F7 slice S1, story 13 of 16. VERTICAL in Rust, the first story that makes the SSH client run. It starts processes (the user's shell, the recording stub, real zsh and bash), so the F7 CI gate applies: the local lines plus a green run of both backend CI jobs on the final commit, zsh on the Linux job (d1). FIRST STEP (design section 17, R4): SV-2 AC2's table run under the CI image's bash 5.1 and zsh on the Linux backend job, before the rest is built; a row that gives another outcome there is a finding for the product manager's table, and the story stops until the owner decides. Design sections 2.1 (the invocation), 2.2 (supported shells), 2.3 (quoting in Rust; the home folder), 2.4 (the environment), 2.5 (the command and its steps 1 to 7; the start folder), 2.6 (the tests that need a real shell), 6 (the rules' use at a connect), 7 (kinds), 17 (row R4). Contracts: .ade/context/saved-servers.md, ADR 0044 (the login shell replacing itself with ssh), ADR 0008 (the quoter's rule). Needs R1 (rules, grammar, quote, kinds, wire), R2 (the store), R3b (ending::admit and ending::insert) and D1 (zsh on Linux).
+
+Build, test first:
+1. vault::secret_names(): a plain reader of vault-index.json in app data, names only; no keychain call, no secret's value read. The design (section 4) lists vault.rs (secret_names) as the one change to vault.rs. Its test: the function reads the file as a plain file and returns the names.
+2. client_env.rs: client_env(base environment, names) builds the environment the shell is started with (PRD SV-2 AC8, the five rules (a) to (e), with the design's section 2.4): no vault value (no call to env_for_terminals); no ADE_* variable set; every inherited ADE_* variable removed; no SSH_* set or changed (the user's own SSH_ values reach ssh unchanged), SSH_ASKPASS and SSH_ASKPASS_REQUIRE never set; every inherited variable whose name is a vault secret's name removed, a listed name starting SSH_ included. ADE hands what a new terminal's shell gets otherwise (ADE's environment, TERM, the default locale).
+3. secret_names is the one vault reference in the saved_servers tree; wiring.rs names it in the checked-in list.
+4. supported_shell(path) -> Result<Shell, Kind> (design 2.2): the base name after the last slash; zsh and bash exactly; anything else is shell-not-supported, carrying the base name only when it is 1 to 32 characters of A-Z a-z 0-9 . _ + -. Runs before anything is started.
+5. home_of(base) -> Option<&OsStr> reads HOME as bytes from the base the client start is given (not crate::env_home); start_folder(home) per design 2.5's table (set and not empty: the folder as it is; unset: no folder set, the library picks the user's folder or /; set and empty: /).
+6. The instruction (2.1): the shell is started as <shell> -l -i -c <instruction>, where the instruction is exec command ssh G... for zsh and exec ssh G... for bash, every word quoted by shell_quote (r1's) and joined by one space. Its output for {host db1.example.com, port 2222, user deploy} under zsh is 'exec' 'command' 'ssh' '-p' '2222' '-l' 'deploy' '--' 'db1.example.com'.
+7. server_connect(app, window, ptys, agent, args: ConnectArgs { serverId, paneId, rows, cols }, on_event: Channel<PtyEvent>) -> Result<Connected, Kind>, #[tauri::command(async)], main window only, the steps of design 2.5 in order: (1) availability (not-in-engagement; window main); (2) load the store (list-unreadable); (3) find the identifier (server-gone); (4) rules::check on the record with existing = the rows earlier in the file (server-failed-checks with every field and reason); (5) supported_shell (shell-not-supported); (6) build the grammar and the instruction and the environment, then ending::admit (closing, pane; a paneId that is not 1 to 64 of A-Z a-z 0-9 - _ is refused with cause pane); spawn in the start folder (terminal-not-started, cause start, with errno only when the library's error holds one); a start is never refused for lack of a home folder unless the identity file starts ~/ (home-unknown); (7) ending::insert (closing or pane refusals; the instance is then ended by the routine). Connected { ptyId, destination, summary } on success. The command's ConnectArgs has deny_unknown_fields.
+8. The call site: client_start::start has exactly one call site outside tests, server_connect (the wiring test asserts it). No other caller; Reconnect is the same command for the same pane.
+9. The per-pane rule and the gate's two tests repeated through the command, with the stub: a late start, a closed gate (r3b's tests through server_connect); with closed set a new server_connect starts 0 processes.
+10. The keychain test binary: src-tauri/tests/saved_servers_keychain.rs (a separate integration test binary) with a recording stand-in: a connect and a second one make 0 keychain calls and the vault-index.json file is byte-identical after each (SV-2 AC8, SV-7 AC4).
+11. Tests that need zsh and bash (design 2.6): each fails, never skips, when zsh or bash is missing (#[cfg(unix)]); the fixture sets HOME and ZDOTDIR to the fixture home and removes BASH_ENV and ENV; a fixture home whose start-up files export SSH_AUTH_SOCK=/marker and put the stub ssh first on PATH.
+
+Acceptance (PRD SV-1, SV-2, SV-5, SV-6 and SV-7 items; each named as the design gives it):
+(1) SV-2 AC1, owner of the criterion (PRD SV-2 item 1, "The grammar"): the grammar table through a client start (the stub's argument list equals the table's row); the home-folder rows (/Users/Zoë Q with ~/.ssh/id gives one argument /Users/Zoë Q/.ssh/id; no home with ~/ gives the home-unknown refusal with 0 starts and the kind server-failed-checks, field identityFile, reason home-unknown; no home with an absolute identity file gives its list); the client start for a record with no home folder and no identity file starts (not refused).
+(2) SV-2 AC2, owner of the criterion (PRD SV-2 item 2, "How the SSH client is started"): the fixture table (both shells, both quoted-alias rows, the rows of design 2.1's run table) through server_connect with the stub: one connect gives exactly one stub record, its arguments equal AC1's, its environment has SSH_AUTH_SOCK=/marker, its folder is the fixture home, its process id equals the pane's; each row asserts its definition is in effect (the start-up file's last line); the rows' required outcomes (i), (ii) as the table states; the quoted-Host row has one record whose last argument is the alias's value. The live half of the table is r5's (partial).
+(3) SV-2 AC5, owner of the criterion (PRD SV-2 item 5, "Checked again at every client start"): an edited record on disk to host -oProxyCommand=touch /tmp/x (use a fixture path, not /tmp) and to user $HOME: a connect request gives 0 stub records, starts no process, and returns server-failed-checks naming the field and "a character that is not allowed"; two rows sharing a name key: the first starts, the second is refused with taken (design 6).
+(4) SV-2 AC8, owner of the criterion (PRD SV-2 item 8, "The connection's environment"): the builder with its five rules (a) to (e) as unit tests; the process-only variable through a child run of the test executable (the variable reaches the stub); the index missing and damaged (no failure beyond the rules); the keychain binary (item 10).
+(5) SV-2 AC10, partial (owner w6; PRD SV-2 item 10): under an unsupported shell (a fixture $SHELL of fish, or an unlisted name) Connect is refused with shell-not-supported and 0 starts; the base name is carried only as item (4) states.
+(6) SV-1 AC5, partial (owner of the criterion: this story; PRD SV-1 item 5, "The identity file is never opened"): a FIFO with no writer and a regular file of mode 000 as the identity file: the client start returns (a generous bound of 30 s, not a tight one), the grammar holds the path, and no open is made.
+(7) SV-7 AC1, owner of the criterion (PRD SV-7 item 1, "Host key checking is the SSH client's"; the design's test "no -o in any grammar; .ssh byte-identical"): a fixture home's .ssh directory is byte-identical after an add, a connect and a second connect (the test reads every file's bytes); the grammar of the client start has no -o.
+(8) SV-7 AC2, owner of the criterion (PRD SV-7 item 2, "Hostile values run nothing"): the hostile fixture through a client start with the fixture shells: no hostile value that passes the rules runs anything; the check's refusal makes 0 starts.
+(9) SV-7 AC3, owner of the criterion (PRD SV-7 item 3, "Through the shell, safely"): accepted values through both shells: the stub gets each word as one argument, byte for byte; a fixture home with a space and a non-ASCII character in its path: the stub gets the ~/ identity file as one argument, byte for byte, and (in R5) the pane goes live; history untouched (no history file written).
+(10) SV-7 AC4, owner of the criterion (PRD SV-7 item 4, "S1 uses no keychain"): the text test (r1's list) names no keyring and no find_command in every file of the list; the only vault reference is secret_names; vault-index.json byte-identical after add, edit, remove, connect and Reconnect (the keychain binary; the store half is r2's).
+(11) SV-6 AC3, owner of the criterion (PRD SV-6 item 3, "Agent status"): the agent state of a remote pane: ADE runs and installs nothing for it (the client start's process list has only the shell and the ssh of the grammar; the agent tracker is not called for a remote terminal).
+(12) SV-5 AC4, partial (owner r5): the log test for the kinds this story adds a way to reach (server gone, shell not supported, could not start a terminal, failed checks at a connect), with the log helper of r2; no marker in ade.log. The "could not start" kind carries cause start, closing or pane, with errno only with start; the messages are the webview's (w6).
+(13) SV-2 AC5's Rust half and the TypeScript half (w3b) together satisfy the Reconnect row: Reconnect with a changed row leaves the pane remote and ended (the TypeScript side is w3b's item (6)).
+
+Gate. The general verification command in force passes on the story's work (the local lines, zsh and bash on PATH, with the fixture home isolation). Plus the F7 gate: a green run of both backend CI jobs, Backend (cargo test) on ubuntu-22.04 and Backend on macOS (cargo test), on the final commit, attempt 1 each, cited by URL; plus the first step's record (item FIRST STEP, the Linux table under bash 5.1 and zsh) in the Verification section.
+
+Files (expected unless marked read):
+- src-tauri/src/saved_servers/client_env.rs (new), client_start.rs (new), mod.rs (changed), wiring.rs (changed: one call site of client_start::start; the vault reference list), sources.list (changed), fixture.rs (changed: the fixture home, start-up files, the stub on PATH), hostile.json (read; R1's)
+- src-tauri/src/vault.rs (changed: secret_names, a plain reader)
+- src-tauri/src/lib.rs (changed: server_connect registered under cfg(unix))
+- src-tauri/src/platform.rs (read: shell_from, lines 45-58; not changed)
+- src-tauri/tests/saved_servers_keychain.rs (new, the integration test binary)
+- src-tauri/Cargo.toml (changed only if the test binary needs a dev dependency; recorded in the lock file)
+
+Dependencies. after = ["r1", "r2", "r3b", "d1"]. Story r5 depends on it. Story w3b and w5 are webview-side and use its command through the stubbed invoke (w3b) or the real command after this story (w6).
+
+Contracts. Reads .ade/context/saved-servers.md and server-panes.md. Records nothing new unless the table's outcome differs from the design's (then the story stops and reports).
+
+Out of scope. The hand-over judgement and the sampling (r5); the live state (r5); the webview messages (w5, w6); the Windows build (not registered); a stored password or any secret value (S2, not sharded); the architect's invocation for any shell other than zsh and bash (SV-2 AC10: refused).
+
+Notes for the developer. The fixtures are the contract for R5: the same start-up-file rows feed the hand-over test. Never let a test read the developer's own start-up files: the fixture sets HOME, ZDOTDIR, and removes BASH_ENV and ENV.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (13) pass by name in cargo test under zsh and bash. Gate: the first step's record in the Verification section (SV-2 AC2's table under the CI image's bash 5.1 and zsh, Linux), then a green run of both backend CI jobs (Backend (cargo test) and Backend on macOS (cargo test)) on the final commit, attempt 1, cited by URL."
+covers = ["SV-1 AC5", "SV-2 AC1", "SV-2 AC5", "SV-2 AC8", "SV-6 AC3", "SV-7 AC1", "SV-7 AC2", "SV-7 AC3", "SV-7 AC4"]
+after = ["r1", "r2", "r3b", "d1"]
+hitl = false
+risk = "high"
+refine = false
+
+[[entry]]
+id = "w5"
+type = "story"
+title = "The server list overlay, its form, Remove's question and the palette entries"
+description = '''F7 slice S1, story 14 of 16. VERTICAL (components): the list overlay, its form with one message per failing field from its reason code, the rows that fail their checks, Remove's question on C1's dialog, the held press on Connect, the palette entries, and the list's empty, unreadable and full states. The UX is approved (draft 4, 2026-11-19; docs/superpowers/specs/2026-11-18-saved-servers-ux.md) and the mockup beside it (docs/superpowers/specs/2026-11-18-saved-servers-mockup.html) is the visual reference, verified in a mockup only. Design sections 9 (the list's contract, the palette), 10 (the commands), 17 (row W5). UX sections 3 (the palette), 4.1 to 4.10 (the list and its form, the failed row, the messages of a Connect that starts nothing, Remove, the held Connect, keyboard and focus), 10 (keyboard, the one-key rule 10.1) and 11 (accessibility) are read before building, and the defaults in UX section 17's table "If an answer differs from the default" are the ones built (see the list below).
+
+Stories cut to the UX's defaults (UX section 17): palette entries in the SSH category for the server rows and the open-list entry, and in the Panes category for the three pane actions (P8, the PRD's revision 10 text); the list has its filter (P5); only Name and Port are trimmed (P4); one style declaration on the palette label (P11, overflowWrap anywhere, a stated exception); the "no SSH client" title hedged in W6 (P10). What would change if an answer differs: P5 (the filter, its Down rule and empty state) would be cut here; P8 (the three pane entries) would be refused here and the palette would lose them; P11 (the label's declaration) would be left out; A13 (one list read serves the palette's check and the overlay: built here, with W3a and W3b) would add a second read and the dropped-press rule of UX 4.9.
+
+Build, test first:
+1. The overlay (UX 4.1): the list in name order with each row's summary, the filter field (P5), every action by keyboard (SV-9 AC1), the Add action, the Edit and Remove actions on a row. Opened by the window event toggle-servers (as Integrations' toggle-integrations, CommandPalette.tsx:175), reloading the list (serverListStore.load) on open.
+2. The form (UX 4.5): five fields, Name and Port trimmed, Host, User and Identity file checked as typed (SV-1 AC1); a save that the rules refuse shows a message for each failing field from its reason code and the form's own boxes keep what was typed; no typed value appears in a message (the messages are fixed text per reason, the designer's; SV-1 AC1, SV-5 AC4); a saved row may come with an identity-file warning from servers_save, shown after the save (SV-1 AC5, the warning only).
+3. The rows that fail their checks (UX 4.6): the fixed text for a withheld name, the empty destination, the problems listed; the Edit form gets nothing for a failing field but its reason code; fileIndex tells two such rows apart; rows with a withheld name are last.
+4. The list's states (UX 4.2, 4.3, 4.4): empty list says what the feature does and offers Add (SV-9 AC3); unreadable says the file's constant name in Better Terminal's data folder (SERVER_LIST_FILE_NAME), Add, Edit, Remove, Connect and Reconnect refused (SV-1 AC4); full refuses Add with a message (SV-1 AC4: 201st add).
+5. Remove (UX 4.8, SV-1 AC3): one confirmation naming the server, through C1's ConfirmDialog rendered as a child of the overlay's dialog element; no remove request until confirmed; Esc closes the question only and the list stays open; Enter while focus is on Cancel sends no remove request.
+6. The held press on Connect from the overlay (UX 4.9): requestConnect's held result shows the earlier and the current destination (both whole, UX 9.3, the controls name which of host, port, user and identity file differ) and a second, separate confirmation; a cancel removes the held entry.
+7. The palette (UX 3; design 9): after every entry the palette has today, the entries in this order: Servers: Open saved servers (SSH, always first of F7's, whenever the feature is available); one per saved server, Connect to DESTINATION, saved as "NAME" (SSH, in the list's order, with the row's name and summary; a row with problems keeps its entry and gets the fixed text for a withheld name, and running it gives the failed-checks message); Servers: Show this pane's message (Panes; only while the active pane has a bar); Servers: Reconnect this pane (Panes; only while the active pane is an ended server pane whose bar offers Reconnect); Servers: End what is running in this pane (Panes; only while a hand-over message shows; always last). No query naming the feature preselects an entry that starts or ends a connection (UX 3). The label's overflowWrap: anywhere on the label's span only (P11). With availability false, or the list unreadable, there are no per-server entries (SV-8 AC3; SV-9 AC2).
+8. The palette's entry press for a server: requestConnect({ serverId, shown: row }) with the row the label was built from (design 9); the press of a held check opens the overlay on that row.
+9. SV-5 AC4's TypeScript log test for the three list commands (servers_list, servers_save, servers_remove): each rejection from the stubbed invoke, rendered through rejectionMessage and the form's messages, holds no marker (the W3a wrappers' fixed text for an unknown rejection).
+10. Keyboard and focus (UX 4.10, 10, 10.1): one key pressed twice, or held, does not run an action twice (the list's activation key then the question lands on Cancel); the overlay is a dialog (role, label) with focus returned to its opener on close.
+
+Acceptance (PRD SV-1, SV-5, SV-8 and SV-9 items; each named test as the design gives it):
+(1) SV-1 AC1, owner of the criterion (PRD SV-1 item 1, "The closed list of reasons"): the form shows one message per listed field, each from its reason code, and the message text holds no marker (component test; the Rust table is r1's).
+(2) SV-1 AC3, owner of the criterion (PRD SV-1 item 3, "Add, edit, remove", with the component half on Remove and "Enter in that question"): Remove shows one confirmation naming the server, sends no remove request until it is confirmed, Esc closes the question only and the list stays open, and Enter while focus is on Cancel sends no remove request; a refused save with five markers shows a message for each of the five fields and no marker.
+(3) SV-8 AC3, owner of the criterion (PRD SV-8 item 3, "the palette"): serversAvailable false (Windows, or an engagement input) shows no palette entries of F7 and no overlay opener; with the input set the palette has none of F7's entries.
+(4) SV-9 AC1, owner of the criterion (PRD SV-9 item 1, "The server list"): the list in name order with each row's summary; every action (add, edit, remove, connect, filter) reachable by keyboard; the filter matches a row by the members it holds: a failing row keeps a member that passed when its summary is withheld, and the filter matches it by that member (UX A14's default; if the answer differs, the filter no longer matches such a row by host or user).
+(5) SV-9 AC2, owner of the criterion (PRD SV-9 item 2, "The palette"): the palette's entries, match, order, and one request per press: the open entry first among F7's, one entry per server matched by its label's parts, the three pane entries only while they apply, End last; "connect" then Enter connects to the first server in the list (the stated limit); the label's style declaration is present on the label's span only.
+(6) SV-9 AC3, owner of the criterion (PRD SV-9 item 3, "An empty list"): the empty list says what the feature does and offers Add; it lists no server.
+(7) SV-5 AC8, owner of the criterion (PRD SV-5 item 8, the webview half): the palette and the overlay's opener ask serversAvailable (with the engagement input set: no entries, no opener).
+(8) SV-1 AC4, partial (owner r2): the unreadable state refuses Add, Edit, Remove, Connect and Reconnect with the list's message (component); the full list refuses Add with the message.
+(9) SV-3 AC4, partial (owner w6): the held press from the overlay shows both destinations whole and names the differing members (the second confirmation asks again).
+(10) SV-5 AC4, partial (owner r5): item 9 above (the list commands' log test).
+
+CONDITIONAL, SV-5 AC8 (engagements; PRD F7.11, "Merges second"): if w3a's conditional item (7) is on main when this story is reviewed, or lands before it merges, the palette and the opener are tested with the engagement input set (item 7 above); otherwise item (7) is tested with the input set in the TypeScript pure test only. No separate criterion.
+
+Gate: the general verification command in force. No process is started. No CI gate.
+
+Files (expected unless marked read):
+- src/components/ServerListOverlay.tsx (new, expected name), src/components/ServerForm.tsx (new, expected name), src/components/ServerRow.tsx (new, expected)
+- src/components/CommandPalette.tsx (changed: the entries, after today's; the label style on the span; CommandPalette.tsx:73-178 and the toggle at :175)
+- src/App.tsx (changed: the overlay mount, the toggle-servers window event; the ConfirmDialog render site stays, C1's)
+- src/components/ConfirmDialog.tsx (read: C1's; used, not changed here)
+- src/stores/serverListStore.ts, src/lib/serverInvoke.ts, src/lib/serverAvailability.ts, src/lib/serverSessions.ts (read; W3a and W3b's)
+- tests: src/components/__tests__/ServerListOverlay.test.tsx (new), ServerForm.test.tsx (new), CommandPalette.servers.test.tsx (new), each expected names
+
+Dependencies. after = ["c1", "w3a", "w3b"]. Story r4 is the real command behind it (the palette and the form use the stubbed invoke until then, which is allowed by the design). Story w6 and r5 depend on it at the code level only through the overlay's held press and the palette entries (w6 names them).
+
+Contracts. Reads .ade/context/saved-servers.md and server-panes.md. Records nothing new.
+
+Out of scope. The marks, the bar, the tab menu, the messages of the connection states, the hand-over message and its End button, the close question for a running connection (w6); the server tab's Reconnect control (w6); the Rust side of any command (r2, r4); the palette's engagement signal (merges-second item only).
+
+Notes for the developer. Build from the mockup's scenarios (list, empty, unreadable, full, add, refusals, remove, changed, palette, palettelong, palettessh, unavailable) and check each against the UX section it cites; the mockup is the visual reference and was checked in a headless browser only, so the real app is the check for the look (not gated here).'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (10) pass by name in npm test. No CI gate: this story starts no process."
+covers = ["SV-1 AC1", "SV-1 AC3", "SV-5 AC8", "SV-8 AC3", "SV-9 AC1", "SV-9 AC2", "SV-9 AC3"]
+after = ["c1", "w3a", "w3b"]
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "w6"
+type = "story"
+title = "Marks, the bar, Reconnect, the connection messages and the tab menu"
+description = '''F7 slice S1, story 15 of 16. VERTICAL (components): what the engineer sees and does with a server pane and a server tab: the marks (tab bar, tab switcher, pane), the bar with its states, "ssh not confirmed", the hand-over message and End, Reconnect and its control with the held press, the restored and reopened bars, the tab menu without Duplicate and Move to New Window, the close question for a running connection, the rename boxes' rules as rendered, and the tab set's left-out count. The UX is approved (draft 4, 2026-11-19; docs/superpowers/specs/2026-11-18-saved-servers-ux.md) and its mockup beside it. Design sections 8.4 (Reconnect's control reads the list; the held press), 8.6 (the menu and tab sets), 8.7 (the close question), 17 (row W6). UX sections 5.1 to 5.7 (the mark, its places, the bar, the connecting, live and ended states, a split), 6.1 to 6.7 (the close question, quitting and closing, restore and Reopen, the menu, a closed remote pane, rename, saved workspaces), 7 (what is off in a server pane; its words), 8 (every refusal and its words: the twelve kinds with each cause and each optional member's absent form), 9 (the text rules: 9.1 a destination never loses its end, 9.2 plain strings, 9.3 a comparison shows both sides whole) and 10 (keyboard) are read before building.
+
+Stories cut to the UX's defaults (UX section 17): the tab switcher's search matches a server tab by name only (P3); "ssh ended (exit status N)" shows the status (P6); the "another program" message is the one of UX 5.4 as the PRD's revision 10 sentence now reads (P9); the "no SSH client" title is "Possibly no SSH client" (P10); a many-tab close counts server tabs in its one question (A12); the bar and the header's second row re-fit the terminal when their height changes (A10, the default; if it differs, the largest change in the list); the page reads differsFromPane from the session (A15). A UX default that differs changes only the places UX section 17 names for W6.
+
+Build, test first:
+1. The mark (UX 5.1, 5.2): a server tab's mark on the tab bar and in the tab switcher (the tab switcher's search matches by name only, P3); the pane's mark for the server pane only (no mark on the other panes of a split server tab, the owner's decision of 2026-11-19, SV-3 AC5); three states (connecting "ssh not confirmed", live, ended), never "connected"; absent on a local tab; accessible names carry the state.
+2. The bar (UX 5.3): the server pane's bar with its buttons; it re-fits no terminal in its default (A10).
+3. Connecting, live, ended (UX 5.4 to 5.6): the "ssh not confirmed" state; cleared when live (live: "ssh running"); the ended state keeps the output, prints today's "[Process exited]" line, and offers Reconnect with the destination (or Reconnect with the held or changed-destination form when the check holds the press, UX 4.9 and 9.3); the failed-checks message with each field and reason; End only with a hand-over message (SV-2 AC9).
+4. The hand-over message (UX 5.4; PRD SV-2 AC9 as revision 10 states it): the two kinds "another program is running" and "not handed over yet"; the message states as fact only what Better Terminal observed and gives the rest as possibilities (P9); End is its button; the "ended before ssh was seen to start" kind with and without its status (P6: the status shows when there is one).
+5. The kind messages (UX 8): every refusal of the twelve kinds with its words, each optional member's absent form ("could not be saved" with no error number, "could not start a terminal" with none), and terminal-not-started's three causes: start (may carry the error number), closing ("Better Terminal is closing or its page is reloading") and pane ("that pane already has a connection or a start in progress"). A message that names a server is composed in the webview from the identifier sent and the list it holds; no kind carries a name.
+6. Reconnect (UX 5.6, 8.4): the control on an ended server pane reads the current list (the store's check before the press is w3b's); the changed-destination form (both destinations whole, the differing members named, a second confirmation); the held press; the "the saved server no longer exists" and failed-checks forms.
+7. The restored and reopened bars (UX 6.3): the bar comes from origin (restored, reopened); SV-4 AC2 and AC3 say the tab is ended with Reconnect and nothing connects by itself.
+8. The tab's menu (UX 6.4; SV-2 AC6, SV-3 AC8): a server tab's menu has no Duplicate and no Move to New Window; a local tab's menu is unchanged.
+9. The close question (UX 6.1; SV-3 AC6): for a running connection (connecting or live) closing a remote pane or a tab asks, built on C1's ConfirmDialog; an ended pane does not ask; the many-tab close's one question counts server tabs (A12); Enter straight after the question opens cancels (C1's rule, pinned here by the close test).
+10. Quitting and closing the main window (UX 6.2): the copy for the ending (what happens to a live connection on a window close or a quit); no question for a quit or window close (F7 leaves them asking nothing for any terminal, PRD SV-2 AC3).
+11. A closed remote pane (UX 6.5): the tab becomes a local tab named "Terminal" with no mark; a renamed tab keeps its typed name (SV-3 AC9). Rename (UX 6.6; SV-3 AC1): the rename boxes commit unchanged text as no change and a changed name removes the mark (the store rule is w1's; the rendering is here).
+12. The saved workspaces' left-out count (UX 6.7; SV-5 AC3): "N server tabs were left out" from tabSetEntries's leftOut.
+13. What is off in a server pane (UX 7; SV-6 AC1, AC2, AC4): the words of the on-a-server state of the file browser, the file-path links that are not links (no words needed), the refused write's message (the scratchpad's image case: nothing sent, the text kept, a reason shown). W4 built the logic; this story gives the words and the component tests.
+14. The "Show this pane's message" and "Reconnect this pane" palette entries' effect: they focus the bar (or the question's Cancel) and start nothing (the palette's entries are w5's).
+
+Acceptance (PRD SV-2, SV-3, SV-4, SV-5, SV-6 items; each named as the design gives it):
+(1) SV-3 AC1, owner of the criterion (PRD SV-3 item 1, "Name, and what a rename is"): the name Connect gives, a rename box that commits unchanged text as no change keeps the mark, a changed name removes it (component and store test).
+(2) SV-3 AC2, owner of the criterion (PRD SV-3 item 2, "The remote mark"): the mark on the tab bar, the switcher (matched by name only, P3) and the server pane with its three states and accessible names; absent on a local tab; no mark on the other panes of a split (the owner's 2026-11-19 decision).
+(3) SV-3 AC3, owner of the criterion (PRD SV-3 item 3, "Ending"): output kept; "[Process exited]" written; Reconnect with the destination; End only with the hand-over message; an ordinary end shows its exit status when there is one (P6); the events before and after the resolve (w3b's session object feeds it).
+(4) SV-3 AC4, owner of the criterion (PRD SV-3 item 4, the changed-destination check's display): the current destination shown; a changed destination shows both whole, names the differing members, and asks again; the check at the press for Reconnect, for Connect from the overlay and for a palette entry (the press's logic is w3b's); both key paths shown whole when the key differs; a removed row says so.
+(5) SV-3 AC6, owner of the criterion (PRD SV-3 item 6, "Closing"): the question asks while not confirmed or running (connecting, live), never when ended; Enter straight after the question opens does not close (C1's rule); the many-tab close's question counts server tabs.
+(6) SV-3 AC8, owner of the criterion (PRD SV-3 item 8, "Move to New Window is not offered on a server tab"): the menu has no Move to New Window item for a server tab; the action refuses one (the detach refusal is w1's).
+(7) SV-2 AC6, owner of the criterion (PRD SV-2 item 6, the table, its menu test): the menu of a server tab has no Duplicate item and no Move to New Window item; the menu of the tab in the last row (Connect, split, close of the remote pane) has both, as a local tab does (TabBar component test; the store rows are w2's and w3b's).
+(8) SV-2 AC10, owner of the criterion (PRD SV-2 item 10, "Under an unsupported shell, Connect is refused"): the message, with and without the name (the kind's base name only when the rule allows it).
+(9) SV-4 AC3, owner of the criterion (PRD SV-4 item 3, "Reopen Closed Tab and Duplicate"): the reopened bar; the menu has no Duplicate for a server tab; an edited Host between close and reopen shows the held form and makes no request until confirmed (the menu and the hand-built tab).
+(10) SV-3 AC5 partial (owner w3b; the split marks): the split panes of a server tab carry no remote mark.
+(11) SV-5 AC3, owner of the criterion (PRD SV-5 item 3, "Tab sets"): the saved workspace's left-out count names the number of server tabs left out.
+(12) SV-6 AC1, AC2, AC4, partial (owner w4, as the design's table names): the words of the on-a-server state and the refused write's message; the test asserts the words the UX gives and that the scratchpad keeps the text.
+(13) SV-2 AC9, partial (owner r5; PRD SV-2 item 9): the messages' rendering of each kind of hand-over notice, and End's presence only with the message; the judgement is r5's.
+(14) SV-8 AC2, partial (owner r5): the "Possibly no SSH client" title and its announcement, with the status and the OS line (UX 5.6); the no-ssh-client kind's rendering.
+(15) SV-7 AC5, owner of the criterion (PRD SV-7 item 5, "The list's store is untrusted input", which has no test of its own; its tests are SV-1 AC2 and AC4, SV-2 AC5, SV-7 AC2, SV-3 AC4 and SV-9 AC2): the last of those to pass in build order is this story's (SV-3 AC4 and the held press); its completion is the named tests of those criteria passing on the story's final commit, and the hostile text in the file is never drawn (UX 9, "hostile" in the mockup).
+
+Gate: the general verification command in force. No process is started by this story. No CI gate. The hand-over text and the process-related messages are rendered from fixed states; the judgement is r5's.
+
+Files (expected unless marked read):
+- src/components/TabBar.tsx (changed: the mark, the menu; TabBar.tsx:126-131 rename box, :139-147 menu), src/components/TabSwitcher.tsx (changed: the mark and the search by name)
+- src/components/TerminalPane.tsx, src/components/ServerPaneBar.tsx (new, expected name for the bar), src/components/ServerMessage.tsx (new, expected name for the kind messages), src/components/SubTerminalStrip.tsx (read: viewCwd)
+- src/components/FileBrowser.tsx (changed: the on-a-server words)
+- src/components/SettingsPanel.tsx (changed: the left-out count text; the rename box, SettingsPanel.tsx:208-209)
+- src/hooks/useGuardedClose.ts and src/__tests__/closeConfirm.test.tsx (read or changed for the many-tab sentence, A12)
+- tests: src/components/__tests__/TabBar.server.test.tsx (new), ServerPaneBar.test.tsx (new), ServerMessage.test.tsx (new), TabSwitcher.server.test.tsx (new); each expected names
+
+Dependencies. after = ["c1", "w1", "w3b", "w4", "w5"] (C1's dialog for the close question; the store helpers; the connect and Reconnect store; the folder words; the list the Reconnect control reads). Story r5 depends on this story at the code level for the hand-over messages' rendering only.
+
+Contracts. Reads .ade/context/server-panes.md and saved-servers.md. Records nothing new.
+
+Out of scope. The hand-over judgement and the observation (r5); the Rust commands (r2, r4); the palette entries (w5, built before); the close question's dialog itself (c1); a detached window (no server tab reaches it: SV-10 is not sharded).
+
+Notes for the developer. The UX's text is the designer's; where a wording of UX 8 or 9 is not clear, quote it from the spec and stop, do not invent words. Read UX 9.1 to 9.3 for the destination and comparison rules before writing any message that names one.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (15) pass by name in npm test. No CI gate: this story starts no process."
+covers = ["SV-2 AC6", "SV-2 AC10", "SV-3 AC1", "SV-3 AC2", "SV-3 AC3", "SV-3 AC4", "SV-3 AC6", "SV-3 AC8", "SV-4 AC3", "SV-5 AC3", "SV-7 AC5"]
+after = ["c1", "w1", "w3b", "w4", "w5"]
+hitl = false
+risk = "medium"
+refine = false
+
+[[entry]]
+id = "r5"
+type = "story"
+title = "The hand-over check: the pane goes live only when ssh is seen"
+description = '''F7 slice S1, story 16 of 16 (the last). VERTICAL in Rust: ADE watches the pane's own process and makes the pane live only when an image of it is ssh with exactly the grammar, and reports the other outcomes. It starts processes (the fixtures, the stub, the shells), so the F7 CI gate applies: the local lines plus a green run of both backend CI jobs on the final commit, zsh on Linux (d1). FIRST STEP (design section 17, R5): one test that prints every reading of the pane's own process for the first 2 s of each fixture start, run on the Linux backend job; record the forms seen (the shell, the stub, each script wrapper), the early readings, and any reading that is neither a whole list, empty, nor ADE's own. If the observation rule does not hold there (a partial list; a form section 3.3 does not place), the story stops and the finding goes to the owner, as PRD SV-2 AC9 says a form the rule does not list comes back as a question. Design sections 3.1 (how the pane's own process is observed, sysinfo and the image of the process), 3.2 (what a sample can be that is not an image of the shell's making), 3.3 (judge, the table and the rows the design places), 3.4 (the monitor's one state machine, step), 3.5 (a $SHELL that is itself a script), 3.6 (the pane's events and the exit status), 3.7 (the tests), and 17 (row R5). ADR 0046 (the hand-over is judged once, from the pane's own argument list). Needs R4 (the client start, the instruction, the grammar).
+
+Build, test first:
+1. observe (3.1, 3.2): the sample of the pane's own process: the list of its words as the kernel gives it, read through the process table (sysinfo, as the design states), with the four readings of 3.2 (unreadable; empty; equal to Better Terminal's own; anything else). A reading that is unreadable, empty, or still Better Terminal's own is not an observation: nothing is judged and the pane stays connecting. The test: observe over the four rows, and one that the test's own process's image is not empty.
+2. judge(started, observed, grammar) -> Judged { StillShell, SshClient, Other } (3.3, pure, byte-wise word equality): equal to started gives StillShell; [P, G] with base(P) == "ssh" gives SshClient; [I, P, G] with I one of sh, bash, zsh, dash, ksh gives SshClient; [E, I, P, G] with base(E) == "env" gives SshClient; anything else is Other. G must equal the grammar exactly, nothing before, between or after. The rows the design places: [/bin/sh, -e, /x/ssh, G] gives Other; [bash, -l, /x/ssh, G] gives Other; a shell wrapper script as the pane's process gives Other; [ssh, G] whose executable is /bin/echo (a hash entry) gives SshClient (the argument list decides, PRD SV-2 AC2's stated case). The type gives no way to call judge for NotObserved.
+3. step (3.4): the one pure state machine of the monitor, over every row of 3.4 (the watching rows, the sampling, live, notice, and the exit rows; the unwatched rows, EndedByUser and GaveUp are r3a's): the notice-then-live sequence; judged once (ADR 0046); nothing after an exit. live is sent once the SshClient image is judged; the notice kinds are not-handed-over-yet (the bound passes and the process is still the shell) and not-handed-over-another-program (the judged image is not the SSH client, at once).
+4. The sampling and the monitor thread (3.1, 3.4): the sampler reads the pane's own process at the design's rate; the notice of the bound (2 s, SV-2 AC9's bound) and ADE keeps watching; the pane's events (3.6): live, notice (both kinds), exit with its status (0, 255, null) and kind (no-ssh-client for status 127, ended-before-ssh with its status when the process ended before ssh was seen to start, with the status absent when a signal ended it), each serialised as events.json (r3a's fixture).
+5. The kinds this story adds a way to reach (design 7): no-ssh-client (status 127), ended-before-ssh (status, or absent), not-handed-over-another-program, not-handed-over-yet. Each reaches the webview as the event's kind; the log test (item 11) reads them.
+6. The wrapper cases (3.5): a $SHELL that is itself a script gives "another program" at once while the session works; the design's shell-wrapper fixture: the notice at once and the stub alive at twice the bound.
+
+Acceptance (PRD SV-2 items 2, 3, 4, 9 and SV-8 items 1 and 2; each named test as the design gives it):
+(1) SV-2 AC9, owner of the criterion (PRD SV-2 item 9, "The hand-over is confirmed before the pane is live"): observe's table, then judge's table (item 2) and the rows of 3.3; step over every row of 3.4; SV-2 AC9's eleven fixture cases with the 2 s bound, under zsh and under bash (both always; a missing shell fails the test); the shell-wrapper fixture: "another program" at once, the stub alive at twice the bound; the messages' rendering is w6's (partial).
+(2) SV-2 AC2, owner of the criterion, live half (PRD SV-2 item 2): the fixture table of R4's item (2) with the live clauses: a pane is reported live only after the stub was observed; never live for the two quoted-alias rows; the other rows as the table states.
+(3) SV-2 AC3, owner of the criterion (PRD SV-2 item 3): the matrix through a real client start: live; connecting as a child; connecting replaced by a fixture program; each ignoring the hangup; ended by server_terminal_end, by kill_pty, by main_closed and by app_exiting: the same outcomes as r3a's and r3b's rows (0 bytes; none alive at 5 s; the ones that ignore the hangup included); the TypeScript write count (w3b's and w4's tests) stays green.
+(4) SV-2 AC4, owner of the criterion (PRD SV-2 item 4, "No fall-through to a local shell"): the stub exits 0 and 255 after live; the pane reports an exit with the stub's status; nothing of the pane is alive afterwards; the output after the stub's last byte is empty; the stub's last bytes (a marker) arrive whole before the exit (review A2-m7); a background holder: the exit after 1 s and before the 5 s stop, and no output follows the exit.
+(5) SV-8 AC1, owner of the criterion (PRD SV-8 item 1, "macOS and Linux"): the hand-over and the client start are tested on macOS and on Linux under zsh and bash, by SV-2 AC2, AC9 and SV-7 AC4's tests (no find_command in the Rust text; the ssh the user's shell finds is the one started).
+(6) SV-8 AC2, owner of the criterion (PRD SV-8 item 2, "None installed"): with no ssh on PATH, under both shells: the shell exits 127, the exit carries no-ssh-client, Connect and Reconnect are not refused beforehand; the message "Possibly no SSH client" is w6's; the test asserts the kind and status.
+(7) SV-5 AC4, owner of the criterion (PRD SV-5 item 4): the log test for the four kinds this story adds (no SSH client; ended before ssh; the two notices), with the log helper of r2; no marker in ade.log. The kinds' fixed list stays twelve.
+(8) The exit event rows: each event in events.json serialises equal to its row (the Rust side; r3a's file; the TypeScript side is w3b's).
+(9) The shell-wrapper and the forking-form fixtures pass their assertions (the fixture asserts the forking form, 1.7).
+(10) The first step's test (FIRST STEP above) is kept as a permanent test that prints nothing and asserts the four readings: it fails when a reading is neither a whole list, empty nor ADE's own, on any platform the test runs on.
+
+Gate and verification. The general verification command in force passes on the story's work. Plus the F7 gate: a green run of both backend CI jobs, Backend (cargo test) on ubuntu-22.04 and Backend on macOS (cargo test), on the final commit, attempt 1 each, cited by URL per F1's gate item 4 applied to these two jobs. The first step's Linux record (the forms seen; the early readings; any finding) and its run's URL are in the Verification section. If the observation rule does not hold on Linux, this story stops and is not built further.
+
+Files (expected unless marked read):
+- src-tauri/src/saved_servers/handover.rs (changed: observe, judge, step, the sampler, the monitor's watching rows and the notices; r3a created the monitor and waiter threads)
+- src-tauri/src/saved_servers/mod.rs, wiring.rs, sources.list (changed)
+- src-tauri/src/saved_servers/fixture.rs (changed: the shell-wrapper fixture, the 11 fixture cases of SV-2 AC9, the holder process)
+- src-tauri/src/saved_servers/client_start.rs (read; R4's)
+- src-tauri/Cargo.toml and Cargo.lock (changed only if sysinfo's features need it; recorded in the same commit)
+- src/lib/serverFixtures/events.json (read; r3a's)
+
+Dependencies. after = ["r4", "w6"]: R4 (the client start) and W6 (the messages it renders; the hand-over message's rendering is W6's, so the story builds the notice kinds in Rust and the message in the webview). Story R5 is the last in the build order.
+
+Contracts. Reads .ade/context/server-panes.md and ADR 0046. Records nothing new unless a finding changes the observation rule (then the story stops).
+
+Out of scope. The messages' words and the End button (w6); the monitor's removal and the unwatched rows (r3a); the client start (r4); a $SHELL that is not zsh or bash (SV-2 AC10: refused before any start); any F4 or S1b behaviour; Windows (not built, SV-8 AC3).
+
+Notes for the developer. Read design 3.1 and 3.2 before writing observe: a sample can be a partial list, the empty list, or ADE's own image, and none of those is an observation (PRD SV-2 AC9, the revision 8 rule). The stated limits (F7.9) are stated in the messages, not hidden in the code.'''
+verify = "The general verification command in force passes on the story's work, and the named tests (1) to (10) pass by name in cargo test under zsh and bash. Gate: the first step's Linux record in the Verification section (the forms seen, the early readings, any finding), then a green run of both backend CI jobs (Backend (cargo test) on ubuntu-22.04, and Backend on macOS (cargo test)) on the final commit, attempt 1, cited by URL. A finding of the first step stops the story and goes to the owner."
+covers = ["SV-2 AC2", "SV-2 AC3", "SV-2 AC4", "SV-2 AC9", "SV-5 AC4", "SV-8 AC1", "SV-8 AC2"]
+after = ["r4", "w6"]
+hitl = false
+risk = "high"
+refine = false

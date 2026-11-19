@@ -1,0 +1,13 @@
+# Epics of F7 slice S1 (saved servers, SSH: the list, Connect, the server tab, the session, the palette), in build order.
+# Sharded 2026-11-19 from the approved PRD (docs/prd.md F7, revision 10: SV-1 to SV-9 with F7.11's items), the approved design
+# (docs/superpowers/specs/2026-11-18-saved-servers-design.md, sections 1 to 23, and its section 17 for the story list) and the
+# approved UX (docs/superpowers/specs/2026-11-18-saved-servers-ux.md, sections 3 to 11 for W5 and W6, and section 17 for defaults).
+# Slices S1b (SV-13), S2 (SV-12, gated on the architect's spike), S3 (SV-10) and S4 (SV-11) are not sharded here: see the initiative file.
+# Stories of S1 are built in the design's order (see the epic file): C1, R1, W1, D1; R2, R3a, W2, W4; R3b, R6, W3a, W3b; R4, W5, W6; R5.
+# Merges second (F7.11, SV-5 AC7 and AC8): .ade/context/f7-merges-second.md, and the conditional items written into phone-watch ticket 8, F1 ticket e29 and the S1 stories below.
+
+[[epic]]
+id = 1
+slug = "epic-slice-1-saved-servers"
+title = "F7 S1: saved servers (SSH), main window"
+covers = ["SV-1", "SV-2", "SV-3", "SV-4", "SV-5", "SV-6", "SV-7", "SV-8", "SV-9"]
