@@ -9,11 +9,11 @@ description: >-
 url: https://ade.ardata.tech
 baseurl: ""
 # Installers are still published as GitHub Releases, so download links use this.
-repo: https://github.com/alvin-reyes/better-agentic-ide
+repo: https://github.com/better-ade/ade-terminal
 
 # Where the Download button points.
-download_url: https://github.com/alvin-reyes/better-agentic-ide/releases/latest
-repo_url: https://github.com/alvin-reyes/better-agentic-ide
+download_url: https://github.com/better-ade/ade-terminal/releases/latest
+repo_url: https://github.com/better-ade/ade-terminal
 # The consultancy ADE is built for and used on.
 ardata_url: https://ardata.tech
 

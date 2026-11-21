@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 
-REPO="alvin-reyes/better-agentic-ide"
+REPO="better-ade/ade-terminal"
 API="https://api.github.com/repos/$REPO/releases"
 VERSION=""
 FORMAT="appimage"

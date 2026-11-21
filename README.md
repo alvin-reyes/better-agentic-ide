@@ -7,19 +7,19 @@
 <p align="center"><strong>The terminal for building products with AI.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <a href="https://github.com/alvin-reyes/better-agentic-ide/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/alvin-reyes/better-agentic-ide?label=release&color=7C8FFF"></a>
-  <a href="https://github.com/alvin-reyes/better-agentic-ide/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/alvin-reyes/better-agentic-ide/total?color=4CC38A"></a>
+  <a href="https://github.com/better-ade/ade-terminal/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/better-ade/ade-terminal/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/better-ade/ade-terminal/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/better-ade/ade-terminal?label=release&color=7C8FFF"></a>
+  <a href="https://github.com/better-ade/ade-terminal/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/better-ade/ade-terminal/total?color=4CC38A"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-5A616D">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-4CC38A"></a>
-  <a href="https://github.com/alvin-reyes/ade-setup/releases/latest"><img alt="ade-setup" src="https://img.shields.io/github/v/release/alvin-reyes/ade-setup?label=ade-setup&color=BC8CFF"></a>
+  <a href="https://github.com/better-ade/ade-method/releases/latest"><img alt="ade-setup" src="https://img.shields.io/github/v/release/better-ade/ade-method?label=ade-setup&color=BC8CFF"></a>
 </p>
 
 <p align="center">
   <a href="https://ade.ardata.tech/"><strong>Website</strong></a> ·
-  <a href="https://github.com/alvin-reyes/better-agentic-ide"><strong>Source</strong></a> ·
+  <a href="https://github.com/better-ade/ade-terminal"><strong>Source</strong></a> ·
   <a href="https://ade.ardata.tech/guide/"><strong>User guide</strong></a> ·
-  <a href="https://github.com/alvin-reyes/better-agentic-ide/releases/latest"><strong>Download</strong></a>
+  <a href="https://github.com/better-ade/ade-terminal/releases/latest"><strong>Download</strong></a>
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@ ADE is a desktop IDE for macOS and Linux built around **Claude Code**, with Code
 - **One role, any CLI**: a profile composes one role definition in `~/.ade/roles/`, shared by every project; Claude Code and Ollama (deepseek and other local models) each receive it the way they accept one. Codex is shown unavailable rather than guessing a flag that fails silently.
 - **A whole company, not just a delivery team**: nineteen roles end to end, from analyst and product manager through developer and QA to security engineer, SRE, release manager, support and solutions engineering. The picker lists every one unpaired, so the roles no profile covers are still a keystroke away.
 - **Project setup**: every project is set up for agents once, automatically. See [below](#project-setup).
-- **The agents are a repo you can share**: every role definition lives in [ade-setup](https://github.com/alvin-reyes/ade-setup), versioned and released, and ADE ships a pinned copy. Improve a role there and it reaches your projects when you choose to update them, not on ADE's release schedule.
+- **The agents are a repo you can share**: every role definition lives in [ade-setup](https://github.com/better-ade/ade-method), versioned and released, and ADE ships a pinned copy. Improve a role there and it reaches your projects when you choose to update them, not on ADE's release schedule.
 <p align="center">
   <img src="docs/assets/img/fleet.webp" alt="The fleet timeline: one lane per agent and sub-agent, with what is running, what finished, and the cost so far" width="100%">
 </p>
@@ -86,7 +86,7 @@ Works on macOS (Apple Silicon and Intel) and Linux x86_64. It picks the right
 build, checks it against the release's `SHA256SUMS`, and installs without sudo.
 Pass `--dry-run` to see what it would do, or `--help` for the options.
 
-**Installers**: download from the [latest release](https://github.com/alvin-reyes/better-agentic-ide/releases/latest): `.dmg` for macOS (Apple Silicon and Intel) and `.deb` or `.AppImage` for Linux.
+**Installers**: download from the [latest release](https://github.com/better-ade/ade-terminal/releases/latest): `.dmg` for macOS (Apple Silicon and Intel) and `.deb` or `.AppImage` for Linux.
 
 ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex and Ollama. See the [user guide](https://ade.ardata.tech/guide/) to get started.
 
@@ -94,7 +94,7 @@ ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Co
 
 ADE is free and open source under the [MIT licence](LICENSE). Every feature, no account, no keys, no telemetry. Use it at work, fork it, ship your own build, no permission needed.
 
-Issues and pull requests are welcome, on the app and on [ade-setup](https://github.com/alvin-reyes/ade-setup), where the agent definitions live. [CONTRIBUTING.md](CONTRIBUTING.md) has the build steps, what CI checks, and a path in that needs no Rust: the nineteen roles are markdown.
+Issues and pull requests are welcome, on the app and on [ade-setup](https://github.com/better-ade/ade-method), where the agent definitions live. [CONTRIBUTING.md](CONTRIBUTING.md) has the build steps, what CI checks, and a path in that needs no Rust: the nineteen roles are markdown.
 
 ## Used on real work
 

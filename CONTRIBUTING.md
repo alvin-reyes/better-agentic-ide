@@ -28,7 +28,7 @@ welcome contribution on its own.
 You need **Node 20** and a **stable Rust toolchain** (CI uses both).
 
 ```bash
-git clone https://github.com/alvin-reyes/better-agentic-ide
+git clone https://github.com/better-ade/ade-terminal
 cd better-agentic-ide
 npm ci
 npm run tauri dev
@@ -74,7 +74,7 @@ projects. Editing them directly looks like it works and is silently undone the
 next time they are re-synced.
 
 - **Role definitions** belong in
-  [ade-setup](https://github.com/alvin-reyes/ade-setup). Change them there, then
+  [ade-setup](https://github.com/better-ade/ade-method). Change them there, then
   re-vendor with `npm run sync:agents`.
 - **BMAD** tasks and templates come from BMAD upstream.
 
@@ -83,7 +83,7 @@ next time they are re-synced.
 The quickest useful contribution needs no build at all:
 
 - **Improve a role.** The 19 roles are markdown in
-  [ade-setup](https://github.com/alvin-reyes/ade-setup). Each states what it
+  [ade-setup](https://github.com/better-ade/ade-method). Each states what it
   owns, what it must not touch, and whose job the rest is. Sharpening those
   boundaries improves every project that uses ADE.
 - **Fix the docs or the site.** `docs/` is Jekyll. One warning from experience:

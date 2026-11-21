@@ -45,7 +45,7 @@ irm https://ade.ardata.tech/install.ps1 | iex
 ```
 
 Windows builds are not published yet, so this reports that and stops. It is
-ready for when they are: see [issue #22](https://github.com/alvin-reyes/better-agentic-ide/issues/22).
+ready for when they are: see [issue #22](https://github.com/better-ade/ade-terminal/issues/22).
 
 ## Install an agent
 

@@ -11,7 +11,7 @@ set -euo pipefail
 VERSION="${1:?usage: $0 <version> <cask.rb>}"
 VERSION="${VERSION#v}"  # accept v0.15.0 as well as 0.15.0
 CASK="${2:?usage: $0 <version> <cask.rb>}"
-REPO="alvin-reyes/better-agentic-ide"
+REPO="better-ade/ade-terminal"
 
 json=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/tags/v${VERSION}")
 digest() {

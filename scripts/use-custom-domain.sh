@@ -13,8 +13,8 @@
 set -uo pipefail
 
 DOMAIN="${DOMAIN:-ade.ardata.tech}"
-TARGET="alvin-reyes.github.io"
-REPO="alvin-reyes/better-agentic-ide"
+TARGET="better-ade.github.io"
+REPO="better-ade/ade-terminal"
 OLD="https://alvin-reyes.github.io/better-agentic-ide"
 NEW="https://$DOMAIN"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

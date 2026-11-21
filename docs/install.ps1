@@ -39,7 +39,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Repo = 'alvin-reyes/better-agentic-ide'
+$Repo = 'better-ade/ade-terminal'
 $Api  = "https://api.github.com/repos/$Repo/releases"
 
 function Write-Head($m) { Write-Host $m -ForegroundColor White }
