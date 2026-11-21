@@ -102,7 +102,12 @@ fn hook_mode_prints_an_empty_object_and_exits_0() {
     let mut cmd = helper(Path::new(BIN), &[]);
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().unwrap();
-    child.stdin.take().unwrap().write_all(&payload).unwrap();
+    // The helper may answer and exit before reading all of stdin; a closed
+    // pipe here is not a failure, the exit code and stdout below are.
+    match child.stdin.take().unwrap().write_all(&payload) {
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+        other => other.unwrap(),
+    }
     let out = child.wait_with_output().unwrap();
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
     assert_eq!(text(&out.stdout).trim(), "{}");
