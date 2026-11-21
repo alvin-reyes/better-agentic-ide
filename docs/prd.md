@@ -4289,7 +4289,7 @@ manager.
   Linux desktop ADE runs on has an `ssh` client installed, and that Windows has
   the OpenSSH client present by default.
 - **The hub template is the public repository `ade-brain`**
-  (`alvin-reyes/ade-brain`; its README says "Formerly `ai-agent-hub-template`"). The
+  (`better-ade/ade-brain`; its README says "Formerly `ai-agent-hub-template`"). The
   owner made it public on 2026-11-18, so F7 names it. Read at its `main`, commit
   8ffac3d; the lines cited below were checked again at f3fb64e, `main` on the day of
   the delta check of revision 6, and match (R6-m13), **except `bin/lib.sh`'s, which
@@ -4406,7 +4406,7 @@ manager.
     hub-tab flag nor F4's workspace mark (F2 OB-5 AC4, F4 WS-2 AC7). **A hub tab
     keeps no scrollback** (F2 OB-14 AC1).
   - **Both are macOS only** (F2.4; F4.8, S1), and F4 S1 depends on F2 slice 1.
-- **ade-setup holds the role definitions** (`alvin-reyes/ade-setup`). ADE carries a
+- **ade-setup holds the role definitions** (`better-ade/ade-method`). ADE carries a
   pinned copy in `vendor/ade-setup/` (release v1.0.4, `vendor/ade-setup/VERSION`),
   which is not edited here (`CONTRIBUTING.md`) and is replaced by `npm run
   sync:agents` (`scripts/syncAgents.mjs`, which copies `agents` and `templates` at a

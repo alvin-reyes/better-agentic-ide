@@ -26,7 +26,7 @@ const VENDOR = join(ROOT, "vendor", "ade-setup");
  * when it was first added, while VERSION claims it came from the pinned ref.
  */
 const VENDORED = ["agents", "templates"];
-const REMOTE = "https://github.com/alvin-reyes/ade-setup.git";
+const REMOTE = "https://github.com/better-ade/ade-method.git";
 // A released tag is the normal thing to pin; `main` is the escape hatch.
 const ref = process.argv[2] || process.env.ADE_SETUP_REF || "main";
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();

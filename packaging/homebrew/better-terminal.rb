@@ -10,11 +10,11 @@ cask "better-terminal" do
   sha256 arm:   "0000000000000000000000000000000000000000000000000000000000000000",
          intel: "0000000000000000000000000000000000000000000000000000000000000000"
 
-  url "https://github.com/alvin-reyes/better-agentic-ide/releases/download/v#{version}/Better.Terminal_#{version}_#{arch}.dmg"
+  url "https://github.com/better-ade/ade-terminal/releases/download/v#{version}/Better.Terminal_#{version}_#{arch}.dmg"
   name "Better Terminal"
   name "ADE"
   desc "Terminal for running and monitoring AI coding agents"
-  homepage "https://github.com/alvin-reyes/better-agentic-ide"
+  homepage "https://github.com/better-ade/ade-terminal"
 
   livecheck do
     url :url

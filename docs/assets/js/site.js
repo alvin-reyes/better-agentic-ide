@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  var REPO = "alvin-reyes/better-agentic-ide";
+  var REPO = "better-ade/ade-terminal";
   var isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
 
   // --- Mobile nav ---------------------------------------------------------
@@ -191,7 +191,7 @@
     (function () {
       var rows = document.querySelectorAll("[data-repo-stats]");
       if (!rows.length) return;
-      fetch("https://api.github.com/repos/alvin-reyes/better-agentic-ide")
+      fetch("https://api.github.com/repos/better-ade/ade-terminal")
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
         .then(function (d) {
           var fmt = function (v) {
