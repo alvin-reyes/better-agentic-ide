@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/img/hero.webp" alt="ADE: two terminal panes running tests and git log, a live Markdown preview of the implementation plan, and the prompt scratchpad along the bottom" width="100%">
+  <img src="https://ade.ardata.tech/assets/img/hero.webp" alt="ADE: two terminal panes running tests and git log, a live Markdown preview of the implementation plan, and the prompt scratchpad along the bottom" width="100%">
 </p>
 
 ADE is a desktop IDE for macOS and Linux built around **Claude Code**, with Codex and local models running alongside it. Every project gets a methodology and a team of agents, and you see exactly what each one costs. It goes furthest on serious engineering work: nineteen roles that cover a whole company, a verification gate that decides when a story is actually done, and smart contracts from first test to reviewed deploy.
@@ -37,7 +37,7 @@ ADE is a desktop IDE for macOS and Linux built around **Claude Code**, with Code
 - **Project setup**: every project is set up for agents once, automatically. See [below](#project-setup).
 - **The agents are a repo you can share**: every role definition lives in [ade-setup](https://github.com/alvin-reyes/ade-setup), versioned and released, and ADE ships a pinned copy. Improve a role there and it reaches your projects when you choose to update them, not on ADE's release schedule.
 <p align="center">
-  <img src="docs/assets/img/fleet.webp" alt="The fleet timeline: one lane per agent and sub-agent, with what is running, what finished, and the cost so far" width="100%">
+  <img src="https://ade.ardata.tech/assets/img/fleet.webp" alt="The fleet timeline: one lane per agent and sub-agent, with what is running, what finished, and the cost so far" width="100%">
 </p>
 
 - **Prompt scratchpad**: draft long prompts under every terminal with prompt tips and de-slop, send with one key, chain steps and reuse from history. Drafts survive crashes.
@@ -61,7 +61,7 @@ Only missing files are written, and the toast that lists them has Undo. Add or r
 
 - **Contracts panel**: one key opens build, test, gas report, coverage, Slither and Aderyn analysis and a local chain for Foundry, Hardhat and Anchor projects.
 <p align="center">
-  <img src="docs/assets/img/contracts-panel.webp" alt="The Contracts panel: build, test, gas report, coverage, Slither and Aderyn, a local chain, and a deploy command that is typed into the terminal rather than run" width="100%">
+  <img src="https://ade.ardata.tech/assets/img/contracts-panel.webp" alt="The Contracts panel: build, test, gas report, coverage, Slither and Aderyn, a local chain, and a deploy command that is typed into the terminal rather than run" width="100%">
 </p>
 
 - **Workbench**: run Foundry tests one at a time with gas, fuzz runs and counterexamples, then deploy and call contracts on Anvil with decoded events and reverts.
