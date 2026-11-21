@@ -6,9 +6,9 @@ designs. The designs themselves stay where this repo keeps them: feature designs
 `docs/superpowers/specs/`, plans in `_bmad-output/`, decisions in
 `.ade/context/decisions/`, and shared contracts in `.ade/context/`.
 
-> Publishing: `docs/` is the GitHub Pages site. Like `prd.md` (D21), this file is
-> in `exclude` in `docs/_config.yml`, so the site does not render it. The repository
-> is public either way.
+> Publishing: the website moved to better-ade/ade-website (ADR 0047); `docs/` holds
+> the project documents and the installers. Until the domain moves, Pages still serves
+> this folder. The repository is public either way.
 
 ## Designs
 

@@ -62,7 +62,7 @@ cargo test --locked  # in src-tauri/, for Rust changes
 | `src/` | React frontend: components, stores, hooks, `lib/` |
 | `src-tauri/` | Rust backend: PTY, filesystem, vault, watchers, the command surface |
 | `scripts/` | Build tooling **and** the guard tests that run in Node rather than jsdom |
-| `docs/` | The website (Jekyll, served at ade.ardata.tech) |
+| `docs/` | Project documents (PRD, architecture, UX) and the installers `install.sh` / `install.ps1`. The website (ade.ardata.tech) lives in [better-ade/ade-website](https://github.com/better-ade/ade-website) |
 | `vendor/ade-setup/` | The 19 role definitions, **vendored — do not edit here** |
 | `claude-plugin/` | The ADE plugin for Claude Code |
 | `src-tauri/resources/bmad/` | Vendored BMAD tasks, templates and workflows |
@@ -86,9 +86,9 @@ The quickest useful contribution needs no build at all:
   [ade-setup](https://github.com/alvin-reyes/ade-setup). Each states what it
   owns, what it must not touch, and whose job the rest is. Sharpening those
   boundaries improves every project that uses ADE.
-- **Fix the docs or the site.** `docs/` is Jekyll. One warning from experience:
-  **quote every string in `_data/*.yml`.** An unquoted value containing a colon
-  broke the site build once and the failure is not obvious.
+- **Fix the site or the user guide.** They live in
+  [better-ade/ade-website](https://github.com/better-ade/ade-website), whose tests
+  check them against this repo's code.
 
 ## Pull requests
 
